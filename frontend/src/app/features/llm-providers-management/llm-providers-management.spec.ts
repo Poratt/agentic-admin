@@ -38,6 +38,10 @@ describe('LlmProvidersManagement', () => {
 
     const mockProviderService = {
         testModel: vi.fn(() => ({ subscribe: vi.fn() })),
+        testAllModels: vi.fn(),
+        testAllStatus: vi.fn(),
+        getCatalog: vi.fn(),
+        syncModels: vi.fn(),
     };
 
     const mockConfirmService = {
@@ -349,6 +353,242 @@ describe('LlmProvidersManagement', () => {
             expect(mockMessageService.add).toHaveBeenCalledWith(
                 expect.objectContaining({ summary: 'Deleted', detail: 'Model has been permanently deleted.' }),
             );
+        });
+    });
+
+    describe('sync models dialog', () => {
+        it('loads the catalog with nothing preselected', () => {
+            let handler: { next: (res: any) => void; error: (err: any) => void };
+            mockProviderService.getCatalog.mockReturnValue({ subscribe: (h: any) => (handler = h) });
+
+            component.openSyncDialog({ id: 12, label: 'NVIDIA NIM' } as any);
+            handler!.next({
+                success: true,
+                result: {
+                    models: [
+                        { key: 'nvidia/embed-x', status: 'new' },
+                        { key: 'z-ai/glm-5.2', status: 'new' },
+                        { key: 'openai/gpt-oss-20b', status: 'exists' },
+                        { key: 'old/model', label: 'Old', status: 'unavailable' },
+                    ],
+                },
+            });
+
+            expect(mockProviderService.getCatalog).toHaveBeenCalledWith(12);
+            expect(component.catalog().length).toBe(4);
+            // no defaults — the admin selects explicitly
+            expect(component.newSelectionCount()).toBe(0);
+            expect(component.isKeySelected('nvidia/embed-x')).toBe(false);
+            expect(component.isKeySelected('z-ai/glm-5.2')).toBe(false);
+            expect(component.isKeySelected('openai/gpt-oss-20b')).toBe(false);
+        });
+
+        it('adds only selected new models and toasts the result', () => {
+            component.syncProvider.set({ id: 12, label: 'NVIDIA NIM' } as any);
+            component.catalog.set([
+                { key: 'a', status: 'new' },
+                { key: 'b', status: 'new' },
+                { key: 'c', status: 'exists' },
+            ]);
+            component.selectedKeys.set(new Set(['a', 'c']));
+            mockProviderService.syncModels.mockReturnValue({
+                subscribe: (h: any) => h.next({ result: { added: 1, skipped: 0 } }),
+            });
+
+            component.addSelectedModels();
+
+            expect(mockProviderService.syncModels).toHaveBeenCalledWith(12, ['a']);
+            expect(mockMessageService.add).toHaveBeenCalledWith(expect.objectContaining({ summary: 'Models Added' }));
+        });
+
+        it('search is token-based: "nemo 35" finds nemotron-3.5 models (order-free, partial)', () => {
+            component.catalog.set([
+                { key: 'nvidia/nemotron-3.5-lightning-30b-a3b', status: 'new' },
+                { key: 'nvidia/nemotron-3.5-content-safety', status: 'new' },
+                { key: 'openai/gpt-oss-20b', status: 'new' },
+                { key: 'nvidia/nemotron-nano-9b-v2', status: 'new' },
+            ]);
+
+            component.catalogSearch.set('nemo 35');
+            expect(
+                component
+                    .filteredCatalog()
+                    .map((m) => m.key)
+                    .sort(),
+            ).toEqual(['nvidia/nemotron-3.5-content-safety', 'nvidia/nemotron-3.5-lightning-30b-a3b']);
+
+            component.catalogSearch.set('nemo 3.5');
+            expect(component.filteredCatalog().length).toBe(2);
+
+            component.catalogSearch.set('nemotron 35');
+            expect(component.filteredCatalog().length).toBe(2);
+
+            component.catalogSearch.set('lightning 30b');
+            expect(component.filteredCatalog().map((m) => m.key)).toEqual(['nvidia/nemotron-3.5-lightning-30b-a3b']);
+
+            component.catalogSearch.set('content safety');
+            expect(component.filteredCatalog().map((m) => m.key)).toEqual(['nvidia/nemotron-3.5-content-safety']);
+        });
+
+        it('filters the catalog by search text (key or label)', () => {
+            component.catalog.set([
+                { key: 'nvidia/embed-x', status: 'new' },
+                { key: 'z-ai/glm-5.2', status: 'new' },
+                { key: 'openai/gpt-oss-20b', status: 'exists' },
+                { key: 'old/model', label: 'GPT Legacy', status: 'unavailable' },
+            ]);
+
+            expect(component.filteredCatalog().length).toBe(4);
+
+            component.catalogSearch.set('gpt');
+            expect(
+                component
+                    .filteredCatalog()
+                    .map((m) => m.key)
+                    .sort(),
+            ).toEqual(['old/model', 'openai/gpt-oss-20b']);
+
+            component.catalogSearch.set('');
+            component.catalogSearch.set('embed');
+            expect(component.filteredCatalog().map((m) => m.key)).toEqual(['nvidia/embed-x']);
+        });
+
+        it('groups selectable models by owned_by (fallback: key prefix) and supports collapse', () => {
+            component.catalog.set([
+                { key: 'nvidia/a', owned_by: 'nvidia', status: 'new' },
+                { key: 'nvidia/b', owned_by: 'nvidia', status: 'exists' },
+                { key: 'poolside/x:free', status: 'new' },
+                { key: 'old/model', label: 'Old', status: 'unavailable' },
+            ]);
+
+            const groups = component.catalogGroups();
+            expect(groups.map((g) => g.name)).toEqual(['nvidia', 'poolside']);
+            expect(groups[0].items.length).toBe(2);
+            expect(groups[0].items.every((m) => m.status !== 'unavailable')).toBe(true);
+
+            component.toggleGroup('nvidia');
+            expect(component.isGroupCollapsed('nvidia')).toBe(true);
+            component.toggleGroup('nvidia');
+            expect(component.isGroupCollapsed('nvidia')).toBe(false);
+        });
+
+        it('strips the cosmetic ~ variant prefix for display only', () => {
+            component.catalog.set([{ key: '~z-ai/glm-latest', status: 'new' }]);
+
+            expect(component.displayKey('~z-ai/glm-latest')).toBe('z-ai/glm-latest');
+            expect(component.catalogGroups()[0].name).toBe('z-ai');
+            // the raw key is untouched for selection/API use
+            expect(component.catalog()[0].key).toBe('~z-ai/glm-latest');
+        });
+
+        it('shows the short model name in rows (group header carries the publisher)', () => {
+            expect(component.shortModelName('@cf/black-forest-labs/flux-1-schnell')).toBe('flux-1-schnell');
+            expect(component.shortModelName('nvidia/nemotron-3.5-lightning-30b-a3b')).toBe(
+                'nemotron-3.5-lightning-30b-a3b',
+            );
+            expect(component.shortModelName('agnes-2.0-flash')).toBe('agnes-2.0-flash'); // no prefix
+        });
+
+        it('groups @cf/-prefixed keys by their real publisher, not by the namespace', () => {
+            component.catalog.set([
+                { key: '@cf/meta/llama-2', status: 'new' },
+                { key: '@cf/openai/gpt-oss-120b', status: 'new' },
+                { key: '@cf/black-forest-labs/flux-1-schnell', status: 'new' },
+            ]);
+
+            expect(component.catalogGroups().map((g) => g.name)).toEqual(['black-forest-labs', 'meta', 'openai']);
+        });
+
+        it('prefers the key vendor over a constant owned_by (GMI-style catalogs)', () => {
+            component.catalog.set([
+                { key: 'anthropic/claude-fable-5', owned_by: 'GMI Cloud', status: 'new' },
+                { key: 'deepseek-ai/deepseek-chat', owned_by: 'GMI Cloud', status: 'new' },
+                { key: 'some-flat-model', owned_by: 'GMI Cloud', status: 'new' },
+            ]);
+
+            expect(component.catalogGroups().map((g) => g.name)).toEqual([
+                'anthropic',
+                'deepseek-ai',
+                'GMI Cloud', // prefix-less key falls back to owned_by
+            ]);
+        });
+
+        it('select/deselect all only touch the filtered (visible) new models', () => {
+            component.catalog.set([
+                { key: 'z-ai/glm-5.2', status: 'new' },
+                { key: 'z-ai/glm-latest', status: 'new' },
+                { key: 'openai/gpt-oss-20b', status: 'new' },
+            ]);
+
+            component.catalogSearch.set('glm');
+            component.selectAllNew();
+            expect(component.isKeySelected('z-ai/glm-5.2')).toBe(true);
+            expect(component.isKeySelected('z-ai/glm-latest')).toBe(true);
+            expect(component.isKeySelected('openai/gpt-oss-20b')).toBe(false);
+
+            component.deselectAll();
+            expect(component.isKeySelected('z-ai/glm-5.2')).toBe(false);
+            expect(component.isKeySelected('z-ai/glm-latest')).toBe(false);
+        });
+
+        it('testAllModels starts a run and toasts; no-op with zero active text models', () => {
+            const provider = {
+                id: 12,
+                label: 'NVIDIA NIM',
+                models: [
+                    { active: true, capability: 'text' },
+                    { active: false, capability: 'text' },
+                ],
+            } as any;
+            mockProviderService.testAllModels.mockReturnValue({
+                subscribe: (h: any) => h.next({ result: { tested: 1 } }),
+            });
+
+            component.testAllModels(provider);
+            expect(mockProviderService.testAllModels).toHaveBeenCalledWith(12);
+            expect(component.testingAllProviderId()).toBe(12);
+            expect(mockMessageService.add).toHaveBeenCalledWith(
+                expect.objectContaining({ summary: 'Test Run Started' }),
+            );
+            component.testingAllProviderId.set(0); // stop the background poll chain
+            mockProviderService.testAllStatus.mockReturnValue({
+                subscribe: { next: vi.fn(), error: vi.fn() } as any,
+            });
+
+            mockMessageService.add.mockClear();
+            const emptyProvider = { id: 13, label: 'Empty', models: [] } as any;
+            component.testAllModels(emptyProvider);
+            expect(mockProviderService.testAllModels).toHaveBeenCalledTimes(1);
+            expect(mockMessageService.add).toHaveBeenCalledWith(
+                expect.objectContaining({ summary: 'Nothing to test' }),
+            );
+        });
+
+        it('keeps unavailable hidden behind the toggle and counts them', () => {
+            component.catalog.set([
+                { key: 'a', status: 'new' },
+                { key: 'dead/1', label: 'Dead 1', status: 'unavailable' },
+                { key: 'dead/2', status: 'unavailable' },
+            ]);
+
+            expect(component.unavailableCount()).toBe(2);
+            expect(component.unavailableList().length).toBe(0);
+
+            component.toggleShowUnavailable();
+            expect(component.unavailableList().length).toBe(2);
+        });
+
+        it('deselect only affects new models (existing stay checked/disabled)', () => {
+            component.catalog.set([
+                { key: 'a', status: 'new' },
+                { key: 'c', status: 'exists' },
+            ]);
+            component.selectedKeys.set(new Set(['a', 'c']));
+
+            component.deselectAll();
+
+            expect(component.isKeySelected('a')).toBe(false);
+            expect(component.isKeySelected('c')).toBe(true);
         });
     });
 });

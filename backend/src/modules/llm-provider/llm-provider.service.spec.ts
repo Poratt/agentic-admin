@@ -1,5 +1,5 @@
 import { LessThan, FindOperator } from 'typeorm';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { LlmProviderService } from './llm-provider.service';
 
 function makeService(mockDelete: jest.Mock): LlmProviderService {
@@ -101,5 +101,158 @@ describe('LlmProviderService.deleteProvider', () => {
 
     await expect(svc.deleteProvider(99)).rejects.toThrow(NotFoundException);
     expect(providerRepo.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('LlmProviderService.getProviderCatalog', () => {
+  function makeCatalogService(providerRepo: { createQueryBuilder: jest.Mock }, modelRepo: { find: jest.Mock }): LlmProviderService {
+    return new LlmProviderService(providerRepo as any, modelRepo as any, {} as any, {} as any);
+  }
+
+  function providerRepoFor(provider: any): { createQueryBuilder: jest.Mock } {
+    const qb = {
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getOne: jest.fn().mockResolvedValue(provider),
+    };
+    return { createQueryBuilder: jest.fn().mockReturnValue(qb) };
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('merges the upstream catalog with statuses: new / exists / unavailable', async () => {
+    const providerRepo = providerRepoFor({ id: 12, key: 'nvidia', baseUrl: 'https://x/v1', apiKey: 'k' });
+    const modelRepo = {
+      find: jest.fn().mockResolvedValue([
+        { key: 'openai/gpt-oss-20b', label: 'GPT OSS 20B' },
+        { key: 'deepseek-ai/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+      ]),
+    };
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: 'openai/gpt-oss-20b', owned_by: 'openai' },
+          { id: 'moonshotai/kimi-k2.6', owned_by: 'moonshotai' },
+        ],
+      }),
+    });
+    jest.spyOn(global, 'fetch').mockImplementation(fetchMock as any);
+    const svc = makeCatalogService(providerRepo, modelRepo);
+
+    const res = await svc.getProviderCatalog(12);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://x/v1/models',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer k' }) }),
+    );
+    expect(res.result!.models).toEqual([
+      { key: 'deepseek-ai/deepseek-v4-pro', label: 'DeepSeek V4 Pro', status: 'unavailable' },
+      { key: 'moonshotai/kimi-k2.6', owned_by: 'moonshotai', status: 'new' },
+      { key: 'openai/gpt-oss-20b', owned_by: 'openai', status: 'exists' },
+    ]);
+  });
+
+  it('throws BadRequest when the upstream catalog fails', async () => {
+    const providerRepo = providerRepoFor({ id: 12, key: 'nvidia', baseUrl: 'https://x/v1', apiKey: null });
+    const modelRepo = { find: jest.fn() };
+    jest.spyOn(global, 'fetch').mockResolvedValue({ ok: false, status: 410 } as any);
+    const svc = makeCatalogService(providerRepo, modelRepo);
+
+    await expect(svc.getProviderCatalog(12)).rejects.toThrow(BadRequestException);
+  });
+
+  it('falls back to the Cloudflare native catalog on 405 and maps names to keys', async () => {
+    const providerRepo = providerRepoFor({
+      id: 30,
+      key: 'cloudflare',
+      baseUrl: 'https://api.cloudflare.com/client/v4/accounts/acc123/ai/v1',
+      apiKey: 'cf-key',
+    });
+    const modelRepo = { find: jest.fn().mockResolvedValue([{ key: '@cf/meta/llama-2', label: 'Llama 2' }]) };
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 405 } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          result: [
+            { name: '@cf/openai/gpt-oss-120b', task: { name: 'Text Generation' } },
+            { name: '@cf/meta/llama-2', task: { name: 'Text Generation' } },
+          ],
+        }),
+      } as any);
+    jest.spyOn(global, 'fetch').mockImplementation(fetchMock as any);
+    const svc = makeCatalogService(providerRepo, modelRepo);
+
+    const res = await svc.getProviderCatalog(30);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toContain('/ai/models/search?per_page=100&page=1');
+    expect(res.result!.models).toEqual([
+      { key: '@cf/meta/llama-2', owned_by: undefined, status: 'exists' },
+      { key: '@cf/openai/gpt-oss-120b', status: 'new' },
+    ]);
+  });
+});
+
+describe('LlmProviderService.markModelUnavailable', () => {
+  function makeMarkService(modelRepo: { findOne: jest.Mock; save: jest.Mock }): LlmProviderService {
+    return new LlmProviderService({} as any, modelRepo as any, {} as any, {} as any);
+  }
+
+  it('deactivates an active model', async () => {
+    const model = { id: 5, active: true };
+    const modelRepo = { findOne: jest.fn().mockResolvedValue(model), save: jest.fn().mockResolvedValue(model) };
+    const svc = makeMarkService(modelRepo);
+
+    await svc.markModelUnavailable(12, 'z-ai/glm-5.2');
+
+    expect(modelRepo.findOne).toHaveBeenCalledWith({ where: { providerId: 12, key: 'z-ai/glm-5.2' } });
+    expect(model.active).toBe(false);
+    expect(modelRepo.save).toHaveBeenCalledWith(model);
+  });
+
+  it('does nothing when the model is missing or already inactive', async () => {
+    const modelRepo = { findOne: jest.fn().mockResolvedValue(null), save: jest.fn() };
+    const svc = makeMarkService(modelRepo);
+
+    await svc.markModelUnavailable(12, 'gone');
+
+    expect(modelRepo.save).not.toHaveBeenCalled();
+  });
+});
+
+describe('LlmProviderService.syncProviderModels', () => {
+  function makeSyncService(
+    providerRepo: { findOneBy: jest.Mock },
+    modelRepo: { find: jest.Mock; create: jest.Mock; save: jest.Mock },
+  ): LlmProviderService {
+    return new LlmProviderService(providerRepo as any, modelRepo as any, {} as any, {} as any);
+  }
+
+  it('adds only missing keys (deduped, active=false, capability=text) and counts skips', async () => {
+    const created: any[] = [];
+    const modelRepo = {
+      find: jest.fn().mockResolvedValue([{ key: 'openai/gpt-oss-20b' }]),
+      create: jest.fn().mockImplementation((data) => {
+        created.push(data);
+        return data;
+      }),
+      save: jest.fn().mockResolvedValue([]),
+    };
+    const providerRepo = { findOneBy: jest.fn().mockResolvedValue({ id: 12, key: 'nvidia' }) };
+    const svc = makeSyncService(providerRepo, modelRepo);
+
+    const res = await svc.syncProviderModels(12, ['a', 'a', 'openai/gpt-oss-20b', 'b']);
+
+    expect(modelRepo.save).toHaveBeenCalledWith([created[0], created[1]]);
+    expect(created).toEqual([
+      expect.objectContaining({ key: 'a', active: false, capability: 'text', providerId: 12 }),
+      expect.objectContaining({ key: 'b', active: false, capability: 'text', providerId: 12 }),
+    ]);
+    expect(res.result).toEqual({ added: 2, skipped: 1 });
   });
 });

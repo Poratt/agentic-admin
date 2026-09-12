@@ -14,6 +14,7 @@ import { CreateLlmProviderDto } from './dto/create-llm-provider.dto';
 import { UpdateLlmProviderDto } from './dto/update-llm-provider.dto';
 import { CreateLlmModelDto } from './dto/create-llm-model.dto';
 import { UpdateLlmModelDto } from './dto/update-llm-model.dto';
+import { SyncModelsDto } from './dto/sync-models.dto';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { AdminGuard } from '../../core/guards/admin.guard';
 import { ServiceResultContainer } from '../../core/models/service-result-container.model';
@@ -102,6 +103,39 @@ export class LlmProviderController {
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
   async createModel(@Param('id') id: string, @Body() dto: CreateLlmModelDto): Promise<ServiceResultContainer<LlmModelEntity>> {
     return this.service.createModel(+id, dto);
+  }
+
+  @Get(':id/catalog')
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: 'Get provider model catalog',
+    summaryHe: 'שולפים את קטלוג המודלים החי מהספק וממזגים אותו עם המקומי (חדש / קיים / לא זמין)',
+    toolIcon: 'ph-cloud-arrow-down',
+    description:
+      "Fetches the provider's live OpenAI-compatible GET /models catalog and merges it with the local list: new (not in DB), exists, unavailable (local model the provider no longer lists). Read-only.",
+  } as CustomApiOperationOptions)
+  @ApiOkResponse({ description: 'Merged catalog entries with status new|exists|unavailable' })
+  @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
+  async getCatalog(@Param('id') id: string): Promise<
+    ServiceResultContainer<{
+      models: Array<{ key: string; label?: string; owned_by?: string; status: 'new' | 'exists' | 'unavailable' }>;
+    }>
+  > {
+    return this.service.getProviderCatalog(+id);
+  }
+
+  @Post(':id/sync-models')
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: 'Add selected models from catalog',
+    summaryHe: 'מוסיפים מודלים שנבחרו מהקטלוג כשהם כבויים, עם דילוג של קיימים',
+    toolIcon: 'ph-download-simple',
+    description: 'Bulk-adds model keys selected in the sync dialog with active=false, capability=text. Existing keys are skipped.',
+  } as CustomApiOperationOptions)
+  @ApiOkResponse({ description: 'Number of models added/skipped' })
+  @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
+  async syncModels(@Param('id') id: string, @Body() dto: SyncModelsDto): Promise<ServiceResultContainer<{ added: number; skipped: number }>> {
+    return this.service.syncProviderModels(+id, dto.keys);
   }
 
   @Patch('models/:id')

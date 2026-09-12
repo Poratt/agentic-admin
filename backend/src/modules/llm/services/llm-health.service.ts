@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { ServiceResultContainer } from '../../../core/models/service-result-container.model';
 import { LlmModelCheckTarget, LlmModelTestResult, LlmProvider } from '../types/llm.types';
 import { LlmClientService } from './llm-client.service';
@@ -7,11 +7,76 @@ import { LlmProviderService } from '../../llm-provider/llm-provider.service';
 
 @Injectable()
 export class LlmHealthService {
+  private readonly logger = new Logger(LlmHealthService.name);
+
+  /** Provider ids with a background test run currently in flight. */
+  private readonly providerTestRuns = new Set<number>();
+
+  isProviderTestRunning(providerId: number): boolean {
+    return this.providerTestRuns.has(providerId);
+  }
+
   constructor(
     private readonly client: LlmClientService,
     private readonly providerConfig: LlmProviderConfigService,
     private readonly dbProviderService: LlmProviderService,
   ) {}
+
+  /**
+   * Tests every active text model of ONE provider sequentially and saves each
+   * result (testLlm persists per model). Paced for OpenRouter free-tier limits
+   * (~3.5s between free-model calls). The controller kicks this off WITHOUT
+   * awaiting — results stream into llm_model_test_results as models complete,
+   * and the guard rejects a second concurrent run for the same provider.
+   */
+  async testProviderModels(providerId: number): Promise<ServiceResultContainer<{ tested: number }>> {
+    if (this.providerTestRuns.has(providerId)) {
+      throw new BadRequestException('A test run for this provider is already in progress');
+    }
+
+    const providersResult = await this.dbProviderService.findProviders();
+    const provider = (providersResult.result ?? []).find((p) => p.id === providerId);
+    if (!provider) throw new NotFoundException(`Provider with ID ${providerId} not found`);
+
+    const models = (provider.models ?? []).filter((m) => m.active && (!m.capability || m.capability === 'text'));
+    if (models.length === 0) {
+      return { success: true, message: 'No active text models to test', result: { tested: 0 } };
+    }
+
+    this.providerTestRuns.add(providerId);
+    void (async () => {
+      try {
+        for (const model of models) {
+          try {
+            await this.testLlm(
+              provider.key as any,
+              model.key,
+              'Hello! This is an interactive connection test.',
+              'You are a helpful assistant.',
+              model.id,
+            );
+          } catch (error: unknown) {
+            // Daily quota exhausted — every remaining call would 429 too. Abort the run.
+            if (error instanceof BadRequestException && error.message.includes('quota exhausted')) {
+              this.logger.warn(`Provider ${providerId}: daily free-model quota exhausted — aborting test run`);
+              return;
+            }
+            // Capability gate or provider error for this model — continue with the rest.
+          }
+          const paced = model.key.toLowerCase().includes(':free') || provider.key === 'openrouter';
+          await new Promise((resolve) => setTimeout(resolve, paced ? 3_500 : 1_000));
+        }
+      } finally {
+        this.providerTestRuns.delete(providerId);
+      }
+    })();
+
+    return {
+      success: true,
+      message: `Testing ${models.length} models in the background`,
+      result: { tested: models.length },
+    };
+  }
 
   async testLlm(
     provider: LlmProvider,
@@ -75,6 +140,12 @@ export class LlmHealthService {
       console.error('Failed to save LLM test result to database:', dbError);
     }
 
+    // Daily-quota exhaustion is deterministic — surface it loudly so batch runs
+    // (test-all) can abort immediately instead of grinding through the rest.
+    if (errorMessage?.includes('free-models-per-day')) {
+      throw new BadRequestException('OpenRouter daily free-model quota exhausted — add credits or wait for the daily reset');
+    }
+
     return {
       success: status === 'success',
       message: status === 'success' ? 'LLM check completed successfully.' : `LLM check failed: ${errorMessage}`,
@@ -131,6 +202,10 @@ export class LlmHealthService {
           provider: model.provider,
           available: false,
         });
+        // Daily quota exhausted — remaining models would 429 too. Stop the batch run.
+        if (e instanceof BadRequestException && e.message.includes('quota exhausted')) {
+          break;
+        }
       }
 
       // Delay after each model within a batch

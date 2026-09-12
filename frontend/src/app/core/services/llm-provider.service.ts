@@ -29,6 +29,13 @@ export interface LlmProvider {
     updatedAt: string;
 }
 
+export interface ProviderCatalogEntry {
+    key: string;
+    label?: string;
+    owned_by?: string;
+    status: 'new' | 'exists' | 'unavailable';
+}
+
 @Injectable({
     providedIn: 'root',
 })
@@ -57,6 +64,25 @@ export class LlmProviderService {
         return this.http.post<ServiceResultContainer<LlmModel>>(`${this.base}/${providerId}/models`, model);
     }
 
+    // Live catalog from the provider's OpenAI-compatible GET /models, merged with
+    // the local list: new / exists / unavailable (local model no longer listed).
+    getCatalog(providerId: number): Observable<ServiceResultContainer<{ models: ProviderCatalogEntry[] }>> {
+        return this.http.get<ServiceResultContainer<{ models: ProviderCatalogEntry[] }>>(
+            `${this.base}/${providerId}/catalog`,
+        );
+    }
+
+    // Adds the selected catalog keys with active=false; existing keys are skipped server-side.
+    syncModels(
+        providerId: number,
+        keys: string[],
+    ): Observable<ServiceResultContainer<{ added: number; skipped: number }>> {
+        return this.http.post<ServiceResultContainer<{ added: number; skipped: number }>>(
+            `${this.base}/${providerId}/sync-models`,
+            { keys },
+        );
+    }
+
     updateModel(modelId: number, model: Partial<LlmModel>): Observable<ServiceResultContainer<LlmModel>> {
         return this.http.patch<ServiceResultContainer<LlmModel>>(`${this.base}/models/${modelId}`, model);
     }
@@ -79,6 +105,22 @@ export class LlmProviderService {
 
     testModel(modelId: number): Observable<ServiceResultContainer<any>> {
         return this.http.post<ServiceResultContainer<any>>(`${environment.apiUrl}/llm/models/${modelId}/test`, {});
+    }
+
+    // Starts a background test run for every active text model of the provider;
+    // results stream into the test history as each model completes.
+    testAllModels(providerId: number): Observable<ServiceResultContainer<{ tested: number }>> {
+        return this.http.post<ServiceResultContainer<{ tested: number }>>(
+            `${environment.apiUrl}/llm/providers/${providerId}/test-all`,
+            {},
+        );
+    }
+
+    // Whether the provider's background test run is still in flight.
+    testAllStatus(providerId: number): Observable<ServiceResultContainer<{ running: boolean }>> {
+        return this.http.get<ServiceResultContainer<{ running: boolean }>>(
+            `${environment.apiUrl}/llm/providers/${providerId}/test-all/status`,
+        );
     }
 
     deleteTestResult(testResultId: number): Observable<ServiceResultContainer<void>> {

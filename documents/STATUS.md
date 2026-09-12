@@ -2,6 +2,31 @@
 
 Last updated: 2026-09-12
 
+## 2026-09-12 — ✅ DONE: Test All (per-provider, background) + provider row-level click
+
+- **Backend:** `POST /llm/providers/:id/test-all` — sequential testLlm over the provider's active text models (results saved per model), paced 3.5s free / 1s paid, runs in background ({tested} returned immediately), concurrent-run guard per provider; hidden from the agent.
+- **Frontend:** "Test All" button next to Sync — toast on start, spinner+disabled while in flight, store reloads every 8s (~96s) so results appear live; "Nothing to test" guard.
+- **UX:** whole provider row toggles expansion (cursor pointer; action buttons stop propagation).
+- **Verified:** backend **526/526 (48 suites)** + build 0; frontend **536/536 (57 files)** + build 0. graphify updated. No architecture-diagram change. No commit/push.
+- **Open:** restart backend to serve the endpoint; then commit+push of the full session.
+
+## 2026-09-12 — ✅ DONE: provider model catalog sync dialog + lazy auto-mark
+
+- **Why:** manual model entry broke down when NVIDIA retired 8 seed-era checkpoints (410s) — catalog sync replaces manual add.
+- **Backend:** `GET :id/catalog` (live /models merged: new/exists/unavailable w/ local label) + `POST :id/sync-models` (bulk add active=false, dedupe/skip) + lazy auto-mark: real-usage 404 + model_not_found/invalid_model/model-key signal → auto active=false (generic 404s ignored). syncModels hidden from the agent.
+- **Frontend (user-verified ✅):** "Sync" button per provider → dialog: header stats, search + Select/Deselect All one row, collapsible groups by owned_by/key-prefix, Exists gray+disabled+tag, unavailable hidden behind `Show unavailable (N)` (red tags, always last), `~` variant prefix stripped for display only (real OpenRouter ids), 16px checkboxes + clickable labels, sm footer buttons.
+- **✅ KEY LESSON (Golden Rule #8):** PrimeNG dialogs project to `<body>` — component-emulated CSS never reaches them; ALL dialog styles live in `_primeng-overrides.css`. This was the entire "styling not applied" saga.
+- **Verified:** backend **523/523 (48 suites)** + build 0; frontend **534/534 (57 files)** + targeted 46/46 + build 0. graphify updated. No architecture-diagram change. No commit/push.
+- **Open (user, optional):** daily background catalog-refresh job.
+
+## 2026-09-12 — 🚑 RECOVERED: llm-db checkout corrupted live DB + local env files
+
+- **Cause:** running the backend (watch) on the old llm-db branch applied its June schema to the shared live DB → `llm_models` wiped (provider_id=0, key=''), 325 test results orphaned, FKs dropped. Checkout also deleted gitignored env files + local root package.json.
+- **Recovered:** env files + root package.json recreated; 44/47 models restored via label→seed mapping (ids preserved → user defaults intact); 3 unmapped customs deleted (GLM 4.7 Flash, MiniMax M3 dup, x-Alpha); 325 orphaned test results removed (unattributable). Backend boots clean, unique index + FKs recreated; client up. apiKeys restored encrypted from .env (openrouter, nvidia, agnes, OmniRoute, GMI-Cloud, cloudflare). GLM 4.7 Flash re-added on cloudflare (`@cf/zai-org/glm-4.7-flash`, live-verified SUCCESS).
+- **User cleanup (verified live):** NVIDIA — 8 retired checkpoints deleted (NIM catalog drift, 4 remain); requesty provider deleted (no key existed). Final state: 6 providers, 36 models.
+- **Prevention (done, user approved):** AGENTS.md Golden Rule #7 — no branch switch with backend running + mandatory baseline dump; baseline taken: `C:\tmp\db-baselines\my_app-2026-09-12-post-recovery.sql` (2.9MB, 17 tables).
+- **Open:** user re-adds x-Alpha / MiniMax M3 if wanted; root package.json still untracked (decide whether to commit).
+
 ## 2026-09-12 — ✅ CLOSED (user decision): SearXNG proxy backlog item obsolete
 
 - User: the project moved off SearXNG to a different search mechanism (the new web-search channels — Tavily / Reddit / HN Algolia, see the squashed web-search commits). The long-open "rotating proxy pool" decision is moot — no action needed. Historical backlog mentions in older entries stay as records.

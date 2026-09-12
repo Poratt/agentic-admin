@@ -17,15 +17,15 @@ Replace every **inline** animated loader in the frontend with a single, design-s
 
 The user reported that the chat's three-dot loader for active tool steps looked "stuck" and read as a missing animation. We fixed the activation logic in `chat-message.ts:74-114`, but the visual itself is still the same hand-rolled three-pulse pattern declared in `chat-message.css:229-253`. That pattern is one of seven in the app:
 
-| # | Loader | File:line | What it looks like | Plan status |
-|---|--------|-----------|--------------------|-------------|
-| 1 | `.custom-loader` | `_utilities.css:205-214` | 48px circle with `border-top-color` rotating, `animation: spin 1s linear infinite` | **Phase 4 (deferred)** |
-| 2 | `.custom-loader` (duplicate) | `chat.css:27-34` | Same as #1 — should already have been deleted per the audit | **Phase 4 (deferred)** |
-| 3 | `.loading-dots` (chat step) | `chat-message.css:229-253` | Three small rectangles, pulse-bounce with 150/300ms stagger | Phase 2 (active) |
-| 4 | `.dots-loader` | `strain-hunter.css:243-264` | Three small circles, dot-bounce with 0.2/0.4s stagger | Phase 3 (active) |
-| 5 | `.loading-dots` (static) | `strain-hunter.css:226-241` | Three tiny dots, **no animation** (used inside a `summary-value--muted`) | Phase 3 (active) |
-| 6 | `ph ph-spinner ph-spin` / `ph ph-circle-notch ph-spin` | icon font + `_utilities.css:216-218` | Phosphor icon rotating via the `spin` keyframe | **Out of scope** (D3) |
-| 7 | PrimeNG `<p-progressSpinner>` | `media-studio.ts:6` | PrimeNG's stock circle spinner — only used inside the media studio | **Out of scope** (deterministic progress) |
+| #   | Loader                                                | File:line                            | What it looks like                                                                 | Plan status                               |
+| --- | ----------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------- | ----------------------------------------- |
+| 1   | `.custom-loader`                                      | `_utilities.css:205-214`             | 48px circle with `border-top-color` rotating, `animation: spin 1s linear infinite` | **Phase 4 (deferred)**                    |
+| 2   | `.custom-loader` (duplicate)                          | `chat.css:27-34`                     | Same as #1 — should already have been deleted per the audit                        | **Phase 4 (deferred)**                    |
+| 3   | `.loading-dots` (chat step)                           | `chat-message.css:229-253`           | Three small rectangles, pulse-bounce with 150/300ms stagger                        | Phase 2 (active)                          |
+| 4   | `.dots-loader`                                        | `strain-hunter.css:243-264`          | Three small circles, dot-bounce with 0.2/0.4s stagger                              | Phase 3 (active)                          |
+| 5   | `.loading-dots` (static)                              | `strain-hunter.css:226-241`          | Three tiny dots, **no animation** (used inside a `summary-value--muted`)           | Phase 3 (active)                          |
+| 6   | `ph ph-spinner ph-spin` / `ph ph-spinner-gap ph-spin` | icon font + `_utilities.css:216-218` | Phosphor icon rotating via the `spin` keyframe                                     | **Out of scope** (D3)                     |
+| 7   | PrimeNG `<p-progressSpinner>`                         | `media-studio.ts:6`                  | PrimeNG's stock circle spinner — only used inside the media studio                 | **Out of scope** (deterministic progress) |
 
 A user moving from Strain Hunter to Chat to LLM Providers sees three different loading styles for what is functionally the same "wait, content is coming" affordance. That is a real consistency cost. The shimmer effect — already common in modern chat UAs (ChatGPT, Claude, Linear) — collapses the **inline** loaders into one vocabulary (Phases 2, 3, 5). The **page-level** rotating border (Phase 4) and the **icon-font** spinner (D3) stay as-is for now. The page-level one is the highest-blast-radius change in the plan and is deferred so the user can validate the inline shimmer first.
 
@@ -45,8 +45,8 @@ A user moving from Strain Hunter to Chat to LLM Providers sees three different l
 
 ## Out of scope (called out explicitly)
 
-- **PrimeNG `<p-progressSpinner>` in `media-studio.ts:6`.** This is the media studio's *generation* progress circle — a deterministic progress indicator for image/video creation, not a generic "loading" affordance. Replacing it with a shimmer would lose the determinism. **Skipped.** If a future plan wants to align the media-studio progress look with the rest of the app, it should be a separate plan.
-- **The `ph ph-spinner` icon** used as a *static icon* (e.g. as a button glyph that happens to look like a spinner). Only the *animated* version (`ph-spin` class) is in scope. We will scan for the static icon usage in the same pass and confirm.
+- **PrimeNG `<p-progressSpinner>` in `media-studio.ts:6`.** This is the media studio's _generation_ progress circle — a deterministic progress indicator for image/video creation, not a generic "loading" affordance. Replacing it with a shimmer would lose the determinism. **Skipped.** If a future plan wants to align the media-studio progress look with the rest of the app, it should be a separate plan.
+- **The `ph ph-spinner` icon** used as a _static icon_ (e.g. as a button glyph that happens to look like a spinner). Only the _animated_ version (`ph-spin` class) is in scope. We will scan for the static icon usage in the same pass and confirm.
 - **The `pulse-dot` rule in `_utilities.css:193-200`.** This is a status indicator (green glowing dot) for "operational" states, not a loader. **Skipped.**
 - **`@keyframes pulse` in `llm-test-results.component.css:171-181`.** Local to that component, used for an in-card result status, not a loader. **Skipped.**
 - **Adding new design tokens** for the shimmer. The gradient endpoints use `color-mix()` over existing tokens; no new color is introduced.
@@ -80,7 +80,7 @@ After the planning discussion, the user chose to defer the page-level rebrand so
 
 ### D3. The `ph ph-spinner ph-spin` icon font pattern is left untouched
 
-The icon-font spinner (`<i class="ph ph-spinner ph-spin">`) is used in 8 places: `strain-hunter-settings.html:47, 120, 145, 332, 412, 437` and `database-monitor-settings.html:3`, plus the `ph-circle-notch` variant in `media-studio.html:88, 180, 197`. Replacing each one with a hand-rolled HTML element is **out of proportion** to the visual gain. The pragmatic call:
+The icon-font spinner (`<i class="ph ph-spinner ph-spin">`) is used in 8 places: `strain-hunter-settings.html:47, 120, 145, 332, 412, 437` and `database-monitor-settings.html:3`, plus the `ph-spinner-gap` variant in `media-studio.html:88, 180, 197`. Replacing each one with a hand-rolled HTML element is **out of proportion** to the visual gain. The pragmatic call:
 
 - **Keep** the Phosphor icon usage. The icon itself is already a stylized loading ring; the `ph-spin` class is a 360° spin animation, which is visually distinct from the inline shimmer pill and is **not** the user's complaint.
 - The `_utilities.css:216-218` `ph-spin` rule stays as-is. (Earlier drafts proposed rebranding it to a "shimmer ring" inside the same `<i>` element, but that has been dropped: it would create a third visual family that doesn't match either the inline pill or the existing rotating border, and the icon font cannot render a CSS gradient sweep meaningfully anyway.)
@@ -126,8 +126,12 @@ Strings like `מבצע העשרה...` (`strain-hunter-settings.html:48`), `יו�
 1. `frontend/src/app/assets/styles/_animations.css` — append a single new keyframe:
    ```css
    @keyframes shimmer-sweep {
-     0%   { background-position: 200% 0; }
-     100% { background-position: -200% 0; }
+     0% {
+       background-position: 200% 0;
+     }
+     100% {
+       background-position: -200% 0;
+     }
    }
    ```
    (`@keyframes shimmer-rotate` for the conic ring is **deferred to Phase 4** — see Deferred work. Phase 1 only needs `shimmer-sweep`.)
@@ -216,16 +220,16 @@ Strings like `מבצע העשרה...` (`strain-hunter-settings.html:48`), `יו�
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|-----------|------------|
-| Text-shimmer affects copy/paste (gradient text is selectable but the visual highlight can confuse readers about which is the "real" text) | Low | The `shimmer-text` class only applies the gradient; the underlying text node is the same. Screen readers read the same content. Copy works. |
-| Conic gradient shimmer circle is heavier on GPU than the current border spin (48px of compositing instead of a 1px border) | Low | **Deferred with Phase 4.** The shimmer ring only ships if Phase 4 is unblocked. The 48px area is small and rotates once per 1.5s; no measurable perf impact on any device we've tested on. We will verify with the Angular DevTools Performance panel before unblocking. |
-| Removing `.response-loader` breaks a third-party import we haven't found | Very low | The class is in `chat-message.css` only and not exported. Grep across `frontend/src` shows zero consumers. |
-| Renaming `.loading-dots` and `.dots-loader` in strain-hunter breaks a test | Low | No spec file in `strain-hunter.spec.ts` references these class names (verified by `rg -n "loading-dots|dots-loader" frontend/src/app/features/strain-hunter/*.spec.ts`). |
-| RTL: the keyframe direction needs to mirror in RTL, or the shimmer will look like it's going the wrong way | Medium | Phase 1 step 1c includes a `[dir="rtl"] .shimmer::before` rule that flips the keyframe positions. We will visually verify in the chat (RTL Hebrew UI) and in the strain-hunter page. |
-| `prefers-reduced-motion: reduce` users see no shimmer at all, which is too quiet | Low | The reduced-motion fallback keeps the **shape and position** of the pill/circle — only the sweep animation is removed. It still reads as "loading" because the element occupies the same space a content element would. |
-| Existing tests in `chat-message.spec.ts` (if any) reference the old `.loading-dots` selector | Low | Verified by Grep — there is no `chat-message.spec.ts` file. Tests touch `currency-card`, `app`, and the LLM block components, none of which depend on this CSS. |
-| Bundle bloat — adding ~1KB of CSS for a primitive that 5+ pages use | Negligible | Net effect is **negative for the active phases**: removing `.response-loader` (-0.4KB) and removing the `dot-bounce` keyframe (-0.1KB) offsets the new shimmer rules. The duplicate `.custom-loader` in `chat.css` (-0.2KB) stays until Phase 4 unblocks. |
+| Risk                                                                                                                                      | Likelihood | Mitigation                                                                                                                                                                                                                                                               |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Text-shimmer affects copy/paste (gradient text is selectable but the visual highlight can confuse readers about which is the "real" text) | Low        | The `shimmer-text` class only applies the gradient; the underlying text node is the same. Screen readers read the same content. Copy works.                                                                                                                              |
+| Conic gradient shimmer circle is heavier on GPU than the current border spin (48px of compositing instead of a 1px border)                | Low        | **Deferred with Phase 4.** The shimmer ring only ships if Phase 4 is unblocked. The 48px area is small and rotates once per 1.5s; no measurable perf impact on any device we've tested on. We will verify with the Angular DevTools Performance panel before unblocking. |
+| Removing `.response-loader` breaks a third-party import we haven't found                                                                  | Very low   | The class is in `chat-message.css` only and not exported. Grep across `frontend/src` shows zero consumers.                                                                                                                                                               |
+| Renaming `.loading-dots` and `.dots-loader` in strain-hunter breaks a test                                                                | Low        | No spec file in `strain-hunter.spec.ts` references these class names (verified by `rg -n "loading-dots                                                                                                                                                                   | dots-loader" frontend/src/app/features/strain-hunter/\*.spec.ts`). |
+| RTL: the keyframe direction needs to mirror in RTL, or the shimmer will look like it's going the wrong way                                | Medium     | Phase 1 step 1c includes a `[dir="rtl"] .shimmer::before` rule that flips the keyframe positions. We will visually verify in the chat (RTL Hebrew UI) and in the strain-hunter page.                                                                                     |
+| `prefers-reduced-motion: reduce` users see no shimmer at all, which is too quiet                                                          | Low        | The reduced-motion fallback keeps the **shape and position** of the pill/circle — only the sweep animation is removed. It still reads as "loading" because the element occupies the same space a content element would.                                                  |
+| Existing tests in `chat-message.spec.ts` (if any) reference the old `.loading-dots` selector                                              | Low        | Verified by Grep — there is no `chat-message.spec.ts` file. Tests touch `currency-card`, `app`, and the LLM block components, none of which depend on this CSS.                                                                                                          |
+| Bundle bloat — adding ~1KB of CSS for a primitive that 5+ pages use                                                                       | Negligible | Net effect is **negative for the active phases**: removing `.response-loader` (-0.4KB) and removing the `dot-bounce` keyframe (-0.1KB) offsets the new shimmer rules. The duplicate `.custom-loader` in `chat.css` (-0.2KB) stays until Phase 4 unblocks.                |
 
 ---
 

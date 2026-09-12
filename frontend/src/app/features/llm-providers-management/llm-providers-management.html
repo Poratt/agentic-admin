@@ -55,7 +55,7 @@
                             </span>
                         </div>
                     </div>
-                    <label class="show-inactive-toggle" for="show-inactive">
+                    <label class="control-label-inline" for="show-inactive">
                         <p-toggleswitch [ngModel]="showInactive()" (ngModelChange)="toggleShowInactive($event)" inputId="show-inactive" />
                         Show inactive
                     </label>
@@ -87,7 +87,7 @@
                     </ng-template>
 
                     <ng-template #body let-provider>
-                        <tr>
+                        <tr class="clickable-row" (click)="toggleProvider(provider.id)">
                             <td class="col-expand">
                                 <button
                                     type="button"
@@ -96,19 +96,23 @@
                                     [attr.aria-label]="isProviderExpanded(provider.id) ? 'Collapse' : 'Expand'"
                                     appTooltip
                                     [text]="isProviderExpanded(provider.id) ? 'Collapse' : 'Expand'"
-                                    (click)="toggleProvider(provider.id)"
                                 >
                                     <i class="ph ph-caret-right"></i>
                                 </button>
                             </td>
-                            <td class="row-label clickable" (click)="toggleProvider(provider.id)">{{ provider.label }}</td>
+                            <td class="row-label">{{ provider.label }}</td>
                             <td class="row-meta row-meta--mono col-base-url" appTooltip [text]="provider.baseUrl">
                                 {{ provider.baseUrl }}
                             </td>
                             <td class="col-count count-value">{{ provider.modelsCount }}</td>
                             <td class="col-actions">
                                 @if (isAdmin()) {
-                                    <div class="row-actions">
+                                    <div class="row-actions" (click)="$event.stopPropagation()">
+                                        <p-toggleswitch
+                                            [ngModel]="provider.active"
+                                            (ngModelChange)="setProviderActive(provider, $event)"
+                                            [ariaLabel]="provider.active ? 'Deactivate provider' : 'Activate provider'"
+                                        />
                                         <button
                                             type="button"
                                             class="icon-only transparent-btn sm"
@@ -119,11 +123,7 @@
                                         >
                                             <i class="ph ph-pencil-simple"></i>
                                         </button>
-                                        <p-toggleswitch
-                                            [ngModel]="provider.active"
-                                            (ngModelChange)="setProviderActive(provider, $event)"
-                                            [ariaLabel]="provider.active ? 'Deactivate provider' : 'Activate provider'"
-                                        />
+
                                         <button
                                             type="button"
                                             class="icon-only danger-btn sm"
@@ -147,34 +147,30 @@
                                             <span class="ph ph-cube-simple"></span>
                                             <p>No models configured for this provider.</p>
                                             @if (isAdmin()) {
-                                                <button
-                                                    type="button"
-                                                    class="primary-btn filled sm"
-                                                    (click)="openAddModelDialog(provider.id)"
-                                                >
-                                                    <i class="ph ph-plus"></i>
-                                                    Add Model
-                                                </button>
+                                                <div class="row-actions">
+                                                    <button
+                                                        type="button"
+                                                        class="transparent-btn sm"
+                                                        (click)="openSyncDialog(provider)"
+                                                        aria-label="Sync models from provider"
+                                                        appTooltip
+                                                        [text]="'Sync from provider'"
+                                                    >
+                                                        <i class="ph ph-cloud-arrow-down"></i>
+                                                        Sync
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        class="primary-btn filled sm"
+                                                        (click)="openAddModelDialog(provider.id)"
+                                                    >
+                                                        <i class="ph ph-plus"></i>
+                                                        Add Model
+                                                    </button>
+                                                </div>
                                             }
                                         </div>
                                     } @else {
-                                        <div class="panel-header compact">
-                                            <span class="panel-title muted">Models</span>
-                                            @if (isAdmin()) {
-                                                <button
-                                                    type="button"
-                                                    class="primary-btn filled sm"
-                                                    (click)="openAddModelDialog(provider.id)"
-                                                    aria-label="Add model"
-                                                    appTooltip
-                                                    [text]="'Add model'"
-                                                >
-                                                    <i class="ph ph-plus"></i>
-                                                    Add Model
-                                                </button>
-                                            }
-                                        </div>
-
                                         <p-table
                                             [value]="provider.models"
                                             dataKey="id"
@@ -195,8 +191,58 @@
                                                             Performance <p-sort-icon field="performanceScore" />
                                                         </div>
                                                     </th>
-                                                    <th class="col-test"></th>
-                                                    <th class="col-actions-xs"></th>
+                                                    <th class="col-test">
+                                                        @if (isAdmin()) {
+                                                            <button
+                                                                type="button"
+                                                                class="icon-only transparent-btn sm"
+                                                                [class.testing]="testingAllProviderId() === provider.id"
+                                                                [disabled]="testingAllProviderId() === provider.id"
+                                                                aria-label="Test all models"
+                                                                appTooltip
+                                                                [text]="
+                                                                    testingAllProviderId() === provider.id
+                                                                        ? 'Testing in background...'
+                                                                        : 'Test all models'
+                                                                "
+                                                                (click)="testAllModels(provider)"
+                                                            >
+                                                                <i
+                                                                    [class]="
+                                                                        testingAllProviderId() === provider.id
+                                                                            ? 'ph ph-spinner-gap ph-spin'
+                                                                            : 'ph ph-lightning'
+                                                                    "
+                                                                ></i>
+                                                            </button>
+                                                        }
+                                                    </th>
+                                                    <th class="col-actions-xs">
+                                                        @if (isAdmin()) {
+                                                            <div class="row-actions">
+                                                                <button
+                                                                    type="button"
+                                                                    class="icon-only transparent-btn sm"
+                                                                    aria-label="Sync models from provider"
+                                                                    appTooltip
+                                                                    [text]="'Sync from provider'"
+                                                                    (click)="openSyncDialog(provider)"
+                                                                >
+                                                                    <i class="ph ph-cloud-arrow-down"></i>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    class="icon-only transparent-btn sm"
+                                                                    aria-label="Add model"
+                                                                    appTooltip
+                                                                    [text]="'Add model'"
+                                                                    (click)="openAddModelDialog(provider.id)"
+                                                                >
+                                                                    <i class="ph ph-plus"></i>
+                                                                </button>
+                                                            </div>
+                                                        }
+                                                    </th>
                                                 </tr>
                                             </ng-template>
 
@@ -267,7 +313,7 @@
                                                                 <i
                                                                     [class]="
                                                                         testingModelId() === model.id
-                                                                            ? 'ph ph-circle-notch ph-spin'
+                                                                            ? 'ph ph-spinner-gap ph-spin'
                                                                             : 'ph ph-lightning'
                                                                     "
                                                                 ></i>
@@ -277,6 +323,11 @@
                                                     <td class="col-actions-xs">
                                                         @if (isAdmin()) {
                                                             <div class="row-actions">
+                                                                <p-toggleswitch
+                                                                    [ngModel]="model.active"
+                                                                    (ngModelChange)="setModelActive(provider.id, model, $event)"
+                                                                    [ariaLabel]="model.active ? 'Deactivate model' : 'Activate model'"
+                                                                />
                                                                 <button
                                                                     type="button"
                                                                     class="icon-only accent-btn sm"
@@ -296,6 +347,7 @@
                                                                         "
                                                                     ></i>
                                                                 </button>
+
                                                                 <button
                                                                     type="button"
                                                                     class="icon-only transparent-btn sm"
@@ -306,11 +358,7 @@
                                                                 >
                                                                     <i class="ph ph-pencil-simple"></i>
                                                                 </button>
-                                                                <p-toggleswitch
-                                                                    [ngModel]="model.active"
-                                                                    (ngModelChange)="setModelActive(provider.id, model, $event)"
-                                                                    [ariaLabel]="model.active ? 'Deactivate model' : 'Activate model'"
-                                                                />
+
                                                                 <button
                                                                     type="button"
                                                                     class="icon-only danger-btn sm"
@@ -565,6 +613,140 @@
         <button type="button" class="primary-btn filled sm" [disabled]="modelForm.invalid" (click)="saveModel()">
             <i class="ph ph-check"></i>
             <span>Save</span>
+        </button>
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    [visible]="syncDialogVisible()"
+    (visibleChange)="syncDialogVisible.set($event)"
+    [modal]="true"
+    [closable]="!syncing()"
+    [dismissableMask]="!syncing()"
+    [style]="{ width: '680px', maxWidth: '94vw' }"
+    [draggable]="false"
+    [resizable]="false"
+>
+    <ng-template #header>
+        <div class="sync-dialog-header">
+            <span class="sync-dialog-title">Sync Models · {{ syncProvider()?.label }}</span>
+            <span class="sync-dialog-stats">
+                {{ newSelectionCount() }} selected · {{ existingCount() }} existing · {{ unavailableCount() }} unavailable
+            </span>
+        </div>
+    </ng-template>
+    @if (catalogLoading()) {
+        <div class="sync-dialog-state">
+            <i class="ph ph-spinner-gap ph-spin"></i>
+            <p>Loading provider catalog...</p>
+        </div>
+    } @else if (catalogError()) {
+        <div class="sync-dialog-state error-state">
+            <span class="ph ph-warning-circle"></span>
+            <p>{{ catalogError() }}</p>
+            <button type="button" class="primary-btn filled sm" (click)="retryCatalog()">
+                <i class="ph ph-arrow-clockwise"></i>
+                Try again
+            </button>
+        </div>
+    } @else {
+        <div class="sync-toolbar">
+            <input
+                pInputText
+                type="text"
+                class="form-control"
+                placeholder="Search models..."
+                [value]="catalogSearch()"
+                (input)="catalogSearch.set($any($event.target).value)"
+            />
+            <span class="sync-bulk">
+                <button type="button" class="transparent-btn sm" (click)="selectAllNew()">Select All</button>
+                <button type="button" class="transparent-btn sm" (click)="deselectAll()">Deselect All</button>
+            </span>
+        </div>
+
+        <div class="sync-model-list">
+            @for (group of catalogGroups(); track group.name; let g = $index) {
+                <div class="sync-group">
+                    <div class="sync-group-header" (click)="toggleGroup(group.name)">
+                        <i
+                            class="ph"
+                            [class.ph-caret-down]="!isGroupCollapsed(group.name)"
+                            [class.ph-caret-right]="isGroupCollapsed(group.name)"
+                        ></i>
+                        <span class="sync-group-name">{{ group.name }}</span>
+                        <span class="sync-group-count">{{ group.items.length }}</span>
+                    </div>
+                    @if (!isGroupCollapsed(group.name)) {
+                        <div class="sync-group-body">
+                            @for (m of group.items; track m.key; let i = $index) {
+                                <div class="sync-model-row" [class.exists-row]="m.status === 'exists'">
+                                    <p-checkbox
+                                        [binary]="true"
+                                        [inputId]="'sync-model-cb-' + g + '-' + i"
+                                        [ngModel]="isKeySelected(m.key)"
+                                        (ngModelChange)="toggleCatalogKey(m.key, $event)"
+                                        [disabled]="m.status === 'exists'"
+                                    />
+                                    <label class="sync-model-key" [for]="'sync-model-cb-' + g + '-' + i" appTooltip [text]="m.key">{{
+                                        shortModelName(m.key)
+                                    }}</label>
+                                    @if (m.status === 'exists') {
+                                        <span class="sync-tag tag-exists">Exists</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            } @empty {
+                <div class="sync-dialog-state">
+                    <p>No models match the current filter.</p>
+                </div>
+            }
+        </div>
+
+        @if (unavailableCount() > 0) {
+            <div class="sync-unavailable-section">
+                <button
+                    type="button"
+                    class="sync-unavailable-toggle"
+                    (click)="toggleShowUnavailable()"
+                    [attr.aria-expanded]="showUnavailable()"
+                >
+                    <i class="ph" [class.ph-caret-down]="showUnavailable()" [class.ph-caret-right]="!showUnavailable()"></i>
+                    Show unavailable ({{ unavailableCount() }})
+                </button>
+                @if (showUnavailable()) {
+                    <div class="sync-model-list unavailable-list">
+                        @for (m of unavailableList(); track m.key) {
+                            <div class="sync-model-row unavailable-row">
+                                <span class="sync-model-key" appTooltip [text]="m.key">{{ shortModelName(m.label || m.key) }}</span>
+                                <span class="sync-tag tag-unavailable">Unavailable</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    <ng-template #footer>
+        <button type="button" class="transparent-btn sm" [disabled]="syncing()" (click)="closeSyncDialog()">
+            <span>Cancel</span>
+        </button>
+        <button
+            type="button"
+            class="primary-btn filled sm"
+            [disabled]="syncing() || newSelectionCount() === 0 || catalogLoading()"
+            (click)="addSelectedModels()"
+        >
+            @if (syncing()) {
+                <i class="ph ph-spinner-gap ph-spin"></i>
+            } @else {
+                <i class="ph ph-download-simple"></i>
+            }
+            <span>Add Selected ({{ newSelectionCount() }})</span>
         </button>
     </ng-template>
 </p-dialog>

@@ -175,6 +175,167 @@ export class LlmProviderService {
       .getOne();
   }
 
+  /**
+   * Fetches the provider's live model catalog from its OpenAI-compatible
+   * `GET {baseUrl}/models` endpoint and merges it with the local model list:
+   * - 'new'         — upstream entry we don't have yet
+   * - 'exists'      — upstream entry already in the DB
+   * - 'unavailable' — local model the provider no longer lists (retired)
+   * Read-only — nothing is written until syncProviderModels runs.
+   */
+  async getProviderCatalog(providerId: number): Promise<
+    ServiceResultContainer<{
+      models: Array<{ key: string; label?: string; owned_by?: string; status: 'new' | 'exists' | 'unavailable' }>;
+    }>
+  > {
+    const provider = await this.providerRepo
+      .createQueryBuilder('provider')
+      .addSelect('provider.apiKey')
+      .where('provider.id = :id', { id: providerId })
+      .getOne();
+    if (!provider) throw new NotFoundException(`Provider with ID ${providerId} not found`);
+
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (provider.apiKey) headers.Authorization = `Bearer ${provider.apiKey}`;
+
+    let response: Response;
+    try {
+      response = await fetch(`${provider.baseUrl.replace(/\/$/, '')}/models`, {
+        headers,
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (error: unknown) {
+      const reason = error instanceof Error ? error.message : 'unknown error';
+      throw new BadRequestException(`Provider catalog request failed: ${reason}`);
+    }
+    if (!response.ok) {
+      // Cloudflare's OpenAI-compat layer doesn't implement GET /models (405) —
+      // fall back to its native ai/models/search API and map names to keys.
+      if (response.status === 405 && this.isCloudflareBaseUrl(provider.baseUrl)) {
+        const upstream = await this.fetchCloudflareCatalog(provider);
+        return { success: true, message: 'Provider catalog retrieved', result: { models: await this.mergeCatalog(providerId, upstream) } };
+      }
+      throw new BadRequestException(`Provider catalog request failed (HTTP ${response.status})`);
+    }
+
+    let body: { data?: Array<{ id?: string; owned_by?: string }> };
+    try {
+      body = (await response.json()) as { data?: Array<{ id?: string; owned_by?: string }> };
+    } catch {
+      throw new BadRequestException('Provider catalog returned invalid JSON');
+    }
+
+    const upstream = (body.data ?? [])
+      .filter((m): m is { id: string; owned_by?: string } => typeof m.id === 'string' && m.id.length > 0)
+      .map((m) => ({ key: m.id, owned_by: m.owned_by }));
+
+    return { success: true, message: 'Provider catalog retrieved', result: { models: await this.mergeCatalog(providerId, upstream) } };
+  }
+
+  private isCloudflareBaseUrl(baseUrl: string): boolean {
+    return /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai\/v1\/?$/.test(baseUrl.trim().replace(/\/$/, ''));
+  }
+
+  /**
+   * Cloudflare native catalog (GET ai/models/search). The compat /models is
+   * 405 there. Paginates (per_page=100) and maps model `name` to key.
+   */
+  private async fetchCloudflareCatalog(provider: LlmProviderEntity): Promise<Array<{ key: string; owned_by?: string }>> {
+    const accountId = provider.baseUrl.match(/\/accounts\/([^/]+)/)?.[1];
+    if (!accountId) throw new BadRequestException('Cannot derive Cloudflare account id from provider baseUrl');
+
+    const upstream: Array<{ key: string; owned_by?: string }> = [];
+    for (let page = 1; page <= 3; page += 1) {
+      const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/models/search?per_page=100&page=${page}`, {
+        headers: {
+          Accept: 'application/json',
+          ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}),
+        },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) throw new BadRequestException(`Provider catalog request failed (HTTP ${res.status})`);
+
+      const body = (await res.json()) as { result?: Array<{ name?: string }> };
+      const rows = body.result ?? [];
+      for (const row of rows) {
+        if (typeof row.name === 'string' && row.name.length > 0) upstream.push({ key: row.name });
+      }
+      if (rows.length < 100) break;
+    }
+    return upstream;
+  }
+
+  /**
+   * Merges upstream catalog entries with the local model list:
+   * 'new' (not in DB) / 'exists' / 'unavailable' (local model no longer listed).
+   */
+  private async mergeCatalog(
+    providerId: number,
+    upstream: Array<{ key: string; owned_by?: string }>,
+  ): Promise<Array<{ key: string; label?: string; owned_by?: string; status: 'new' | 'exists' | 'unavailable' }>> {
+    const local = await this.modelRepo.find({ where: { providerId }, select: ['key', 'label'] });
+    const localByKey = new Map(local.map((m) => [m.key, m.label]));
+    const upstreamKeys = new Set<string>();
+
+    const models: Array<{ key: string; label?: string; owned_by?: string; status: 'new' | 'exists' | 'unavailable' }> = [];
+    for (const entry of upstream) {
+      upstreamKeys.add(entry.key);
+      models.push({
+        key: entry.key,
+        owned_by: entry.owned_by,
+        status: localByKey.has(entry.key) ? 'exists' : 'new',
+      });
+    }
+    for (const [key, label] of localByKey) {
+      if (!upstreamKeys.has(key)) {
+        models.push({ key, label, status: 'unavailable' });
+      }
+    }
+    models.sort((a, b) => a.key.localeCompare(b.key));
+    return models;
+  }
+
+  /**
+   * Marks a model inactive after the provider itself reported it missing
+   * (model_not_found / 404 / invalid_model). Reversible from the management UI.
+   */
+  async markModelUnavailable(providerId: number, key: string): Promise<void> {
+    const model = await this.modelRepo.findOne({ where: { providerId, key } });
+    if (!model || !model.active) return;
+
+    model.active = false;
+    await this.modelRepo.save(model);
+  }
+
+  /**
+   * Adds the given model keys (from the catalog dialog) under the provider with
+   * active=false and capability=text. Keys that already exist are skipped — the
+   * unique (provider_id, key) index is the backstop against concurrent adds.
+   */
+  async syncProviderModels(providerId: number, keys: string[]): Promise<ServiceResultContainer<{ added: number; skipped: number }>> {
+    const provider = await this.providerRepo.findOneBy({ id: providerId });
+    if (!provider) throw new NotFoundException(`Provider with ID ${providerId} not found`);
+
+    const uniqueKeys = [...new Set(keys)];
+    const existing = new Set((await this.modelRepo.find({ where: { providerId }, select: ['key'] })).map((m) => m.key));
+
+    const toAdd = uniqueKeys
+      .filter((key) => !existing.has(key))
+      // label drops cosmetic variant prefixes (e.g. OpenRouter '~') — the key keeps them for the API.
+      .map((key) => this.modelRepo.create({ key, label: key.replace(/^~/, ''), capability: 'text', sortOrder: 0, active: false, providerId }));
+
+    if (toAdd.length > 0) {
+      await this.modelRepo.save(toAdd);
+    }
+
+    const added = toAdd.length;
+    return {
+      success: true,
+      message: `Added ${added} models (${uniqueKeys.length - added} skipped)`,
+      result: { added, skipped: uniqueKeys.length - added },
+    };
+  }
+
   async createModel(providerId: number, dto: CreateLlmModelDto): Promise<ServiceResultContainer<LlmModelEntity>> {
     const provider = await this.providerRepo.findOneBy({ id: providerId });
     if (!provider) throw new NotFoundException(`Provider with ID ${providerId} not found`);

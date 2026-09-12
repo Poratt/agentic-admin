@@ -188,6 +188,8 @@ Before using `str_replace` on any file:
 4. Enums always start from `1`, never `0`
 5. Prettier runs automatically via Hook — do not run manually
 6. `tsconfig.app.json` include must be `src/**/*.ts` — never `src/**/*.d.ts`
+7. **Never switch branches while the backend is running** (incident 2026-09-12): the dev backend runs TypeORM `synchronize` against the shared live DB — an old branch's schema rewrites/corrupts it (llm-db checkout wiped `llm_models` and orphaned 325 test results). Before ANY branch checkout: stop the backend, take a baseline dump (`mysqldump` → `C:\tmp\db-baselines\`), then switch. Remember `frontend/src/app/environments/*.ts` and the root `package.json` are local-only (not in git) — a checkout can silently overwrite/delete them; back them up too.
+8. **PrimeNG dialog/overlay styles go in `_primeng-overrides.css` (global), never in component CSS** (2026-09-12): PrimeNG projects dialogs to `<body>`, outside the component host — Angular's emulated encapsulation (`:host`-scoped rules) never reaches them, so component styles silently do nothing. Same rule for any content rendered through a PrimeNG overlay (dialogs, confirms, toasts, dropdowns).
 
 ## Session Management (MANDATORY)
 

@@ -325,3 +325,13 @@ select {
   }
 
 }
+/* Inline labeled control (label wraps/walks a toggle or checkbox) */
+.control-label-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}

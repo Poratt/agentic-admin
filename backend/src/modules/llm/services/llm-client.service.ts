@@ -24,7 +24,7 @@ export class LlmClientService {
   constructor(
     private readonly providerConfig: LlmProviderConfigService,
     private readonly dbProviderService: LlmProviderService,
-  ) { }
+  ) {}
 
   async generateResponse(llmRequest: LlmRequest): Promise<LlmResponse> {
     const { prompt, systemContext, messageHistory, providerOverride, modelOverride, tools, image, maxTokens, userId } = llmRequest;
@@ -32,9 +32,7 @@ export class LlmClientService {
     // Resolve effective provider/model: explicit override → user default → legacy env
     const legacyProvider = this.providerConfig.getActiveProvider();
     const legacyModel = this.providerConfig.getActiveModel();
-    const resolved = await this.dbProviderService.resolveEffectiveModel(
-      providerOverride, modelOverride, userId, legacyProvider, legacyModel,
-    );
+    const resolved = await this.dbProviderService.resolveEffectiveModel(providerOverride, modelOverride, userId, legacyProvider, legacyModel);
 
     const { client, dbProvider } = await this.getClient(resolved.provider);
     const activeProvider = resolved.provider;
@@ -55,60 +53,68 @@ export class LlmClientService {
     // client timeout. Streaming surfaces the final content incrementally and
     // resolves promptly (the same mechanism used by generateStream).
     const start = Date.now();
-    const completion = await this.withRetry(async () => {
-      const stream = await client.chat.completions.create({
-        model: activeModel,
-        stream: true,
-        messages: [
-          { role: 'system', content: systemContext || 'You are a helpful assistant.' },
-          ...(messageHistory?.length ? messageHistory : []),
-          ...(prompt ? [{ role: 'user' as const, content: this.buildUserMessage(prompt, image) }] : []),
-        ],
-        tools: tools && tools.length > 0 ? (tools as OpenAI.Chat.Completions.ChatCompletionTool[]) : undefined,
-        temperature: 0.2,
-        max_tokens: maxTokens ?? 1024,
-        ...(activeProvider === 'openrouter' && { reasoning: { enabled: false } }),
-      } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming);
+    let completion: LlmResponse;
+    try {
+      completion = await this.withRetry(async () => {
+        const stream = await client.chat.completions.create({
+          model: activeModel,
+          stream: true,
+          messages: [
+            { role: 'system', content: systemContext || 'You are a helpful assistant.' },
+            ...(messageHistory?.length ? messageHistory : []),
+            ...(prompt ? [{ role: 'user' as const, content: this.buildUserMessage(prompt, image) }] : []),
+          ],
+          tools: tools && tools.length > 0 ? (tools as OpenAI.Chat.Completions.ChatCompletionTool[]) : undefined,
+          temperature: 0.2,
+          max_tokens: maxTokens ?? 1024,
+          ...(activeProvider === 'openrouter' && { reasoning: { enabled: false } }),
+        } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming);
 
-      let content: string | null = null;
-      const toolCalls: LlmToolCall[] = [];
-      let finishReason: string | null = null;
+        let content: string | null = null;
+        const toolCalls: LlmToolCall[] = [];
+        let finishReason: string | null = null;
 
-      for await (const chunk of stream) {
-        const choice = chunk.choices?.[0];
-        if (!choice) {
-          continue;
-        }
-        const delta = choice.delta;
-        if (delta?.content) {
-          content = (content ?? '') + delta.content;
-        }
-        if (delta?.tool_calls?.length) {
-          for (const tc of delta.tool_calls) {
-            const idx = tc.index ?? 0;
-            toolCalls[idx] = toolCalls[idx] ?? { id: '', type: 'function', function: { name: '', arguments: '' } };
-            if (tc.id) toolCalls[idx].id = tc.id;
-            if (tc.function?.name) toolCalls[idx].function.name += tc.function.name;
-            if (tc.function?.arguments) toolCalls[idx].function.arguments += tc.function.arguments;
+        for await (const chunk of stream) {
+          const choice = chunk.choices?.[0];
+          if (!choice) {
+            continue;
+          }
+          const delta = choice.delta;
+          if (delta?.content) {
+            content = (content ?? '') + delta.content;
+          }
+          if (delta?.tool_calls?.length) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              toolCalls[idx] = toolCalls[idx] ?? { id: '', type: 'function', function: { name: '', arguments: '' } };
+              if (tc.id) toolCalls[idx].id = tc.id;
+              if (tc.function?.name) toolCalls[idx].function.name += tc.function.name;
+              if (tc.function?.arguments) toolCalls[idx].function.arguments += tc.function.arguments;
+            }
+          }
+          if (choice.finish_reason) {
+            finishReason = choice.finish_reason;
           }
         }
-        if (choice.finish_reason) {
-          finishReason = choice.finish_reason;
+
+        if (content === null && toolCalls.length === 0) {
+          throw new Error('Returned no content or tool calls from AI model');
         }
-      }
 
-      if (content === null && toolCalls.length === 0) {
-        throw new Error('Returned no content or tool calls from AI model');
-      }
-
-      return { content, toolCalls, finishReason };
-    }, 'generateResponse');
+        return { content, toolCalls, finishReason };
+      }, 'generateResponse');
+    } catch (error) {
+      this.autoMarkIfModelMissing(dbProvider.id, activeModel, error);
+      throw error;
+    }
     this.logger.log(`LLM response took ${((Date.now() - start) / 1000).toFixed(1)}s`);
 
     const { content, toolCalls, finishReason } = completion;
 
     this.logger.log(`Response OK: content=${content?.length ?? 0} chars: ${content?.slice(0, 200)}... toolCalls=${toolCalls.length}`);
-    this.logger.log(`[RESPONSE] provider=${dbProvider.key} (${dbProvider.label}) model=${activeModel} tokens=${content?.length ?? 0} finish_reason=${finishReason}`);
+    this.logger.log(
+      `[RESPONSE] provider=${dbProvider.key} (${dbProvider.label}) model=${activeModel} tokens=${content?.length ?? 0} finish_reason=${finishReason}`,
+    );
     return {
       content,
       toolCalls,
@@ -126,9 +132,7 @@ export class LlmClientService {
     // Resolve effective provider/model: explicit override → user default → legacy env
     const legacyProvider = this.providerConfig.getActiveProvider();
     const legacyModel = this.providerConfig.getActiveModel();
-    const resolved = await this.dbProviderService.resolveEffectiveModel(
-      providerOverride, modelOverride, userId, legacyProvider, legacyModel,
-    );
+    const resolved = await this.dbProviderService.resolveEffectiveModel(providerOverride, modelOverride, userId, legacyProvider, legacyModel);
 
     const { client, dbProvider } = await this.getClient(resolved.provider);
     const activeProvider = resolved.provider;
@@ -187,10 +191,7 @@ export class LlmClientService {
     }
   }
 
-  private buildUserMessage(
-    prompt: string,
-    image?: string,
-  ): OpenAI.Chat.Completions.ChatCompletionContentPart[] | string {
+  private buildUserMessage(prompt: string, image?: string): OpenAI.Chat.Completions.ChatCompletionContentPart[] | string {
     if (!image) {
       return prompt;
     }
@@ -254,22 +255,23 @@ export class LlmClientService {
       } catch (error: unknown) {
         lastError = error;
         const errorLike = error as { status?: number; message?: string };
+        // Daily-quota 429s are deterministic — retrying just burns time.
+        const isDailyQuota = errorLike.message?.includes('free-models-per-day') ?? false;
         const isRetryable =
-          errorLike.status === 503 ||
-          errorLike.status === 502 ||
-          errorLike.status === 500 ||
-          errorLike.status === 429 ||
-          errorLike.message?.includes('no choices') ||
-          errorLike.message?.includes('overloaded');
+          !isDailyQuota &&
+          (errorLike.status === 503 ||
+            errorLike.status === 502 ||
+            errorLike.status === 500 ||
+            errorLike.status === 429 ||
+            errorLike.message?.includes('no choices') ||
+            errorLike.message?.includes('overloaded'));
 
         if (!isRetryable || attempt === MAX_RETRIES) {
           break;
         }
 
         const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
-        this.logger.warn(
-          `[${label}] attempt ${attempt}/${MAX_RETRIES} failed - retrying in ${delay}ms. Error: ${this.getErrorMessage(error)}`,
-        );
+        this.logger.warn(`[${label}] attempt ${attempt}/${MAX_RETRIES} failed - retrying in ${delay}ms. Error: ${this.getErrorMessage(error)}`);
         await new Promise((resolve) => {
           setTimeout(resolve, delay);
         });
@@ -418,7 +420,13 @@ export class LlmClientService {
     numInferenceSteps?: number;
     seed?: number;
     negativePrompt?: string;
-  }): Promise<{ taskId?: string; videoId: string; status: 'queued' | 'in_progress' | 'completed' | 'failed'; seconds?: number | string; size?: string }> {
+  }): Promise<{
+    taskId?: string;
+    videoId: string;
+    status: 'queued' | 'in_progress' | 'completed' | 'failed';
+    seconds?: number | string;
+    size?: string;
+  }> {
     const { provider, model, prompt, image, mode, height, width, numFrames, frameRate, numInferenceSteps, seed, negativePrompt } = request;
 
     await this.assertCapability(provider, model, 'video');
@@ -455,8 +463,7 @@ export class LlmClientService {
     const BACKOFFS_MS = [1000, 2000];
     const MAX_RATE_LIMIT_WAIT_MS = 30_000;
     let rateLimitBudget = 1;
-    const isTransportError = (err: unknown): boolean =>
-      err instanceof TypeError || (err instanceof Error && err.name === 'AbortError');
+    const isTransportError = (err: unknown): boolean => err instanceof TypeError || (err instanceof Error && err.name === 'AbortError');
 
     let res!: Response;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
@@ -494,17 +501,9 @@ export class LlmClientService {
       if (status === 429) {
         const retryAfterHeader = res.headers?.get?.('retry-after');
         const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : Number.NaN;
-        const validWaitMs =
-          Number.isFinite(retryAfterSec) && retryAfterSec > 0
-            ? retryAfterSec * 1000
-            : 0;
+        const validWaitMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : 0;
 
-        if (
-          validWaitMs > 0 &&
-          validWaitMs <= MAX_RATE_LIMIT_WAIT_MS &&
-          rateLimitBudget > 0 &&
-          attempt < MAX_ATTEMPTS
-        ) {
+        if (validWaitMs > 0 && validWaitMs <= MAX_RATE_LIMIT_WAIT_MS && rateLimitBudget > 0 && attempt < MAX_ATTEMPTS) {
           rateLimitBudget -= 1;
           this.logger.warn(
             `[createVideoTask] attempt ${attempt}/${MAX_ATTEMPTS} failed (HTTP 429 rate limit) — retrying after ${validWaitMs}ms (Retry-After: ${retryAfterSec}s)`,
@@ -523,9 +522,7 @@ export class LlmClientService {
       }
 
       const delay = BACKOFFS_MS[attempt - 1] ?? 1000;
-      this.logger.warn(
-        `[createVideoTask] attempt ${attempt}/${MAX_ATTEMPTS} failed (HTTP ${status}) — retrying in ${delay}ms`,
-      );
+      this.logger.warn(`[createVideoTask] attempt ${attempt}/${MAX_ATTEMPTS} failed (HTTP ${status}) — retrying in ${delay}ms`);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
 
@@ -632,18 +629,7 @@ export class LlmClientService {
     const framePath = join(tmpdir(), `agnes-frame-${Date.now()}.png`);
     try {
       await fs.writeFile(videoPath, videoBuf);
-      await execFileAsync(ffmpegStatic as string, [
-        '-y',
-        '-sseof',
-        '-1',
-        '-i',
-        videoPath,
-        '-vsync',
-        'vfr',
-        '-frames:v',
-        '1',
-        framePath,
-      ]);
+      await execFileAsync(ffmpegStatic as string, ['-y', '-sseof', '-1', '-i', videoPath, '-vsync', 'vfr', '-frames:v', '1', framePath]);
       const frameBuf = await fs.readFile(framePath);
       const frameDataUri = `data:image/png;base64,${frameBuf.toString('base64')}`;
 
@@ -755,7 +741,12 @@ export class LlmClientService {
   async getVideoResult(
     videoId: string,
     provider: string,
-  ): Promise<{ status: 'queued' | 'in_progress' | 'completed' | 'failed'; url?: string; error?: string | Record<string, unknown> | null; seconds?: number | string }> {
+  ): Promise<{
+    status: 'queued' | 'in_progress' | 'completed' | 'failed';
+    url?: string;
+    error?: string | Record<string, unknown> | null;
+    seconds?: number | string;
+  }> {
     const { baseUrl, apiKey } = await this.getProviderConnection(provider);
 
     const result = await this.withRetry(async () => {
@@ -794,5 +785,25 @@ export class LlmClientService {
     }, 'getVideoResult');
 
     return result;
+  }
+
+  /**
+   * After a failed completion, auto-deactivate the model when the provider
+   * itself reported it missing (404 + model_not_found/invalid_model, or the
+   * model key echoed in the message). A generic 404 (wrong baseUrl) does NOT
+   * reference the model and must not trigger this. Fire-and-forget: the
+   * original completion error is rethrown by the caller regardless.
+   */
+  private autoMarkIfModelMissing(providerId: number, modelKey: string, error: unknown): void {
+    const errorLike = error as { status?: number; message?: string };
+    const message = errorLike?.message ?? '';
+    const status = errorLike?.status;
+    const missingSignal = /model_not_found|invalid_model|model.*not[ _]found|does not exist/i.test(message) || message.includes(modelKey);
+    if (status !== 404 || !missingSignal) return;
+
+    this.logger.warn(`Model '${modelKey}' reported missing by provider ${providerId} — marking unavailable`);
+    this.dbProviderService.markModelUnavailable(providerId, modelKey).catch((err: unknown) => {
+      this.logger.warn(`Failed to mark model '${modelKey}' unavailable: ${this.getErrorMessage(err)}`);
+    });
   }
 }

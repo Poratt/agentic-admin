@@ -878,6 +878,68 @@
         "toolIcon": "ph-shield-check"
       }
     },
+    "/llm/providers/{id}/test-all": {
+      "post": {
+        "operationId": "LlmController_testProviderModels",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Background test run started; results stream into the test history"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Test all active text models of a provider in the background",
+        "summaryHe": "בודקים ברקע את כל המודלים הפעילים של הספק ושומרים תוצאות",
+        "tags": [
+          "llm"
+        ],
+        "toolIcon": "ph-lightning"
+      }
+    },
+    "/llm/providers/{id}/test-all/status": {
+      "get": {
+        "operationId": "LlmController_testProviderModelsStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns { running: boolean }"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Whether a background test run is in flight for this provider",
+        "summaryHe": "האם ריצת בדיקות רקע פעילה עבור הספק",
+        "tags": [
+          "llm"
+        ],
+        "toolIcon": "ph-lightning"
+      }
+    },
     "/llm/models/{id}/test": {
       "post": {
         "operationId": "LlmController_testModel",
@@ -1441,6 +1503,86 @@
           "LLM Provider"
         ],
         "toolIcon": "ph-cube"
+      }
+    },
+    "/llm-provider/{id}/catalog": {
+      "get": {
+        "description": "Fetches the provider's live OpenAI-compatible GET /models catalog and merges it with the local list: new (not in DB), exists, unavailable (local model the provider no longer lists). Read-only.",
+        "operationId": "LlmProviderController_getCatalog",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Merged catalog entries with status new|exists|unavailable"
+          },
+          "401": {
+            "description": "JWT token missing or invalid"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get provider model catalog",
+        "summaryHe": "שולפים את קטלוג המודלים החי מהספק וממזגים אותו עם המקומי (חדש / קיים / לא זמין)",
+        "tags": [
+          "LLM Provider"
+        ],
+        "toolIcon": "ph-cloud-arrow-down"
+      }
+    },
+    "/llm-provider/{id}/sync-models": {
+      "post": {
+        "description": "Bulk-adds model keys selected in the sync dialog with active=false, capability=text. Existing keys are skipped.",
+        "operationId": "LlmProviderController_syncModels",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncModelsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Number of models added/skipped"
+          },
+          "401": {
+            "description": "JWT token missing or invalid"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add selected models from catalog",
+        "summaryHe": "מוסיפים מודלים שנבחרו מהקטלוג כשהם כבויים, עם דילוג של קיימים",
+        "tags": [
+          "LLM Provider"
+        ],
+        "toolIcon": "ph-download-simple"
       }
     },
     "/llm-provider/models/{id}": {
@@ -4226,6 +4368,25 @@
         "required": [
           "key",
           "label"
+        ]
+      },
+      "SyncModelsDto": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "description": "Model keys selected from the provider catalog to add (existing keys are skipped server-side)",
+            "example": [
+              "openai/gpt-oss-20b",
+              "moonshotai/kimi-k2.6"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "keys"
         ]
       },
       "UpdateLlmModelDto": {

@@ -6,6 +6,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { Table, TableModule } from 'primeng/table';
 import { DialogModule } from 'primeng/dialog';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
+import { CheckboxModule } from 'primeng/checkbox';
 import { Confirmation, ConfirmationService, MessageService } from 'primeng/api';
 import { AuthStore } from '../../core/store/auth.store';
 import { UserRole } from '../../core/enums/user-role.enum';
@@ -14,7 +15,18 @@ import { PageStates } from '../../core/enums/page-states.enum';
 import { BadgeColor } from '../../core/directives/badge-color.directive';
 import { TooltipDirective } from '../../core/directives/tooltip.directive';
 
-import { LlmProvider, LlmProviderService, LlmModel } from '../../core/services/llm-provider.service';
+import {
+    LlmProvider,
+    LlmProviderService,
+    LlmModel,
+    ProviderCatalogEntry,
+} from '../../core/services/llm-provider.service';
+
+// Search normalization: dots/dashes/underscores are noise — "nemo 35" and
+// "nemo 3.5" must both find "nemotron-3.5-...".
+function normalizeSearchToken(value: string): string {
+    return value.toLowerCase().replace(/[.\-_]/g, '');
+}
 
 export interface LlmModelView extends LlmModel {
     testResults?: any[];
@@ -40,6 +52,7 @@ export interface LlmProviderView extends Omit<LlmProvider, 'models'> {
         TableModule,
         DialogModule,
         ToggleSwitchModule,
+        CheckboxModule,
         TooltipDirective,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
@@ -66,10 +79,99 @@ export class LlmProvidersManagement implements OnInit {
     }
 
     testingModelId = signal<number>(0);
+    // Provider id with a background test-all run in flight (drives button state + polling).
+    testingAllProviderId = signal<number>(0);
 
     // Dialog visibility — bound via [(visible)] so must be signals
     providerDialogVisible = signal(false);
     modelDialogVisible = signal(false);
+
+    // ── Sync models dialog ───────────────────────────────────────────
+    syncDialogVisible = signal(false);
+    syncProvider = signal<LlmProviderView | null>(null);
+    catalogLoading = signal(false);
+    catalogError = signal<string | null>(null);
+    catalog = signal<ProviderCatalogEntry[]>([]);
+    catalogSearch = signal('');
+    selectedKeys = signal<Set<string>>(new Set());
+    syncing = signal(false);
+
+    // Token search: every whitespace-separated token must appear somewhere in
+    // the key/label (case-insensitive, order-free) — "nemo 35" finds
+    // "nvidia/nemotron-3.5-lightning".
+    // Token search with normalization: every whitespace-separated token must
+    // appear in the normalized key/label (order-free) — "nemo 35", "nemo 3.5"
+    // and "nemotron 35" all find "nvidia/nemotron-3.5-lightning-30b-a3b".
+    filteredCatalog = computed(() => {
+        const tokens = this.catalogSearch().toLowerCase().split(/\s+/).filter(Boolean).map(normalizeSearchToken);
+        if (tokens.length === 0) return this.catalog();
+
+        return this.catalog().filter((m) => {
+            const haystack = normalizeSearchToken(`${m.key} ${m.label ?? ''}`);
+            return tokens.every((token) => haystack.includes(token));
+        });
+    });
+
+    newSelectionCount = computed(
+        () => this.catalog().filter((m) => m.status === 'new' && this.selectedKeys().has(m.key)).length,
+    );
+
+    existingCount = computed(() => this.catalog().filter((m) => m.status === 'exists').length);
+
+    unavailableCount = computed(() => this.catalog().filter((m) => m.status === 'unavailable').length);
+
+    // Unavailable models are hidden behind a toggle and always render last.
+    unavailableList = computed(() =>
+        this.showUnavailable() ? this.filteredCatalog().filter((m) => m.status === 'unavailable') : [],
+    );
+
+    showUnavailable = signal(false);
+    collapsedGroups = signal<Set<string>>(new Set());
+
+    // Grouping name, most specific first:
+    // 1. the key's vendor segment — with a leading namespace token (@cf/, @hf/,
+    //    ...) skipped, so Cloudflare-style keys group by their real publisher;
+    // 2. owned_by — only for prefix-less keys (some catalogs like GMI return a
+    //    constant owned_by on every entry, which would group everything as one).
+    vendorOf(key: string): string {
+        const stripped = this.displayKey(key).replace(/^@[^/]+\//, '');
+        const slash = stripped.indexOf('/');
+        return slash > 0 ? stripped.slice(0, slash) : '';
+    }
+
+    catalogGroups = computed(() => {
+        const entries = this.filteredCatalog().filter((m) => m.status !== 'unavailable');
+        const grouped = new Map<string, ProviderCatalogEntry[]>();
+        for (const m of entries) {
+            const name = this.vendorOf(m.key) || m.owned_by || 'Other';
+            const list = grouped.get(name) ?? [];
+            list.push(m);
+            grouped.set(name, list);
+        }
+        return [...grouped.entries()]
+            .map(([name, items]) => ({ name, items: [...items].sort((a, b) => a.key.localeCompare(b.key)) }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    });
+
+    isGroupCollapsed(name: string): boolean {
+        return this.collapsedGroups().has(name);
+    }
+
+    toggleGroup(name: string) {
+        this.collapsedGroups.update((set) => {
+            const next = new Set(set);
+            if (next.has(name)) {
+                next.delete(name);
+            } else {
+                next.add(name);
+            }
+            return next;
+        });
+    }
+
+    toggleShowUnavailable() {
+        this.showUnavailable.update((v) => !v);
+    }
 
     // Reactive Forms for Provider dialog
     providerForm: FormGroup = this.fb.group({
@@ -229,9 +331,17 @@ export class LlmProvidersManagement implements OnInit {
     testModel(modelId: number) {
         this.testingModelId.set(modelId);
         this.llmProviderService.testModel(modelId).subscribe({
-            next: () => {
+            next: (res) => {
                 this.testingModelId.set(0);
                 this.llmProviderStore.reload();
+                if (res?.success === false) {
+                    this.messageService.add({
+                        severity: 'error',
+                        summary: 'Test Failed',
+                        detail: res.message || 'Model check failed.',
+                    });
+                    return;
+                }
                 this.messageService.add({
                     severity: 'success',
                     summary: 'Test Complete',
@@ -248,6 +358,68 @@ export class LlmProvidersManagement implements OnInit {
                 this.llmProviderStore.reload();
             },
         });
+    }
+
+    testAllModels(provider: LlmProviderView) {
+        if (this.testingAllProviderId() !== 0) return;
+
+        const activeTextModels = (provider.models ?? []).filter((m) => m.active && m.capability === 'text').length;
+        if (activeTextModels === 0) {
+            this.messageService.add({
+                severity: 'info',
+                summary: 'Nothing to test',
+                detail: 'No active text models for this provider.',
+            });
+            return;
+        }
+
+        this.testingAllProviderId.set(provider.id);
+        this.llmProviderService.testAllModels(provider.id).subscribe({
+            next: (res) => {
+                this.messageService.add({
+                    severity: 'info',
+                    summary: 'Test Run Started',
+                    detail: `Testing ${res.result?.tested ?? activeTextModels} models in the background — results appear as they finish.`,
+                });
+                this.pollTestResults(provider.id);
+            },
+            error: (err) => {
+                this.testingAllProviderId.set(0);
+                this.messageService.add({
+                    severity: 'error',
+                    summary: 'Test All Failed',
+                    detail: err?.error?.message || 'Unknown error',
+                });
+            },
+        });
+    }
+
+    // Reloads periodically while the backend reports the run in flight; stops
+    // the moment the run finishes (status endpoint) or errors out.
+    private pollTestResults(providerId: number, remainingPolls = 30) {
+        if (this.testingAllProviderId() !== providerId) return;
+        if (remainingPolls <= 0) {
+            this.testingAllProviderId.set(0);
+            return;
+        }
+        setTimeout(() => {
+            if (this.testingAllProviderId() !== providerId) return;
+            this.llmProviderService.testAllStatus(providerId).subscribe({
+                next: (res) => {
+                    if (this.testingAllProviderId() !== providerId) return;
+                    this.llmProviderStore.reload();
+                    if (res.result?.running) {
+                        this.pollTestResults(providerId, remainingPolls - 1);
+                    } else {
+                        this.testingAllProviderId.set(0);
+                        this.llmProviderStore.reload();
+                    }
+                },
+                error: () => {
+                    if (this.testingAllProviderId() === providerId) this.testingAllProviderId.set(0);
+                },
+            });
+        }, 8_000);
     }
 
     toggleProvider(providerId: number) {
@@ -342,6 +514,131 @@ export class LlmProvidersManagement implements OnInit {
         this.editingModelProviderId.set(providerId);
         this.editingModelId.set(null);
         this.modelDialogVisible.set(true);
+    }
+
+    // ── Sync models dialog ───────────────────────────────────────────
+
+    openSyncDialog(provider: LlmProviderView) {
+        this.syncProvider.set(provider);
+        this.syncDialogVisible.set(true);
+        this.loadCatalog(provider.id);
+    }
+
+    loadCatalog(providerId: number) {
+        this.catalogLoading.set(true);
+        this.catalogError.set(null);
+        this.catalog.set([]);
+        this.catalogSearch.set('');
+        this.selectedKeys.set(new Set());
+        this.llmProviderService.getCatalog(providerId).subscribe({
+            next: (res) => {
+                // Nothing preselected — the admin picks (Select All / search) explicitly.
+                this.catalog.set(res.result?.models ?? []);
+                this.catalogLoading.set(false);
+            },
+            error: (err) => {
+                this.catalogError.set(err?.error?.message || 'Failed to load provider catalog');
+                this.catalogLoading.set(false);
+            },
+        });
+    }
+
+    retryCatalog() {
+        const provider = this.syncProvider();
+        if (provider) this.loadCatalog(provider.id);
+    }
+
+    isKeySelected(key: string): boolean {
+        return this.selectedKeys().has(key);
+    }
+
+    // Some providers (e.g. OpenRouter "latest" variants) prefix model keys with
+    // '~'. The prefix is part of the real API key — strip it for display only.
+    displayKey(key: string): string {
+        return key.replace(/^~/, '');
+    }
+
+    // Short display name: the segment after the last '/' — the group header
+    // already shows the publisher, so the full key is noise in the row. The
+    // full key stays available via the row tooltip.
+    shortModelName(key: string): string {
+        const clean = this.displayKey(key);
+        const slash = clean.lastIndexOf('/');
+        return slash >= 0 ? clean.slice(slash + 1) : clean;
+    }
+
+    toggleCatalogKey(key: string, checked: boolean) {
+        this.selectedKeys.update((set) => {
+            const next = new Set(set);
+            if (checked) {
+                next.add(key);
+            } else {
+                next.delete(key);
+            }
+            return next;
+        });
+    }
+
+    // Both respect the active search/owner filter — only what the user can see.
+    selectAllNew() {
+        this.selectedKeys.update((set) => {
+            const next = new Set(set);
+            for (const m of this.filteredCatalog()) {
+                if (m.status === 'new') next.add(m.key);
+            }
+            return next;
+        });
+    }
+
+    deselectAll() {
+        this.selectedKeys.update((set) => {
+            const next = new Set(set);
+            for (const m of this.filteredCatalog()) {
+                if (m.status === 'new') next.delete(m.key);
+            }
+            return next;
+        });
+    }
+
+    closeSyncDialog() {
+        this.syncDialogVisible.set(false);
+        this.syncProvider.set(null);
+        this.catalog.set([]);
+        this.catalogError.set(null);
+        this.catalogSearch.set('');
+        this.selectedKeys.set(new Set());
+    }
+
+    addSelectedModels() {
+        const provider = this.syncProvider();
+        const keys = this.catalog()
+            .filter((m) => m.status === 'new' && this.selectedKeys().has(m.key))
+            .map((m) => m.key);
+        if (!provider || keys.length === 0) return;
+
+        this.syncing.set(true);
+        this.llmProviderService.syncModels(provider.id, keys).subscribe({
+            next: (res) => {
+                this.syncing.set(false);
+                this.closeSyncDialog();
+                this.llmProviderStore.reload();
+                const added = res.result?.added ?? 0;
+                const skipped = res.result?.skipped ?? 0;
+                this.messageService.add({
+                    severity: 'success',
+                    summary: 'Models Added',
+                    detail: `Added ${added} model(s)${skipped > 0 ? `, skipped ${skipped} existing` : ''}.`,
+                });
+            },
+            error: (err) => {
+                this.syncing.set(false);
+                this.messageService.add({
+                    severity: 'error',
+                    summary: 'Sync Failed',
+                    detail: err?.error?.message || 'Unknown error',
+                });
+            },
+        });
     }
 
     openEditModelDialog(providerId: number, model: LlmModel) {

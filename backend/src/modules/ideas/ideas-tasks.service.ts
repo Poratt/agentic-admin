@@ -60,12 +60,7 @@ export class IdeasTasksService {
     // --- Discovery + grounded generation step ---
     // The hard gate (only persist grounded sessions) lives inside the
     // service. We just receive the survivors and save them.
-    const grounded = await this.ideasService.generateGroundedIdeasForCron(
-      count,
-      admin.id,
-      model.provider as LlmProvider,
-      model.model,
-    );
+    const grounded = await this.ideasService.generateGroundedIdeasForCron(count, admin.id, model.provider as LlmProvider, model.model);
 
     if (grounded.length === 0) {
       // Empty run is NOT silent when Telegram is on — every trigger answers,
@@ -77,36 +72,23 @@ export class IdeasTasksService {
         // would completely swallow the report on map misses (buildTranslationTrackerSection
         // returns an empty string when there are no records, so the message stays as it was).
         await this.telegramNotifyService.sendMessage(
-          '🌙 ריצת הלילה הסתיימה בלי רעיונות grounded — לא נוצרו שמירות חדשות. אפשר לנסות שוב מאוחר יותר.' +
-            buildTranslationTrackerSection(),
+          '🌙 ריצת הלילה הסתיימה בלי רעיונות grounded — לא נוצרו שמירות חדשות. אפשר לנסות שוב מאוחר יותר.' + buildTranslationTrackerSection(),
         );
       }
       return;
     }
 
-    this.logger.log(
-      `Nightly: ${grounded.length} grounded session(s) to save: ${grounded.map((g) => g.topic.domain).join(', ')}`,
-    );
+    this.logger.log(`Nightly: ${grounded.length} grounded session(s) to save: ${grounded.map((g) => g.topic.domain).join(', ')}`);
 
     // --- Save step ---
     for (const { topic, response } of grounded) {
       try {
-        await this.ideasService.saveGeneration(
-          admin.id,
-          topic.domain,
-          model.provider,
-          model.model,
-          response,
-          { nightly: true, unread: true },
-        );
+        await this.ideasService.saveGeneration(admin.id, topic.domain, model.provider, model.model, response, { nightly: true, unread: true });
         this.logger.log(
           `Nightly ideas generation succeeded for domain "${topic.domain}" (rationale: ${topic.rationale}) — ${response.result?.length ?? 0} ideas`,
         );
       } catch (e) {
-        this.logger.error(
-          `Nightly ideas generation failed while saving domain "${topic.domain}" (rationale: ${topic.rationale})`,
-          e,
-        );
+        this.logger.error(`Nightly ideas generation failed while saving domain "${topic.domain}" (rationale: ${topic.rationale})`, e);
       }
     }
     // Push a Telegram summary of the generated ideas (no-op when the bot is
@@ -125,7 +107,7 @@ export class IdeasTasksService {
   /**
    * Resolves the model to use for nightly runs, in order of preference:
    * 1. IDEAS_NIGHTLY_MODEL env override ("provider/model" — the model part
-   *    may itself contain slashes, e.g. "cloude-flare/@cf/zai-org/glm-4.7-flash",
+   *    may itself contain slashes, e.g. "cloudflare/@cf/zai-org/glm-4.7-flash",
    *    so only the FIRST slash separates provider from model)
    * 2. DB-stored first active text-capable model
    * 3. AI_PROVIDER env fallback (via LlmProviderConfigService)

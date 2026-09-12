@@ -1,17 +1,81 @@
 # Documentation Handoff
+
+## 2026-09-12 — ✅ DONE: Test All (per-provider background run) + provider row-level click
+
+**Test All (user request):** button next to Sync in each provider's panel — tests every active text model of that provider in one click.
+
+- **Backend:** `POST /llm/providers/:id/test-all` (LlmController, JwtAuthGuard) → `LlmHealthService.testProviderModels`: sequential `testLlm` per active text model (saves results via the modelId path), paced 3.5s for `:free`/openrouter keys else 1s (OpenRouter free-tier limits). Runs in the BACKGROUND — endpoint returns `{tested: N}` immediately; in-flight guard rejects a second concurrent run for the same provider (BadRequest). Hidden from the agent (`LlmController_testProviderModels` in HIDDEN_FROM_LLM).
+- **Frontend:** "Test All" button (lightning; spinner + disabled while running) → toast "Test Run Started" → store reloads every 8s for ~96s so streamed-in results show live; "Nothing to test" info toast when no active text models.
+- **Provider row-level click (user request):** whole `<tr class="provider-row">` toggles expansion (caret button + label cell no longer carry their own click — bubbling handles it once); `.row-actions` stops propagation so Edit/toggle/delete don't expand; cursor: pointer.
+- **Specs:** health +3 (concurrent guard, tested=0, 404); component +2 (run start + toast + state, nothing-to-test). **Verified:** backend **526/526 (48 suites)** + build 0; frontend **536/536 (57 files)** + build 0. graphify updated. No architecture-diagram change.
+
+**Next exact step:** user restarts backend (new endpoint) and tries Test All on openrouter (paced ~26 models ≈ 90s+). Then commit + push of the whole session (catalog sync + test-all + dialog redesign + AGENTS rules). Optional backlog: daily catalog-refresh job; "Select only free" filter.
+
+---
+
+## 2026-09-12 — ✅ DONE: provider model catalog sync — dialog + lazy auto-mark
+
+**Feature (user-designed, approved with 4 adjustments):** one-click model sync from any provider's OpenAI-compatible catalog, replacing manual model entry (motivated by the NVIDIA 410 incident — 8 seed-era models retired upstream).
+
+**Backend (6 files):**
+
+- `llm-provider.service.ts` — NEW `getProviderCatalog(id)`: live `GET {baseUrl}/models` (15s timeout, Bearer if key set, local baseUrl OK keyless) merged with local models → statuses `new` / `exists` / `unavailable` (local key missing from upstream, with its label). NEW `syncProviderModels(id, keys)`: bulk-add selected keys as `active=false, capability=text, label=key`; dedupes, skips existing (unique index backstop), returns `{added, skipped}`. NEW `markModelUnavailable(providerId, key)`: sets active=false, no-op when missing/already inactive.
+- `llm-provider.controller.ts` — `GET :id/catalog` + `POST :id/sync-models` (both AdminGuard, swagger).
+- `dto/sync-models.dto.ts` (NEW) — keys array validation (1-200 items, string 1-255).
+- `llm-client.service.ts` — lazy auto-mark: on generateResponse failure with status 404 AND a missing-signal (`model_not_found`/`invalid_model`/model-key in message), fire-and-forget `markModelUnavailable`. Generic 404 (bad baseUrl) does NOT trigger — no model reference in the message.
+- `swagger-tools.parser.ts` — `LlmProviderController_syncModels` hidden from the agent (catalog left visible, read-only).
+- Specs: catalog status-merge (incl. unavailable w/ label), upstream-fail 400, sync dedupe/skip, markModelUnavailable ×2. **Backend 523/523 (48 suites), build 0.**
+
+**Frontend (5 files):**
+
+- `llm-provider.service.ts` — `getCatalog` / `syncModels` + `ProviderCatalogEntry`.
+- `llm-providers-management.ts/html/css` — "Sync" button next to Add Model (both spots: empty-state + panel header); dialog: live catalog list, search + owned_by filter (owners row only when field exists), existing = gray + disabled + "already added", unavailable = red + "No longer available" tag (no checkbox), new = checkbox preselected except `embed|rerank|guard`; Select All/Deselect All; footer Add Selected (count) + Cancel; loading spinner + error "Try again" retry; success/error toasts; PrimeNG CheckboxModule import (no `label` input in v22 — key rendered as sibling span).
+- Component spec +3 (preselect logic, add-selected payload+toast, owner/search filtering). **Frontend 530/530 (57 files), build 0.**
+
+**Architecture:** no diagram change (in-module endpoints + UI dialog; no new providers/flows).
+
+**✅ User-verified live (screenshot):** dialog renders fully — header stats, one-row toolbar, collapsible groups, tags, unavailable toggle. Root cause of the earlier "styling not applied": PrimeNG projects dialogs to `<body>` → component-emulated CSS never reached them; ALL dialog styles moved to `_primeng-overrides.css` (recorded as Golden Rule #8 in AGENTS.md). OpenRouter's catalog itself contains 16 `~`-prefixed "latest-variant" ids (live-verified) — display strips them, keys keep them.
+
+**Next exact step:** commit + push when user says go. Optional follow-up awaiting user decision: daily background catalog-refresh job.
+
+---
+
+## 2026-09-12 — 🚑 RECOVERED: llm-db branch checkout corrupted live DB + local env files
+
+**Incident (user checked out the old `llm-db` branch, then returned to main):**
+
+- llm-db's June TypeORM schema (`synchronize`) applied against the shared live DB → `llm_models` wiped: all 47 rows `provider_id=0, key=''`; all 325 `llm_model_test_results.model_id` orphaned (unattributable); FKs dropped.
+- Checkout dance deleted local untracked files: `frontend/src/app/environments/environment{,.prod}.ts` (gitignored) + the local root `package.json` (npm workspaces).
+
+**Recovery (all verified):**
+
+- Recreated `environment.ts` / `environment.prod.ts` (content: `apiUrl: 'http://localhost:3000'`; user re-added their primeUiLicenseKey to prod).
+- Recreated root `package.json` = `{"workspaces":["frontend","backend"], private}` — **left untracked** (was deliberately untracked-into-history since e3168e8; decide later whether to commit).
+- `C:\tmp\llm-models-restore.sql` — 44 UPDATEs restoring provider_id+key from label→seed mapping (provider ids 11=openrouter/12=nvidia/13=agnes/17=requesty/29=OmniRoute), preserving row ids → user_llm_defaults (118→user1, 16→user10) stay valid. Deleted 3 unmapped customs (120 'GLM 4.7 Flash', 122 'MiniMax M3' dup, 124 'x-Alpha' — labels recorded here for re-add).
+- Deleted 325 orphaned test results (unattributable post-corruption) — test history reset.
+- Backend then synced clean (unique index + FKs recreated) and came up (401 on guarded route = alive). Frontend up on 4200.
+
+**⚠️ Prevention (discuss):** never run the backend against the shared dev DB from an old branch — `synchronize` rewrites the schema. Either `mysqldump` before branch experiments, or a per-branch DB name. Root `package.json` is local-only — document it in AGENTS.md setup notes.
+
+**Next exact step:** user re-adds the 3 custom models (GLM 4.7 Flash / MiniMax M3 dup / x-Alpha) if still wanted; `mysqldump` baseline after confirming all good.
+
+---
+
 ## 2026-09-12 — ✅ DONE: test button spinner while testing
 
-- `llm-providers-management.html` — test-now button icon swaps to `ph-circle-notch ph-spin` (existing global spin utility) while `testingModelId() === model.id`; `[disabled]` + "Testing..." tooltip already in place. User confirmed the misroute fix works live ("test now תקין").
+- `llm-providers-management.html` — test-now button icon swaps to `ph-spinner-gap ph-spin` (existing global spin utility) while `testingModelId() === model.id`; `[disabled]` + "Testing..." tooltip already in place. User confirmed the misroute fix works live ("test now תקין").
 - **Verified:** targeted **39/39** · `npx ng build` exit 0. No architecture-diagram change. No commit/push.
 
 ---
+
 ## 2026-09-12 — ✅ DONE: inactive providers sink to the bottom of the management table
 
 - `llm-providers-management.ts` — `llmProviders` computed now orders `[...active, ...inactive]` when "Show inactive" reveals them (default listing; a column sort by the user still re-orders normally).
-- spec — +1 (inactive-first input renders active first). 
+- spec — +1 (inactive-first input renders active first).
 - **Verified:** targeted llm-providers-management **39/39** (+1) · `npx ng build` exit 0. No architecture-diagram change. No commit/push.
 
 ---
+
 ## 2026-09-12 — ✅ FIXED: test-now result saved to wrong model + toast direction/design
 
 **User report (3 items):** (1) toast text direction broken; (2) toast restyle — theme background, severity color on icon only; (3) "test now" reports success but no result appears in the UI.
@@ -19,12 +83,14 @@
 **Bug 3 root cause (misrouted save):** `POST /llm/models/:id/test` resolved the model correctly BY ID but passed only KEYS to `testLlm`, which re-looked-up the row via `findModelByKey(model)` — key is unique only per `(providerId, key)`. Seed has duplicate keys across providers (`openai/gpt-oss-20b` under openrouter AND nvidia) → the result row was saved to an arbitrary same-key model → the tested model showed nothing. Also the capability gate used the same ambiguous lookup.
 
 **Fix (modelId flows end-to-end):**
+
 - `llm-health.service.ts` — `testLlm(provider, model, prompt, systemContext, modelId?)`: single DB lookup — `findModelById(modelId)` when id given (UI/test-all), legacy `findModelByKey` fallback; capability gate + `saveTestResult` both use that row (removed the second key lookup).
 - `llm.controller.ts` — passes `dbModel.id`. `llm.service.ts` wrapper — `modelId?` passthrough.
 - `llm.types.ts` — `LlmModelCheckTarget.id?`; `getModelCheckTargets` sets it; `testAllModels` passes it (scheduled health checks also stop misrouting).
 - Specs: health +1 (id 42 must win over wrong key-match id 7); controller spec expectation updated to 5 args.
 
 **Toasts (frontend, `_primeng-overrides.css` new "Toasts" section — none existed):**
+
 - Direction: `.p-toast { direction: ltr; text-align: left }` — toast texts are English app-wide; matches the existing dialogs convention (`direction: ltr`), fixes the ".Model test completed successfully" bidi artifact.
 - Design: message = `var(--color-surface-elevated)` + `--color-border` + `--radius-md` + `--shadow-soft`; summary `--color-text-primary`, detail `--color-text-secondary`; ONLY the icon carries severity (`-success`→`--color-success`, `-error`→`--color-danger`, `-warn`→`--color-warning`, `-info`→`--color-primary`); close button neutral. Theme-aware (dark/light tokens both defined).
 
@@ -33,11 +99,13 @@
 **Next exact step:** restart :3000 (backend change), re-test a model whose key exists on two providers (e.g. `openai/gpt-oss-20b`) → result must appear on THAT model's row; visually check toast (neutral surface, green icon, LTR text). No commit/push performed.
 
 ---
+
 ## 2026-09-12 — ✅ DONE (D+E): provider hard delete endpoint + active-state toggle switches app-consistent
 
 **User decisions this session:** (1) "why no provider delete + why do deactivated providers vanish from the UI?" → investigation: management page filtered `p.active` (`llm-providers-management.ts:100`), `toggleProviderActive` existed but was never wired (dead code), backend had NO provider delete endpoint. (2) Chose D+E. (3) Design pass: ugly INACTIVE badge + raw checkbox rejected → `p-toggleswitch` everywhere for consistency (same component as the dialogs' Active fields). (4) Models' Active column dropped too (redundant with the row toggle).
 
 **Backend (4 files):**
+
 - `llm-provider.service.ts` — NEW `deleteProvider(id)`: findOneBy → 404 if missing → `providerRepo.delete({id})`. DB-level FK cascades do the work: `llm_models.provider_id` CASCADE → `llm_model_test_results.model_id` CASCADE → `user_llm_defaults.model_id` CASCADE. All three verified in entities.
 - `llm-provider.controller.ts` — NEW `DELETE :id` (AdminGuard, swagger, summaryHe).
 - `seeds/llm-providers.seed.ts` — **bootstrap-only seeding**: early return when `providerRepo.count() > 0`. Previously per-provider existence checks resurrected a deleted seeded provider (+ its full model list) on every restart; now permanent deletion sticks. Edge: deleting ALL providers → full reseed on restart (documented in swagger description).
@@ -45,6 +113,7 @@
 - Specs: `llm-provider.service.spec.ts` +2 (delete happy path, 404), NEW `seeds/llm-providers.seed.spec.ts` +2 (skip when non-empty = no resurrection; seeds 5 providers when empty).
 
 **Frontend (7 files):**
+
 - `core/services/llm-provider.service.ts` — NEW `deleteProvider(id)` → `DELETE /llm-provider/:id`.
 - `core/store/llm-provider.store.ts` — `deleteProvider` now calls the real delete (was `update(id, {active:false})`).
 - `llm-providers-management.ts` — `showInactive` signal + `llmProviders` filters by it (inactive no longer invisible); `toggleShowInactive(boolean)`; NEW `setProviderActive`/`setModelActive` (no-op on unchanged); `deleteProvider` dialog → "Delete Provider Permanently" with cannot-be-undone warning; **removed** `deleteModel` (soft-deactivate dialog — replaced by the model toggle); FormsModule import added for row `[ngModel]`.
@@ -59,11 +128,13 @@
 **Next exact step:** visual review — provider row: pencil + toggle + red trash (all `sm`); model row: star + pencil + toggle + red trash; models table has no Active column; toolbar toggle reveals INACTIVE providers (toggle switches them back on). No commit/push performed.
 
 ---
+
 ## 2026-09-12 — ✅ DONE: permanent model delete in UI + provider "delete" dialog now honest (deactivation)
 
 **Context (user):** models/providers could only be "soft deleted" from the UI. Investigation: backend `DELETE /llm-provider/models/:id` (hard delete, `modelRepo.remove` at `llm-provider.service.ts:186`) exists but the UI never called it (`softDeleteModel` = PATCH `{active:false}`); providers have NO delete endpoint at all and the UI dialog lied ("Delete Provider" → actually deactivated); seed recreates the 5 seeded providers only if the provider row is missing (deleting a single model stays deleted; a provider row deleted directly in DB resurrects with its models on backend restart).
 
 **Fix (Option C — frontend only, 5 files):**
+
 - `core/services/llm-provider.service.ts` — NEW `deleteModel(modelId)` → `DELETE /llm-provider/models/:id`; stale comment on `softDeleteModel` updated (no longer claims the UI never calls the hard route).
 - `core/store/llm-provider.store.ts` — NEW `hardDeleteModel(providerId, modelId)` mirroring `softDeleteModel` (reload + error signal).
 - `llm-providers-management.ts` — NEW `hardDeleteModel(...)` confirm dialog: header "Delete Model Permanently", warning "Permanently delete this model, its test history and all user defaults? This cannot be undone."; toast "Model has been permanently deleted." `deleteProvider` dialog reworded: header "Deactivate Provider", message "deactivate this provider?", accept label "Deactivate" + power icon, toast "Deactivated" (was the lying "Deleted").
@@ -79,11 +150,13 @@
 **Next exact step:** visual review — model row should show power icon (deactivate) + red trash (delete permanently); provider row power only, dialog says Deactivate. No commit/push performed.
 
 ---
+
 ## 2026-08-27 — ✅ DONE: comparison dialog cells no longer filter the main table (`feature/strain-comparison`)
 
 **Problem (user review):** every clickable cell in the comparison dialog called `applyDataFilter(...)`, which mutated the main Strain Hunter table's `activeFilters` behind the open dialog — confusing and unwanted while comparing.
 
 **Fix (`strain-hunter.html`, dialog `p-table` body only):** replaced the clickable filter `<button (click)="applyDataFilter(...)">` cells with inert `<span>` renders, keeping the same classes so styling is unchanged:
+
 - name cell: `NEW` tag (`applyDataFilter('isNew')`) → `<span class="strain-new-tag">`; `growType` → `<span class="filter-node grow-filter-node">` (user's change)
 - characterization (packageType/category/family) → inert `family-badge` spans (user)
 - originStrain + parent1/parent2 → inert `origin-strain-node`/genetics spans, tooltips kept (user)
@@ -100,11 +173,13 @@
 **Next exact step:** visual review — dialog cells should be inert (no pointer cursor on pills, no main-table filtering when clicked).
 
 ---
+
 ## 2026-08-27 — ✅ DONE: scroll-to-top button on Strain Hunter (`feature/strain-comparison`)
 
 **Request:** add a scroll-up button that appears once the user scrolls down a little.
 
 **Fix (3 files):**
+
 - `strain-hunter.html` — a `.scroll-top-btn primary-btn icon-only` button rendered at the end of `page-content`, gated by `@if (showScrollTop())`, `aria-label="חזרה לראש העמוד"`, icon `ph-arrow-up`.
 - `strain-hunter.ts` — `showScrollTop` signal (false default); `ngAfterViewInit` walks up from `hostContainer` to the first ancestor whose `overflow-y` is `auto`/`scroll` (the app's `.content-shell`), attaches a passive `scroll` listener that sets `showScrollTop` when `scrollTop > 300`, removes it via `DestroyRef`; `scrollToTop()` smooth-scrolls to top. Made `showScrollTop` public to match the other spec-accessible signals.
 - `strain-hunter.css` — `.scroll-top-btn { position: fixed; bottom: var(--space-8); inset-inline-start: var(--space-8); z-index: 40; box-shadow: var(--shadow-soft) }` — bottom-start, below open modals/toasts (~1200).
@@ -117,6 +192,7 @@
 **Next exact step:** visual review of the button (appears on scroll-down, floats bottom-left, smooth-scrolls to top). No commit/push performed.
 
 ---
+
 ## 2026-08-27 — ✅ DONE: compare button to start of action row, search field to end (`feature/strain-comparison`)
 
 **Request:** move the "פתח השוואת זנים" button to the start of the header action row, and the search field to its end.
@@ -128,11 +204,13 @@
 **Next exact step:** visual review of the reordered header. No commit/push performed.
 
 ---
+
 ## 2026-08-27 — ✅ FIXED: comparison table showed all strains instead of only the selected ones
 
 **Bug (user report):** the second (comparison dialog) table rendered the same full strain content as the main table instead of only the strains selected for comparison.
 
 **Root cause (3 separate wiring bugs in the dialog `p-table`, `strain-hunter.html:603-613`):** the dialog copied the main table's bindings verbatim:
+
 - `#table` → stayed `#table` instead of `#compareTable` — so `compareTable()` (viewChild, `strain-hunter.ts:148`) was always `undefined` and the sort-reset `compareTable()?.reset()` silently no-oped.
 - `[value]="items()"` → should be `[value]="compareItems()"` — the dialog iterated the **filtered full view** instead of the `compareItems` computed (which resolves only the `compareIds` selection from `rawItems`, `strain-hunter.ts:476`).
 - `(sortFunction)="sortTable($event)"` → should be `(sortFunction)="sortCompareTable($event)"` — sort ran against main-table logic/`#table` instead of the comparison sort + `#compareTable` reset.
@@ -144,11 +222,13 @@
 **Next exact step:** visual review of the comparison dialog (should now show only selected strains, in selection order, with correct reset-to-order on 3rd sort click). No commit/push performed.
 
 ---
+
 ## 2026-08-26 — ✅ DONE: comparison table rebuilt as a real p-table (no custom CSS) on `feature/strain-comparison`
 
 **Request:** delete ALL the CSS the agent invented and style the comparison table exactly like the big table — same layout, same design, same structure, each cell with the same data rendering. No new classes except moving `.compare-toggle-btn` into `_buttons.css` under a generic name.
 
 **Fix (4 files):**
+
 - `strain-hunter.html` — replaced the custom `<table class="comparison-table">` (custom thead/tbody/cell classes + `comparison-dialog-content`/`comparison-table-wrapper`/`comparison-empty-state`/`comparison-strain-*` wrappers) with a real `p-table` identical to the main table: `div.glass-effect.card.table-container` + `p-table` (`#compareTable`, `sortMode="single"`, `[value]="compareItems()"`, `[scrollable]`, `scrollHeight="flex"`, `[customSort]`), same `sortable-column-header` + `sort-icon-group` header, same body cell templates (`strain-main-details`, `score-ring-wrapper`, `characterization-cell`, `strain-price-cell`, `origin-strain-cell`, `country-filter`, `package-type-cell`, `market-cell`, fallback `formatValue`), and the same `page-state table-empty-state` empty state. Main-table toggle renamed `compare-toggle-btn` → `icon-circle-toggle`.
 - `strain-hunter.ts` — replaced `sortedCompareItems`/`sortComparison`/`comparisonSortOrder` with a `sortCompareTable(SortEvent)` customSort handler (asc → desc → reset to selection order, mirroring `sortTable`) + `compareTable` viewChild + `restoreCompareOrder` (customSort mutates the compareItems array in place, so reset re-sorts back to `compareIds` order).
 - `_primeng-overrides.css` — deleted ALL `comparison-*` CSS (dialog, mask, table, strain-info/image, empty-state) AND the `app-strain-hunter .compare-toggle-btn` block; reverted the top-level `.sortable-column-header` back into `.p-datatable-thead`. File now matches HEAD exactly (zero diff).
@@ -162,6 +242,7 @@
 **Next exact step:** visual review of the rebuilt comparison table, then commit if approved. No commit/push performed.
 
 ---
+
 ## 2026-08-26 — ✅ DONE: comparison CSS deduplication on `feature/strain-comparison`
 
 **Request:** refactor comparison styling to reuse existing design-system classes; preserve the existing sort icon.
@@ -173,6 +254,7 @@
 **Next exact step:** visual review of the deduplicated comparison row. No commit/push performed.
 
 ---
+
 ## 2026-08-26 — ✅ DONE: comparison strain info spacing on `feature/strain-comparison`
 
 **Request:** add `justify-content: space-between` to `.comparison-strain-info` and group the comparison image with `.comparison-strain-copy`.
@@ -184,6 +266,7 @@
 **Next exact step:** visual review if spacing needs tuning. No commit/push performed.
 
 ---
+
 ## 2026-08-26 — ✅ DONE: comparison table sorting on `feature/strain-comparison`
 
 **Request:** add sorting to the comparison table with the existing `sortable-column-header` pattern.
@@ -195,6 +278,7 @@
 **Next exact step:** review comparison sorting visually on `feature/strain-comparison`, then commit if approved. No commit/push performed.
 
 ---
+
 ## 2026-08-26 — ✅ DONE: comparison dialog polish on `feature/strain-comparison`
 
 **User feedback:** dialog title/X direction was reversed, background too transparent causing text overlap, footer actions were too weak and not grouped on the right.
@@ -208,11 +292,13 @@
 **Next exact step:** review the updated dialog visually on `feature/strain-comparison`, then commit if approved. No commit/push performed.
 
 ---
+
 ## 2026-08-26 — ✅ DONE: strain comparison UI on `feature/strain-comparison`
 
 **Request:** add an "הוסף להשוואה" action and item comparison dialog to Strain Hunter.
 
 **Implemented:**
+
 - New branch: `feature/strain-comparison`.
 - `strain-hunter.ts`: session-only `compareIds`, dialog state, toggle/clear/open methods, selected rows resolved from `rawItems()` in selection order, and comparison columns derived from visible + embedded fields.
 - `strain-hunter.html`: accessible add/remove icon button in each name cell, header scales button with selected-count badge, and RTL PrimeNG dialog with selected strains as rows and properties as columns. Supports removing individual rows, clearing all, and horizontal scrolling for unlimited selections.
@@ -224,6 +310,7 @@
 **Next exact step:** review the UI on the `feature/strain-comparison` branch, then commit if approved. No commit/push performed.
 
 ---
+
 ## 2026-08-26 — ✅ DONE: agent tool 401 loop fixed — internal token cache outlived the JWT
 
 **Symptom (real log):** chat agent calls started 401-ing on `/genetics` (`Request failed with status code 401`) and the LLM retried the same tool 3× → `AgentLoopBreaker` broke the turn. Earlier tool calls (strain-hunter/terpenes) in the same session had worked.
@@ -237,15 +324,18 @@
 **Context (same night, before this):** the MiniMax Music feature (branch `feature/minimax-music`) was fully canceled per the user — branch deleted, uncommitted code discarded, DB rows (gmi-cloud provider id 31 + minimax-music-3.0 model id 121) deleted, `llm_models.capability` enum restored to 3 values, backend rebuilt from `main` and the port-3000 process stopped (user runs it themselves in watch mode now).
 
 ---
+
 ## 2026-08-25 — ✅ DONE: custom sort badge — "1" fixed, PrimeNG badge hidden, grouping
 
 **Symptom chain (user reports):** the "1" badge appeared only after ctrl+clicking the first column again; then with the custom badge the 2+ ordinals showed doubled.
 
 **Root causes (both verified in `primeng-table.mjs` / `primeng-badge.mjs`):**
+
 1. **Missing "1":** PrimeNG 22.0.0's `SortIcon` updates its `sortOrder` signal only when the value CHANGES. Adding a second column keeps the initial column's `sortOrder` (1) unchanged → the OnPush SortIcon never re-renders → `isMultiSorted()` (a plain method) never re-evaluates → its internal badge never renders for the initial column. The "1" only appeared after toggling that column (signal changed → re-render).
 2. **Doubling:** the custom badge rendered for 2+ columns AND PrimeNG's internal badge also rendered. The CSS hide `p-sort-icon .p-sortable-column-badge { display:none }` did NOT work because the `p-badge` host binds `[style.display]` **inline** (verified in `primeng-badge.mjs` host bindings) — inline styles beat ordinary CSS.
 
 **Fix (4 files):**
+
 - `strain-hunter.ts` — `getSortOrderIndex(column)` reads `table().multiSortMeta` (1-based ordinal, null when ≤1 sorted); `sortTick` signal bumped at the top of `sortTable` and read inside `getSortOrderIndex` so the header re-renders after every sort interaction. Also `initialSortMeta` stable property (the array-literal binding re-created a new array each CD → PrimeNG's input-sync effect reset the internal meta).
 - `strain-hunter.html` — header wraps `<p-sort-icon>` + custom badge in `.sort-icon-group` (grouped unit).
 - `_primeng-overrides.css` — hide PrimeNG's internal badge with `display:none !important` (inline-style override); `.sort-icon-group` + custom badge styles (reverted the absolute-positioning attempt that hid the badge entirely).
@@ -254,11 +344,13 @@
 **Verified**: `npx ng test --watch=false` **509/509 (57 files)** · `npx ng build` exit 0 · graphify updated. No architecture-diagram change.
 
 ---
+
 ## 2026-08-25 — ✅ DONE: manual removableSort — 3-click sort cycle (asc → desc → reset)
 
 **Request (manager):** `removableSort` doesn't exist as an attribute in PrimeNG 22.0.0 — implement the removal manually via `customSort`: click 1 asc, click 2 desc, click 3 reset (clear table sort state + restore original order).
 
 **Fix (3 files):**
+
 - `strain-hunter.html` — removed the bogus `removableSort` attribute (it was added by the user earlier; PrimeNG ignores unknown attrs).
 - `strain-hunter.ts` — new `lastSort` tracker; `sortTable` single-column branch detects the third click (`order === 1` while the previous state for the same field was `-1`) → `resetSort()`: clears `lastSort` + `activeSortField`, calls `table().reset()` (verified: `clear()` nulls `sortField`/`multiSortMeta` and emits `onSort(null)` → icons reset), and restores `event.data` to the original `rawItems` order by id. Multi-column (Ctrl+click) branch unchanged and clears the tracker.
 - `strain-hunter.spec.ts` — +1 test: asc → desc → reset cycle on price (`[2,3,1]` → `[1,3,2]` → `[1,2,3]`, `activeSortField` null). Fixed the first version of the test (event rows had no `price` field → comparator got nulls).
@@ -268,9 +360,11 @@
 **Verified**: `npx ng test --watch=false` **508/508 (57 files, +1)** · `npx ng build` exit 0 · graphify updated. No architecture-diagram change.
 
 ---
+
 ## 2026-08-25 — ✅ DONE: sortTable unsorted-restore + manager premises fact-checked
 
 **Manager's two claims vs. PrimeNG 22.0.0 source (verified in `primeng-table.mjs`):**
+
 1. **"badge hidden by `badge > 1`" — FALSE.** No such condition. `getMultiSortMetaIndex` gates on `multiSortMeta.length > 1` and returns the index for EVERY sorted column — badges render 1..N (empirically proven by `sort-badge.spec.ts` → `['1','2']`). Custom-badge template + hiding PrimeNG's badge NOT implemented — would duplicate the library feature and fight it with `!important` for zero gain. If the manager still sees "2,3,4 without 1", the first column was not in `multiSortMeta` (neutral `sort-alt` icon reads as "sorted").
 2. **"removableSort leaves data sorted" — premise FALSE** (no `removableSort` input exists in 22.0.0; `sortMultiple` never emits with empty `multiSortMeta`). BUT the defensive fix is still correct and was implemented: `sortTable` now handles the no-sort contract — `event.field && event.order` guard (a real single-mode bug: `?? 1` turned `order: 0` into an ascending sort), and an unsorted fallback that restores the original `rawItems` order by id and clears `activeSortField`.
 
@@ -279,23 +373,26 @@
 **Verified**: `npx ng test --watch=false` **507/507 (57 files, +1)** · `npx ng build` exit 0 · graphify updated. No architecture-diagram change.
 
 ---
+
 ## 2026-08-25 — ✅ DONE: sort badge "1" verified rendering + PrimeNG behavior proven by spec
 
 **Task:** ensure the first sorted column shows its ordinal (1) in multi-sort; the visual polish (semi-transparent border via `color-mix`, `tabular-nums`) was already applied earlier.
 
 **Verification (new `frontend/src/app/features/strain-hunter/sort-badge.spec.ts`, 2 tests):** a real `p-table` (`sortMode="multiple"` + `multiSortMeta` with 2 entries) renders `.p-sortable-column-badge` as `['1', '2']` — the FIRST column IS numbered. Second test: a single sorted column renders NO badge (PrimeNG 22.0.0 `getMultiSortMetaIndex` gates badges on `multiSortMeta.length > 1`). So with `[showInitialSortBadge]="true"` (the default anyway) every column of a multi-sort shows its ordinal 1..N — the app config already produces correct output.
 
-**Manager screenshot note:** "price has an arrow without a number, others 2,3,4" most likely means price was NOT in the table's `multiSortMeta` (the neutral sort-alt icon renders for unsorted columns too) — the first *actually sorted* column always gets 1.
+**Manager screenshot note:** "price has an arrow without a number, others 2,3,4" most likely means price was NOT in the table's `multiSortMeta` (the neutral sort-alt icon renders for unsorted columns too) — the first _actually sorted_ column always gets 1.
 
 **Verified**: `npx ng test --watch=false` **506/506 (57 files, +2)** · `npx ng build` exit 0 · graphify updated. No architecture-diagram change.
 
 ---
+
 ## 2026-08-25 — ✅ DONE: `[showInitialSortBadge]="true"` added to strain-hunter p-table
 
 - Added the explicit flag to `strain-hunter.html`. Note: PrimeNG 22.0.0's default is already `true` — the flag gates the initial-column badge only when `multiSortMeta.length > 1` (verified in `primeng-table.mjs` `getMultiSortMetaIndex`). If the "1" on the first sorted column is still missing after this, the cause is the meta state on click, not this flag.
 - **Verified**: `npx ng test --watch=false` 504/504 · `npx ng build` exit 0.
 
 ---
+
 ## 2026-08-25 — ✅ DONE: sort badge polish — semi-transparent border + tabular-nums
 
 **Request (manager):** final polish — (1) soften the badge border to a glass look (`color-mix(in srgb, var(--color-primary) 40%, transparent)` instead of solid), (2) `font-variant-numeric: tabular-nums` for optical digit centering in the 15px chip.
@@ -307,6 +404,7 @@
 **Verified**: `npx ng build` exit 0 · graphify updated. No architecture-diagram change (CSS-only).
 
 ---
+
 ## 2026-08-25 — ✅ DONE: multi-sort badge restyled — ghost chip instead of solid accent dot
 
 **Request (manager):** the multi-sort priority badge (`.p-sortable-column-badge`) is too heavy — full turquoise dot reads like a notification badge, not a sort order. Notes: smaller (14–16px, 10px font), glass/ghost look (translucent bg + thin primary border + primary text), next to the sort arrow.
@@ -316,11 +414,13 @@
 **Verified**: `npx ng build` exit 0 · graphify updated. No architecture-diagram change (CSS-only).
 
 ---
+
 ## 2026-08-25 — ✅ DONE: strain-hunter empty state now matches strain-hunter-settings (inside the table)
 
 **Request:** "the empty state in the table should look like the empty state in the strain-hunter-settings tables."
 
 **Fix (2 files):** the settings tables keep the table rendered and show the empty state inside it (`#emptymessage` → `page-state table-empty-state` with `ph-magnifying-glass-minus` + title + subtitle). Strain-hunter now does the same:
+
 - `strain-hunter.ts` — `pageState` drops the `items().length > 0` check → Ready whenever not loading/error (Empty page state no longer replaces the table).
 - `strain-hunter.html` — `@case (PageStates.Empty)` block removed (orphaned by the pageState change); `#emptymessage` replaced with the settings markup (dynamic `[attr.colspan]="columns().length"`).
 
@@ -329,11 +429,13 @@
 **Verified**: `npx ng test --watch=false` **504/504 (56 suites)** · `npx ng build` exit 0. No architecture-diagram change.
 
 ---
+
 ## 2026-08-25 — ✅ DONE: multi-column sort (Ctrl/Cmd+click) in strain-hunter table
 
 **Request (manager):** enable PrimeNG's native multi-column sort — `sortMode="multiple"` + `multiSortMeta` + chained comparator, with `Ctrl/Cmd + click` adding secondary sorts.
 
 **Fix (3 files):**
+
 - `strain-hunter.html` — `sortMode="multiple"`; `[sortField]="'price'"` → `[multiSortMeta]="[{ field: 'price', order: 1 }]"` (same default indicator).
 - `strain-hunter.ts` — `sortTable(event: SortEvent)`: if `event.multiSortMeta` present → map each meta through `resolveSortField`, chain `compareSortValues` comparisons (first non-zero wins, `* order`), `activeSortField` = first meta. Single-column fallback kept for plain clicks (also now works when only `event.field` is set).
 - `strain-hunter.spec.ts` — multi-sort priority test: price asc → expiry asc → `[3, 2, 1]` (id 3: 50₪ first; ids 1+2: same price, expiry `01/27` < `02/27`).
@@ -341,6 +443,7 @@
 **Verified**: `npx ng test --watch=false` **504/504 (56 suites, +1)** · `npx ng build` exit 0 · graphify updated. No architecture-diagram change.
 
 ---
+
 ## 2026-08-25 — ✅ DONE: expiry sort fixed — MM/YY sorted chronologically (not as string)
 
 **Bug (manager report):** the `expiry` column shows `MM/YY` (e.g. `01/27`, `01/28`, `02/27`) but sorts lexicographically — `"01/28"` (Jan 2028) sorts before `"02/27"` (Feb 2027), which is chronologically wrong.
@@ -352,11 +455,13 @@
 **Verified**: `npx ng test --watch=false` **503/503 (56 suites, +1)** · `npx ng build` exit 0 · graphify updated. No architecture-diagram change.
 
 ---
+
 ## 2026-08-25 — ✅ DONE: scrollbar-gutter stable — no more layout shift when table results → empty state
 
 **Bug (manager report):** a vertical scrollbar (~15px) appears when the table has results and disappears in the empty state → the whole layout expands and jumps. Seen on strain-hunter, "probably elsewhere too".
 
 **Fix (2 CSS files, manager's recommended solution 1 — `scrollbar-gutter: stable`):**
+
 - `_layout.css` — `.content-shell` (the app shell's page scroll container, `overflow-y: auto`) gets `scrollbar-gutter: stable` → the track is always reserved on every page → zero width delta between scroll and no-scroll states.
 - `_primeng-overrides.css` — new `.p-datatable-wrapper { scrollbar-gutter: stable }` → PrimeNG scrollable tables reserve the track too (rows → empty state no longer shifts the table content).
 
@@ -365,6 +470,7 @@
 **Verified**: `npx ng build` exit 0. No architecture-diagram change (CSS-only).
 
 ---
+
 ## 2026-08-25 — ✅ DONE: search-clear-btn layout shift fixed (always-DOM + CSS visibility)
 
 **Bug (manager report):** typing in the search field → the entire `.form-field-has-icon` jumps right, pushing the filter icons. Root cause: the `@if (query())` conditional rendering toggled the `:has(.search-clear-btn)` rule in `_forms.css`, which changes `input.form-control` padding-left from 16px→64px (RTL). With `box-sizing: content-box` (default for inputs), the outer width shifts by 48px → the container grows → adjacent elements shift.
@@ -376,11 +482,13 @@
 **Verified**: `npx ng test --watch=false` **502/502 (56 suites)** · `npx ng build` exit 0. No architecture-diagram change (CSS + HTML only).
 
 ---
+
 ## 2026-08-25 — ✅ DONE: search-clear-btn added to all 7 search fields (consistent with strain-hunter-settings pattern)
 
 **Request**: add the clear button (`.search-clear-btn`) to every search field, matching the `strain-hunter-settings` pattern: `@if (filter)` + `<button class="icon-only transparent-btn sm search-clear-btn" aria-label="נקה חיפוש">` + `<span class="ph ph-x">`.
 
 **Fix (6 files)**:
+
 - `strain-hunter.html` — button + `[value]="searchQuery()"` (input was uncontrolled — the signal must drive the field so the × actually clears the text) + `type="search"`→`type="text"` (no double × with the native browser clear).
 - `matching-preferences-drawer.html` — button wired to existing `geneticsFilter()`/`clearGeneticsSearch()` + `type="search"`→`type="text"`. The empty-state "איפוס חיפוש" button kept (different context).
 - `llm-providers-management.{html,ts}` — new `globalFilter = signal('')` (drives `@if` + `[value]`); `applyGlobalFilter` sets signal + `filterGlobal`; new `clearGlobalFilter()` (resets both).
@@ -389,6 +497,7 @@
 **Verified**: `npx ng test --watch=false` **502/502 (56 suites)** · `npx ng build` exit 0 · graphify updated. No architecture-diagram change (UI-only, component-internal state).
 
 ---
+
 ## 2026-08-25 — ✅ DONE: strain-hunter search input now feeds the summary count (like every other filter)
 
 **Request**: the search-box results must affect the `summary-value` (סה"כ זנים) like every other filter.
@@ -398,6 +507,7 @@
 **Verified**: `npx ng test --watch=false` **502/502 (56 suites)** · `npx ng build` exit 0 (only pre-existing strain-hunter.css budget warning) · graphify updated. No architecture-diagram change (component-internal filter flow).
 
 ---
+
 ## ## 2026-08-20 — ✅ DONE: 429 Retry-After handling in createVideoTask + tool-description disambiguation (image vs video)
 
 **Symptom (real log)**: Studio media → "Data graphics, ambient garage lights flickering" + attached image → flow hit real 503 `video_queue_full` (OK with retry) then died on **429 `rate_limit_exceeded: allows 2 requests per 1 minute(s)`**. The previous retry scope was "5xx/queue_full/network only" — 4xx was terminal, so 429 surfaced raw to the UI. Separately the chat-agent LLM picked `LlmController_generateImage` 3 times in a row (loop-broken) instead of `createVideo`, even though the user wanted motion.
@@ -405,16 +515,19 @@
 **Two surgical fixes (4 files:** `llm-client.service.ts` + `llm-client.service.spec.ts` + `llm.controller.ts` + auto-regenerated `swagger-spec.json`):
 
 **Fix 1 — 429 honoring `Retry-After` (existing retry extended):**
+
 - `createVideoTask` in `LlmClientService` now classifies HTTP 429 as transient — with **a single bounded `Retry-After` retry, capped at 30s**. If the header is absent or > 30s, the 429 immediately surfaces as a terminal error (UI-friendly, no long stalls). Bounded to **one** `Retry-After` cycle (rateLimitBudget=1) so the loop cannot chain forever even when the API keeps saying "wait 5s".
 - 5xx + 503+`video_queue_full` + transport (`TypeError` / `AbortError`) behavior untouched. 4xx other than 429 still terminal.
 - Live proof from the file: 4th attempt counter `MAX_RATE_LIMIT_WAIT_MS = 30_000` + `rateLimitBudget = 1`. Log hits `[createVideoTask] attempt N/3 failed (HTTP 429 rate limit) — retrying after Xms (Retry-After: Ns)`.
 
 **Fix 2 — Tool-description cross-reference (forces the LLM to pick the right tool):**
+
 - `LlmController.generateImage.description` now reads "USE ONLY when the user wants a static image ... DO NOT use for motion/animation/video — for those use LlmController_createVideo."
 - `LlmController.createVideo.description` now reads "USE when the user wants a moving video / clip / animation, especially when an attached image should animate (image-to-video, ti2vid). DO NOT use for still images — use LlmController_generateImage."
 - The descriptions are exactly what the LLM reads when picking tools (via the swagger-tools.parser and `swagger-spec.json`). Mirrors the previous auth-loop fix (2026-08-19) where tool descriptions were the cheapest prevention; the rescue was the safety net.
 
 **Tests (4 new in `llm-client.service.spec.ts`, `makeMockResponse` extended with `headers`):**
+
 1. `retries once on 429 with Retry-After=2s, succeeds on attempt 2` — proves the bounded auto-recovery.
 2. `does NOT retry on 429 when no Retry-After header is present (terminal)` — proves no header = no wait.
 3. `does NOT retry on 429 when Retry-After=45 exceeds the 30s cap (terminal)` — proves the cap.
@@ -427,11 +540,13 @@
 **Not changed**: studio media UI still surfaces raw English error if all retries exhaust — UX-friendly Hebrew error is a separate scope. The chat-agent prompt itself was NOT touched — the fix is in the tool descriptions (where the LLM picks which tool) rather than in the agent's system message.
 
 ---
+
 ## 2026-08-20 — ✅ DONE: video queue_full transient retry in LlmClientService.createVideoTask
 
 **Symptom**: Agnes occasionally returns `503 video_queue_full` ("video queue is full, please retry later"); the studio media video tab surfaced the raw error to the user with no retry — every retry had to be manual.
 
 **Fix (surgical, 2 files)**:
+
 - `backend/src/modules/llm/services/llm-client.service.ts` — `createVideoTask`: bounded retry loop around the existing `fetch` to `${baseUrl}/videos`. **3 attempts, fixed backoff 1s+2s** (~3s total, never stalls the UI). Transient classification:
   - **Retry:** HTTP 5xx (status ≥ 500) OR body contains `"video_queue_full"` OR transport errors (`TypeError`, `AbortError`).
   - **No retry:** 4xx (terminal client error — a retry cannot fix it).
@@ -440,6 +555,7 @@
 **Why a focused loop instead of the existing `withRetry`?** The existing helper (`MAX_RETRIES=4`, exponential 1.5/3/6s) handles 5xx generally but the user spec is exactly 3 attempts / 1s+2s. Surgical: don't touch the existing helper, just wrap `createVideoTask`. Same `withRetry` keeps working elsewhere untouched.
 
 **Tests (5 new, fake timers)** in `llm-client.service.spec.ts`:
+
 1. `retries up to 3 times on 503 + video_queue_full, then throws` — proves retry count + preserved error message.
 2. `does NOT retry on 4xx (terminal client error)` — proves terminal detection.
 3. `retries up to 3 times on generic 5xx (non-queue_full body)` — proves 5xx retry without the discriminator.
@@ -453,6 +569,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 **Files touched**: `backend/src/modules/llm/services/llm-client.service.ts` (+61/-11), `backend/src/modules/llm/services/llm-client.service.spec.ts` (+113). No architecture-diagram change (internal retry logic in a single method, no module/request flow change).
 
 ---
+
 2026-08-20 — 💬 Q&A: chat agent cannot use video understanding yet (decision: Option A later, not now)
 
 **User asked:** "הסוכן בצ'אט (frontend/src/app/features/chat/chat/chat.html) גם יכול להשתמש בזה?" — can the in-app chat agent use the video-understand capability?
@@ -460,6 +577,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 **Verified answer: NO today.** The chat pipeline is image-only end-to-end: frontend `accept="image/*"` + `file.type.startsWith('image/')` (8MB); backend `agent-request.dto.ts` validates only `data:image/...;base64,`; the video-understand skill (`~/.agents/skills/video-understand/scripts/process_video.py`) is terminal-only (me, the coding agent). The chat agent DOES already see attached still images (passed to LLM on iteration 0 in `queryDatabase`/`queryDatabaseStream`).
 
 **Options presented (user chose "just explain, don't implement now"):**
+
 - **A (recommended) — `analyze_video` agent tool:** user pastes a YouTube URL in chat → agent calls the tool → backend runs the verified pipeline → returns transcript+analysis as context. Fits the existing 73-tool swagger-parser architecture + visible step icons in chat.
 - **B — upload video in composer** (like images): needs multipart upload endpoint, heavier.
 - **C — native video to gemini:** not viable for generic chat models.
@@ -467,17 +585,20 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 **Next (whenever user wants):** Option A — new backend endpoint (runs process_video.py, returns transcript), auto-exposed via swagger parser as a tool; no frontend change needed for YouTube links.
 
 ---
+
 ## 2026-08-20 — ✅ DONE: video-understand skill installed + ALL providers verified E2E (gemini / openrouter / groq / yt-dlp)
 
 **User request:** install `jrusso1020/video-understand-skills` (Claude Code skill for video understanding/transcription), verify ffmpeg/yt-dlp, run check_providers against backend/.env, install deps, test end-to-end.
 
 **Done (all verified live):**
+
 1. **Skill installed** at `~/.agents/skills/video-understand` (copy of `skills/video-understand` — SKILL.md + scripts; Freebuff loads from ~/.agents/skills, same as caveman/ponytail). check_providers.py = stdlib-only.
 2. **Deps:** `pip install google-generativeai openai groq` ✅. ffmpeg ✅ (2026-01-29) · yt-dlp ✅ — **was outdated (2026.01.29 → update needed)**, upgraded to **2026.08.19** (the old one failed YouTube extraction: HTTP 400/403 + "no JS runtime" warnings).
 3. **Providers (check_providers + live runs):** gemini (native, GEMINI_API_KEY) ✅ · openrouter (google/gemini-3-flash-preview via OpenAI SDK) ✅ · groq whisper (`whisper-large-v3-turbo`) ✅ · ffmpeg offline fallback present.
 4. **Live tests:** 5s generated test-pattern video (ffmpeg lavfi) → gemini read colors/countdown/tone correctly. User's 15s screen recording (Idea History page, lightning-bolt click, triggerSuccess banner) → gemini + openrouter both analyzed it. groq `--asr-only` on silent recording → returned whisper's known "Thank you." silence-hallucination (expected, not a bug). **Full E2E: groq --asr-only on `jNQXAC9IVRw` ("Me at the zoo") → accurate 4-segment transcript** (yt-dlp download → ASR; only "fronts" vs "trunks" — minor whisper error).
 
 **Bugs found & fixed along the way:**
+
 - **`GROQ_BASE_URL` pollution (root cause of groq 404):** user's GROK→GROQ rename moved `GROK_BASE_URL`'s value to `GROQ_BASE_URL=https://api.groq.com/openai/v1` — the groq SDK already defaults to that URL → double `/openai/v1` prefix → `404 Unknown request URL: POST /openai/v1/openai/v1/audio/transcriptions`. Fixed: deleted the line (SDK default is correct). App code reads NO GROK/GROQ/XAI env vars (only OPENROUTER/NVIDIA/AGNES/OLLAMA/REQUESTY) → rename broke nothing.
 - **`PIXAZO_AUTH_HEADER` unquoted space (broke `source .env` line 112):** value `Ocp-Apim-Subscription-Key: <key>` has a space → bash split it into command+arg → "command not found" at line 112 (NOT a bare token — was misread as such earlier). User chose to KEEP Pixazo as option → quoted the value: `PIXAZO_AUTH_HEADER="Ocp-Apim-Subscription-Key: ..."`. `source .env` now fully clean.
 - **Pixazo usage check:** ZERO references in code/.env.example/docs/git — 3 orphan keys in backend/.env only (kept per user decision).
@@ -489,11 +610,13 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 **Next:** pipeline 100% verified — use the skill via `python ~/.agents/skills/video-understand/scripts/process_video.py <source> [--asr-only|--provider X]` with env loaded from backend/.env. yt-dlp needs periodic updates (pip -U).
 
 ---
+
 ## 2026-08-20 — ✅ DONE: error-state UI unified app-wide (mirrors page-empty-state: stagger stagger-up + נסה שוב button)
 
 **User request:** make `PageStates.Error` look like `page-empty-state` (`stagger stagger-up`, no glass card) + a **נסה שוב** retry button, and check this state across the whole app.
 
 **Done (all 9 error blocks / 8 files):**
+
 1. **CSS — one global rule:** `_utilities.css` — `.page-state.error-state` now strips the glass card (`background/border/radius: none`, `animation: none`) and colors the icon primary, mirroring `page-empty-state`. All pages restyled at once (the "global vs variant" open question → global won, because the user asked for app-wide consistency).
 2. **Reduced-motion fix (backlog-flagged gap):** `_animations.css` — `.stagger > * { animation: none; opacity: 1 }` under `prefers-reduced-motion` — stagger children previously stayed invisible (base rule starts them at opacity 0). This also hardens the 4 existing empty states.
 3. **Retry buttons unified:** all blocks use `primary-btn sm` + "נסה שוב" (llm-providers: "Try again"); added the 4 missing ones — dashboard/users → `usersStore.reload()`, llm-providers → `llmProviderStore.reload()`, ideas-page session-level → new `loadSessionIdeas()` (extracted from `setViewMode` because its same-mode guard made a direct retry impossible).
@@ -503,6 +626,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 **Next:** nothing pending on this task. Open items remain: SearXNG proxy decision, translation-quality beyond the map, in-memory tracker restart limitation (future B = DB table).
 
 ---
+
 ## 2026-08-20 — ✅ FIXED: bridge thread rejected by Freebuff "premium slot" — model switched to mimo + /reset & /status commands added
 
 **Symptom (user):** command bot works; chat bot (relay bridge) showed typing but never answered, then "⚠️ לא קיבלתי תשובה מ-Freebuff תוך 5 דקות". User asked about context reset / new session.
@@ -510,6 +634,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 **Diagnosis (DB-proven, not guessed):** every recent bridge message got `freebuff-slot-taken` in the thread (13:07, 13:12, 13:34): "Another tab is using a premium model (deepseek/deepseek-v4-flash). Switch this tab to an unlimited model, or change the other tab." Root cause: Freebuff allows only ONE tab per premium model at a time — the bridge thread (3c673501, model deepseek/deepseek-v4-flash) collided with the active session tab (f4e1fdf3, same model). The thread was NOT stuck (turn_state idle + outcome error) — it was rejected. Also explains the earlier daily-limit message: same model, same premium/free-tier limits.
 
 **Fix (tg-bridge.mjs, outside repo — user-approved):**
+
 1. `CONFIG.model`: `deepseek/deepseek-v4-flash` → **`mimo/mimo-v2.5`** (only other model in use; non-premium). Thread model re-enforced via ensureThread's /agent call on bridge restart.
 2. New commands in the poll loop (previously ALL `/`-prefixed messages were silently dropped — that's why /reset never worked): **`/reset`** (threadId → null, next message creates a fresh thread via ensureThread; ack reply sent) and **`/status`** (model + thread id + active/no-thread).
 
@@ -552,6 +677,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 **User question → reviewer approval:** "אם אנחנו מטפלים באיכות תרגום, מי מעדכן את המפה כשנכנס זן חדש למלאי?" — the honest answer was NOBODY (hardcoded `HEBREW_STRAIN_NAMES` const, manual edits only). The reviewer rejected the naive "debug log" answer (a log nobody scans = unimplemented) and approved A-with-extensions: log + tracker + **visible delivery via the existing nightly Telegram push**, + terpene instrumentation, + a DB-table note for the future B.
 
 **Implemented (7 files + 2 new):**
+
 - **NEW `core/services/translation-tracker.ts`** — module-level singleton (one backend process): records genetics map misses + terpene LLM translations, deduped by Hebrew name (count = distinct new strains, latest wins), capped at 200, `reset()` for tests.
 - **`genetics.service.ts`** `translateToEnglish` — on map miss + successful LLM translation: `recordGeneticsMiss(name, translated)` + debug log (the harvest queue).
 - **`terpene.service.ts`** `translateToEnglish` — records EVERY LLM translation (no map baseline exists → this builds the data for a future terpene map).
@@ -580,6 +706,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 2. **Real fix:** keep the tooltip **invisible during the entire estimate→correct window**. Added `ready: boolean` to both `TooltipPos` and `TerpeneTooltipPos`. Tooltip starts `ready: false` → template binds `[style.visibility]="ready ? 'visible' : 'hidden'"`. `correctTooltipOverlap` flips it to `true` in the SAME signal write that sets the real `top` → only one paint at the final position. Zero frames at wrong pos.
 
 **Files touched:**
+
 - `strain-hunter.ts` — `TooltipPos`/`TerpeneTooltipPos` + `ready` field (×2), `onGeneticsEnter`/`onTerpeneHover` set `ready: false`, `correctTooltipOverlap` sets `ready: true` alongside `top`.
 - `strain-hunter.html` — `[style.visibility]` binding on both `<app-tooltip>` instances (genetics + terpene).
 - `tooltip.css` — reverted the 60ms animation-delay hack (no longer needed; tooltip is hidden during render anyway).
@@ -593,6 +720,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 ## 2026-08-19 — ✅ css-nesting-check.mjs moved to ~/.claude/hooks/ (user-approved)
 
 **User asked who runs it — found: Claude Code hooks (PreToolUse/Write + PostToolUse/Edit|Write), 2 configs × 2 refs each; ZCode refs are dead (policy ignores hooks, proven earlier).** Moved:
+
 - `scripts/css-nesting-check.mjs` → `~/.claude/hooks/css-nesting-check.mjs` (sits with the other 5 hooks)
 - Updated 4 refs: `~/.claude/settings.local.json` (2) + `.claude/settings.local.json` (2) → new path, via parsed-JSON edit (raw string replace failed on escaped backslashes). Note: `.claude/settings.local.json` is GITIGNORED — only the script was tracked.
 - **Verified from new location:** flat CSS → `{decision:block}` exit 2 (correct message); nested → exit 0. Script unchanged, only its home moved.
@@ -602,6 +730,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 ## 2026-08-19 — ✅ Telegram scripts moved OUT of the repo → ~/.freebuff-bridge/scripts/ (user: privacy)
 
 **User asked why the scripts live in the repo — after the token incident they contain personal info (chat id, project layout).** Moved all 3 to the global bridge dir (like the bridge itself):
+
 - `scripts/{telegram-command-bot,telegram-bot-commands,tg-html-send}.js` → `~/.freebuff-bridge/scripts/` (git rm + pushed)
 - **ROOT fix:** the scripts previously resolved the project root via `path.resolve(__dirname,'..')` — that breaks outside the repo. Now `const ROOT = process.env.PROJECT_PATH || 'C:\\Porat\\Practice\\ai\\agentic-admin'` (same pattern as the bridge).
 - **Verified from the new location:** `--test help` and `--test git` (real log output — ROOT works), `node -c` syntax ×3, and `telegram-bot-commands.js` registration (setMyCommands ok, token read from `backend/.env` via ROOT).
@@ -615,6 +744,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 ## 2026-08-19 — ✅ TOKEN ROTATED + single source of truth: bridge reads backend/.env
 
 **User revoked the exposed token in BotFather and provided a new one.** Verified: new token `getMe` OK, old token `401 Unauthorized` — exposure closed.
+
 - **3 local copies updated:** `backend/.env` (`TELEGRAM_BOT_TOKEN`), `C:\Users\porat\.agents\mcp.json`, and the bridge script.
 - **Refactor (user-approved):** `tg-bridge.mjs` no longer hard-codes the token (was line 22). New `loadBotToken()`: `process.env.TELEGRAM_BOT_TOKEN` wins, else reads `backend/.env` — ONE edit per rotation going forward. Bridge restarted (PID 46848), polling clean, no 401/409.
 - **Remaining copy:** `C:\Users\porat\.agents\mcp.json` still holds the literal token — unused by Freebuff (v0.0.65 never reads MCP config), kept as reference per AGENTS.md. Optional cleanup later.
@@ -623,6 +753,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 ## 2026-08-19 — 🔴 SECURITY: @freebuzbot token exposed in public repo — rotation REQUIRED
 
 **GitHub secret-scanning alert:** the relay bot token was committed in `3667b2a` (AGENTS.md#L250) to a **PUBLIC** repo. Anyone can read it and control @freebuzbot.
+
 - **Done:** `de7b41c` removes the token from AGENTS.md (now points to `backend/.env` `TELEGRAM_BOT_TOKEN`) + pushed. `git log -S` confirms the token entered history in exactly ONE commit (3667b2a); old myCBoBot token never hit git.
 - **⚠️ REQUIRED USER ACTION:** revoke in @BotFather (`/revoke` on @freebuzbot → get new token). Token rotation is the only real fix; history rewrite alone doesn't un-expose it.
 - **After user provides the new token, update 3 local copies:** `backend/.env` (`TELEGRAM_BOT_TOKEN`), `C:\Users\porat\.agents\mcp.json`, and `~/.freebuff-bridge/tg-bridge.mjs` (hard-coded `botToken` line 22) — then restart the bridge. The bridge will be dead once the old token is revoked (409/401 on getUpdates) until updated.
@@ -632,11 +763,12 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 ## 2026-08-19 — ✅ PUSHED: accumulated work committed per protocol (6 commits → origin/main)
 
 **User: "commit לפי הפרוטוקול (gemma בנפרד)?"** — committed + pushed 6 commits (`9aab391..3667b2a`):
+
 1. `b540a5a` feat(agent-tools): OAuth callback hidden from LLM + EXACTLY-ONCE contracts (callback, triggerNightly)
 2. `a060648` feat(ideas): nightly → Telegram push — HTML formatting, selective retry, empty-run notice
 3. `88dc183` feat(scripts): FreeBuzCommandBot standalone responder + menu registration + tg-html-send helper
 4. `3667b2a` docs: HANDOFF/STATUS/LOG/architecture-diagram + AGENTS.md (Telegram method, no-duplicates rule)
-5. + the 2 previously-unpushed commits (`7c156ab` OAuth logging, `ae4d071` docs)
+5. - the 2 previously-unpushed commits (`7c156ab` OAuth logging, `ae4d071` docs)
 
 **Gemma note (protocol nuance):** the gemma switch lives in `backend/.env` — gitignored (contains tokens), so it has NO commit by design; it stays local-only on the user's machine, which is the "separate" the protocol wanted. No tracked gemma change exists.
 
@@ -647,6 +779,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 ## 2026-08-19 — ✅ DONE: gemma is now the nightly default (user approval) — live-verified end-to-end
 
 **User: "gemma עכשיו"** — the quality gate closed: manual test (session 95, 4 ideas ~2 min) + content read + approval.
+
 - **Switch:** `backend/.env` — `IDEAS_NIGHTLY_MODEL=openrouter/google/gemma-4-31b-it:free` is the ACTIVE default (glm demoted to a commented fallback). Verified the app reads it: `dotenv` reports gemma. :3000 restarted (PID 43868).
 - **Live proof (not just a config edit):** triggered a real nightly run 20:44→20:53 (~9 min): **3 grounded sessions (96-98) × 15 ideas** — every LLM call on gemma, zero empty-content. Topics: COPPA/GDPR kids-products checker (Shopify), Amazon FBA net-profit calculator, Etsy image-license manager. Telegram summary pushed with the new HTML bold.
 - **Honest limit:** 3 of 5 target sessions — grounding is search-bound (SearXNG noise, known), not the model (glm: 0; gemma: 15).
@@ -657,6 +790,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 ## 2026-08-19 — ✅ DONE: Telegram formatting upgrade — HTML parse_mode everywhere (bold renders, escaping guaranteed)
 
 **User:** "שתי כוכביות לא מעצב פה את הטקסט" → asked to upgrade. Implemented across all three send paths:
+
 - **`scripts/tg-html-send.js` (NEW)** — session-send helper: `{{b}}…{{/b}}` → `<b>`, auto-escapes `& < >`, sends with `parse_mode='HTML'`. Usage: `node scripts/tg-html-send.js relay|command <utf8-file>`.
 - **`telegram-notify.service.ts`** — exported `esc()`; `buildNightlyIdeasMessage` now emits `<b>` counts + topics and escapes LLM-supplied domain/title/description; `trySend` adds `parse_mode:'HTML'`. Empty-run message is static Hebrew — safe as-is.
 - **`scripts/telegram-command-bot.js`** — `sendMessage` auto-escapes + converts `{{b}}` markers; command names bolded in interim/final replies.
@@ -668,6 +802,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 ## 2026-08-19 — ✅ DONE: standalone command bot (FreeBuzCommandBot) — relay drops "/"-commands, so commands now execute outside Freebuff
 
 **Root problem (user's empirical isolation test, option 3):** menu commands tapped in Telegram were SENT and CONSUMED by the relay bot but NEVER reached the session — the Freebuff relay drops "/"-prefixed messages. The orchestrator cannot be modified from this repo, so the fix is a SEPARATE bot that owns command execution entirely.
+
 - **New standalone responder — `scripts/telegram-command-bot.js` (FreeBuzCommandBot, token `TELEGRAM_COMMAND_BOT_TOKEN` in `backend/.env`, chat-gated to 661157823):** long-polling `getUpdates` loop executing `/status /git /tests /build /restart_backend /stop /help` directly via the Bot API — no Freebuff in the loop, no 5-minute warnings. Test modes: `--test <cmd>` (prints replies, no Telegram) / `--test-stop <cmd>` (starts a command, /stops after 3s). Only ONE polling instance (409 otherwise).
 - **Empirically verified (real runs, not "should work"):** /help /status /git fast ✅ · /tests — backend jest **436/436 + frontend ng test 502/502**, real exit codes captured via `echo EXIT=$?` (a `| tail` pipe masks jest's exit code) ✅ · /build **exit 0** ✅ · /restart_backend — real kill+rebuild+start with a poll-until-listening loop (boot takes ~5-10s; a fixed 3s sleep missed it — found and fixed) ✅ · /stop — driver started a REAL jest run and killed it (`taskkill //T` tree, `killed=true`, correct "/tests" label) ✅.
 - **Two bugs found + fixed during the pass:** (1) `exec('(cmd &)')` hangs forever — the backgrounded child inherits exec's stdio pipes so the callback never fires (hit live with /restart_backend: backend DID restart, command never returned). Fix: `runDetached()` = `spawn('bash', ['-c', cmd], {detached: true, stdio: 'ignore'})` + `unref()`. (2) `/stop` routed through `executeCommand` overwrote the running command's busy label (replied "stopped /stop"). Fix: `/stop` calls `cmdStop()` directly (control-plane reads worker state).
@@ -680,6 +815,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 ## 2026-08-19 — ✅ DONE: Telegram menu commands + commands button for the bridge bot (registered + empirically tested)
 
 **User spec (full prompt via Telegram):** `/` menu + slash commands for the Freebuff bridge bot, so the user controls the agent from Telegram instead of free text.
+
 - **Registered (verified via getters):** `setMyCommands` ok + `setChatMenuButton {type:"commands"}` ok; readback = `/status /git /tests /build /restart_backend /stop /help`. Persisted in `scripts/telegram-bot-commands.js` (idempotent, token from `backend/.env`).
 - **List decision:** `/approve` DROPPED (no pending-approval flow exists for this bridge — the CONFIRMATION_REQUIRED flow lives in agentic-admin's own chat, not the Telegram bridge) — flagged to user; `/help` added. `/nightly` offered as a future option.
 - **Honest scope note:** the Freebuff ORCHESTRATOR is not modifiable from this repo (hard-coded, documented). Commands are handled IN-SESSION: they arrive as relayed messages, the agent executes and replies via `sendMessage`. Behavior contract documented in AGENTS.md: immediate "מתחיל…" reply, interim updates for slow ops, clear errors.
@@ -692,6 +828,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 **#1 — empty-run notification (user approved without hesitation):** `runNightly` sends "🌙 ריצת הלילה הסתיימה בלי רעיונות grounded..." when the run ends empty AND Telegram is enabled. **LIVE on :3000.** (Root cause of the earlier "no message" reports: glm-4.7-flash returned `"no content or tool calls"` ×3 in validation → 0 grounded → silent by design.)
 
 **#2 — gemma nightly model (user: "NOT default until content quality approved"):** the user correctly flagged that switching the idea-generation model is a CONTENT-QUALITY decision, not a reliability patch — and that documented gemma quality issues (Cannlytics translation, different context) mean "stable ≠ good content". Followed their protocol:
+
 1. **Manual test run with gemma** (session 95, 18:57→18:59, ~2 min): produced **1 grounded session / 4 ideas** (vs glm: 22 min + 0 grounded). Ideas read + assessed: coherent GDPR/compliance niche, natural Hebrew (no translation issues), strong ChatGPT/Zapier differentiation, honest validation caveats; ⚠️ same-pattern saturation within the domain, 1/5 grounding rate (SearXNG noise, not the model). Quality verdict: **good — recommended for default, user's final call**.
 2. **Default REVERTED to glm** (`cloude-flare/@cf/zai-org/glm-4.7-flash`) in `backend/.env`; gemma kept as a commented manual-test option. **:3000 restarted (PID 45408, 18:59) on glm + empty-run notification.**
 3. When the user approves: switch `IDEAS_NIGHTLY_MODEL` to gemma **in a SEPARATE commit** (their requirement), restart, re-verify.
@@ -705,6 +842,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 ## 2026-08-19 — ✅ DONE: Telegram push hardening — selective retry + explicit failure log (user-driven edge case)
 
 **User's point:** the send-failure path was "logged but easy to miss, no retry" — exactly the edge-case class found today everywhere else (OAuth state overwrite, lazy tabs). Fixed with two additions, per user's spec:
+
 - **Retry — transient only:** network/DNS/timeout + HTTP 5xx → up to **3 attempts** with fixed backoff **500ms/1000ms** (total ~1.5s — never stalls the run for minutes). **Terminal failures are NOT retried**: missing config, API `ok:false` (expired token, unknown chat, blocked bot) and HTTP 4xx — a retry cannot fix them and would only waste time (the user explicitly required this distinction: "לא retry גורף על הכל").
 - **Explicit failure line in runNightly:** when Telegram IS enabled and `sendMessage` returns false → `logger.warn('Nightly ideas generation succeeded, but the Telegram notification failed — see TelegramNotifyService logs above')`. The run's success and the push's failure are both visible and distinguishable; when Telegram is NOT configured, no misleading line.
 - **Empirical tests (fake timers, not "should work"):** network error → exactly 3 calls at the exact gaps (verified at t=499/500/1499/1500); 5xx → 3 attempts then false; **4xx → 1 call, ok:false → 1 call (no retry, proven)**, recovery → succeeds on attempt 2; runNightly warns explicitly when enabled+fails, silent when disabled.
@@ -718,6 +856,7 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 **User request:** "יכול לשלוח את הרעיונות עם ההתראה בטלגרם?" — the nightly-run notification should carry the generated ideas, not just a completion ping. Closes the fire-and-forget gap (7-8 min run with zero feedback) with a one-way push.
 
 **Implementation (3 new/updated files + module + env + tests):**
+
 - `ideas/telegram-notify.service.ts` (NEW) — `TelegramNotifyService.sendMessage(text)`: POSTs a **JSON body** to `https://api.telegram.org/bot<TOKEN>/sendMessage` (Hebrew-safe — no form/curl mangling; the known gotcha). Config: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (both required, else warn + return false). **Never throws** — failures log and return false, so the cron can't be broken by a notification problem. Exported pure `buildNightlyIdeasMessage(grounded)` — Hebrew header with topic/idea counts, per-domain list sorted by score desc (top 5), truncated descriptions, "… ועוד N רעיונות", hard-capped at 4000 chars (Telegram limit).
 - `ideas-tasks.service.ts` — after the save loop: `await telegramNotifyService.sendMessage(buildNightlyIdeasMessage(grounded))`. Fires for BOTH the 04:00 cron and the manual admin trigger (same `runNightly()`). No message when 0 grounded (nothing to report).
 - `ideas.module.ts` — `HttpModule` import + `TelegramNotifyService` provider.
@@ -734,11 +873,13 @@ Real logger output during the failure case proves backoff: `[createVideoTask] at
 ## 2026-08-19 — ✅ DONE: single-use contract audit — callback hidden from LLM + triggerNightly EXACTLY-ONCE (reviewer's open follow-up closed)
 
 **Reviewer's open item ("audit all agent-visible tools for one-time external action nature") is now CLOSED.** Audited all **73 agent-visible tools** (75 spec endpoints − confirmAction/streamChat already hidden; MCP disabled by default). Classification:
+
 - **One-time external user action:** `GoogleCalendarController_auth` (contract already present from the auth-loop fix) + **`GoogleCalendarController_callback`** (was missing — the external redirect target).
 - **One-time fire-and-forget (re-calling is harmful):** **`IdeasController_triggerNightly`** (was missing — each call starts a new ~7.5-min background run).
-- **Other 70 tools: reviewed, NOT applicable** — data/CRUD; video polling is by-design (`getVideo` explicitly instructs polling); `generateImage`'s hosted URL is a *result*, not a user action; batch enrichments are internal jobs with no external step.
+- **Other 70 tools: reviewed, NOT applicable** — data/CRUD; video polling is by-design (`getVideo` explicitly instructs polling); `generateImage`'s hosted URL is a _result_, not a user action; batch enrichments are internal jobs with no external step.
 
 **Fixes (3 files + spec):**
+
 1. `google-calendar.controller.ts` — `callback` description now carries an explicit **NEVER-call contract** ("external redirect target — the agent has no browser session and no valid code/state, so calling it always fails; job ends at presenting the /calendar/auth URL; verify afterwards with GET /calendar/events").
 2. `swagger-tools.parser.ts` — **`GoogleCalendarController_callback` added to `HIDDEN_FROM_LLM`**: the strongest form of "call exactly zero times" — the model cannot even attempt it (same rationale as confirmAction/streamChat).
 3. `ideas.controller.ts` — `triggerNightly` description: **"call EXACTLY ONCE per request — returns immediately, run continues ~7-8 min in the background; do NOT re-call to check progress; do NOT report ideas as ready — they appear in history when done."**
@@ -838,6 +979,7 @@ Applied the same pattern INSIDE strain-hunter-settings (per user): inner `<p-tab
 **User report:** entering /settings fired calls for ALL tabs at once (me, sessions×2, default-model, storage, llm-provider, genetics, terpenes) — suspected non-best-practice. Root causes found: (a) sidebar loads sessions×2 on every page (MainSidebar.ngOnInit — for the dropdowns, by design); (b) `me` = APP_INITIALIZER boot call (once, fine); (c) **settings.ts rendered all 4 tab panels eagerly** — each child component created its store/requests on mount.
 
 **Empirical verification (fresh dev server, dataset markers — console capture in preview is unreliable):**
+
 1. `lazy` ALONE does NOT work: inactive panels rendered empty BUT the components were still instantiated (`sh-ctor;db-ctor;sh-init;db-init;`) and `/genetics` `/terpenes` `/storage` fired at ~320ms — exactly the known behavior behind primeng issue #17351 (projected `ng-content` content is instantiated eagerly; lazy only defers RENDERING).
 2. **Fix (per user's docs hint): `lazy` + wrap each non-first tab's content in `<ng-template #content>`** (settings.html): PrimeNG then uses the TemplateRef (inert until activation) instead of eager projection. Verified live: page load → NO lazy markers, storeTrace only `LLM;`, NO /genetics//terpenes//storage; click Strain Hunter → created + fetched ONCE (t=11165); click מסד נתונים → storage ONCE (t=25024); switch away & back → **no refetch**, components stay alive (state preserved).
 
@@ -876,6 +1018,7 @@ User manually checked the genetics/terpene tables in Strain Hunter: rows appear 
 ## 2026-08-18 Session (ah) — 🦴 ponytail installed · tests-files merged → main (FF) & pushed
 
 **What was done:**
+
 1. **Ponytail skill installed (Freebuff):** cloned `DietrichGebert/ponytail` (latest), copied 6 skills (`ponytail`, `ponytail-review`, `ponytail-audit`, `ponytail-debt`, `ponytail-gain`, `ponytail-help`) → `C:\Users\porat\.agents\skills\` — same SKILL.md format as caveman. Temp clone deleted. Note: Freebuff has no lifecycle hooks — skill activates via description trigger ("ponytail", "lazy mode", "yagni"), like caveman.
 2. **Ponytail installed (Claude Code):** `claude plugin marketplace add DietrichGebert/ponytail` + `claude plugin install ponytail@ponytail -y` (scope: user) → v4.9.0, 6 skills, 3 harness hooks (SessionStart/SubagentStart/UserPromptSubmit), always-on ~676 tok/session. Needs a NEW Claude Code session to activate.
 3. **Merge:** user asked to merge `tests-files` → `main`. Checked first: `tests-files..main` empty → fast-forward. My local `.gitignore` edit (`.freebuff/`) was a DUPLICATE — `2a62f47 chore: ignore local Freebuff tool state` already exists in tests-files → discarded mine, merged. FF merge `main` → `8f35140` (48 commits: enrichment Hebrew-aware search, price-slider, ServiceResultContainer ×6 clusters, test fixes, ideas work, seeds relocation, etc.). Zero conflicts — tree identical to fully-tested tests-files tip (frontend 492/492, backend 401/401 baseline).
@@ -890,6 +1033,7 @@ User manually checked the genetics/terpene tables in Strain Hunter: rows appear 
 **User:** "You didn't fix anything — the problem remains. Go back, cancel the animation, that's where everything started going wrong."
 
 **Action:** reverted ALL animation-related work on `strain-hunter-settings` to the last commit (`ac0691d`) state — verified via `git diff` that every change in these files was mine (animation/skeleton work), then `git checkout`:
+
 - `strain-hunter-settings.ts` — removed: `closingGenetics`/`closingTerpenes`/`closingGeneticsRows`/`closingTerpeneRows`/`flashGenetics`/`flashTerpenes` sets, `ENRICH_EXIT_MS`/`FLASH_MS`, `is*Closing`/`is*FieldFlashing` helpers, collapse helpers, `geneticsLoading`/`terpeneLoading`/`tableSkeletonRows`. `saveEnriched*`/`discardEnriched*` are back to instant map removal; `toggleGenetics`/`toggleTerpene` back to plain set toggle.
 - `strain-hunter-settings.html` — removed: `.expand-anim`/`.enrichment-anim` wrappers, `[class.closing]`, `[class.slide-out-right]`, field-flash bindings, save/discard spinner swaps, skeleton branches + `[value]` loading swap. (Sortable-column-header wrappers kept — they're in the commit.)
 - `strain-hunter-settings.css` — removed: `.expand-anim`/`.enrichment-anim`/`.closing`/inners, `.field-flash`, `.skeleton-row`, `.table-row-header` fade, min-height, reduced-motion block; `.has-enrichment` flex rule back to `.enrichment-panel`.
@@ -909,6 +1053,7 @@ User manually checked the genetics/terpene tables in Strain Hunter: rows appear 
 **Root cause (verified live):** tab switches do NOT refetch — the singleton stores (`httpResource`) keep their cached value, so switching back shows rows instantly (measured: 38 rows at +225ms). The emptiness/pop-in happens only on the **first load** of each resource: `genetics()`/`terpenes()` return `[]` while `isLoading` (no `hasValue` yet) and the tables had **no loading state at all** — empty table → rows burst in.
 
 **Fix (frontend, strain-hunter-settings — genetics + terpene tables):**
+
 1. **Skeleton rows** — `[value]` becomes `loading() ? tableSkeletonRows : filtered*()` (20 placeholder rows = page size, so the height is identical when data arrives); the body template branches `@if (loading())` → `.skeleton-row` with global `.shimmer` bars matching the real column structure (sm/md/lg). New `geneticsLoading`/`terpeneLoading` computeds (store `loading()`).
 2. **Min-height** — `.glass-effect.card { min-height: 480px }` (component-scoped) keeps header+pagination stable.
 3. **Fade-in** — `.table-row-header { animation: tableRowFadeIn 0.2s ease-out }`; keyframe lives in global `_animations.css` (per css-deduplicate convention); `prefers-reduced-motion` disables it. PrimeNG reuses row elements for the same objects, so filter doesn't re-flash; pagination (new objects) gets a subtle fade.
@@ -922,6 +1067,7 @@ User manually checked the genetics/terpene tables in Strain Hunter: rows appear 
 **User:** rewrote the tablist rule in nested form (`.p-tabs { .p-tablist-nav-button { &.p-tablist-prev-button, &.p-tablist-next-button { transform: scale(-1); } } }`) and asked to process the session's CSS per the `css-conventions` + `css-deduplicate` skills.
 
 **Audit results:**
+
 - **css-conventions:** the user's nested `.p-tabs` form is the compliant pattern (mandatory nesting, variants first) — kept as-is; `_primeng-overrides.css` already follows nesting consistently (pre-existing flat top-level overrides untouched — surgical-changes rule).
 - **css-deduplicate (strain-hunter-settings.css vs globals):** the three `@keyframes` I'd added in the component (`gridOpen`, `fieldFlash`, `fieldFlashFull`) were moved to their canonical home `_animations.css` (new sections "Grid rows" + "Field change flash") — component rules still reference them by name. `KEEP`: `.detail-item` (global one in `_layout.css` is nested in `.metric-details`, typography-only — not a match), `.detail-value .badge` (intentional contextual sizing), `.expand-anim`/`.enrichment-anim`+`.closing` (component-structural wrappers), `.detail-item.field-flash` class rules (component-scoped bindings).
 - **Bonus finding:** PrimeNG base ships `.p-tablist-prev-button:dir(rtl), .p-tablist-next-button:dir(rtl) { transform: rotate(180deg) }` — but live DOM showed `transform: none` pre-fix (rule not matching in practice); our `.p-tabs` rule (0,3,0) also beats it (0,2,0) whenever it does match.
@@ -935,12 +1081,14 @@ User manually checked the genetics/terpene tables in Strain Hunter: rows appear 
 **User request:** the `p-tablist-prev-button` / `p-tablist-next-button` chevrons inherit the page `direction: rtl` and point the wrong way — mirror them with `transform: scale(-1)` in `_primeng-overrides.css`.
 
 **Fix:** added a `/* ── Tabs ── */` section in `frontend/src/app/assets/styles/_primeng-overrides.css`:
+
 ```css
 .p-ripple.p-tablist-nav-button.p-tablist-prev-button,
 .p-ripple.p-tablist-nav-button.p-tablist-next-button {
   transform: scale(-1);
 }
 ```
+
 No `!important` needed — live check confirmed PrimeNG base leaves `transform: none` on these buttons.
 
 **Verification:** `ng build` exit 0 (CSS-only). Live (dev server hot-reload): next-button computed `transform: matrix(-1, 0, 0, -1, 0, 0)` = scale(-1) ✅.
@@ -952,6 +1100,7 @@ No `!important` needed — live check confirmed PrimeNG base leaves `transform: 
 **User request (video-agent analysis of the live flow):** (1) opening/closing the LLM panel caused abrupt layout shifts; (2) on Save/Discard the panel vanished instantly (exit animation perceived as missing); (3) no visual feedback on which fields actually changed in the original card; (4) subtle spinner on save/regenerate without layout shifts.
 
 **Implemented (frontend, `strain-hunter-settings`):**
+
 1. **Smooth expand/collapse (rows + panel)** — new wrappers `.expand-anim`/`.enrichment-anim` (CSS grid, `grid-template-rows: 1fr`, `@keyframes gridOpen` 0fr→1fr 0.3s ease-in-out) around the expansion-row content and the LLM panel, with inner `.expand-anim-inner`/`.enrichment-anim-inner` (`overflow: hidden; min-height: 0`). Enter = fresh insertion plays the keyframe; exit = `.closing` class toggles `grid-template-rows: 0fr` with `transition: grid-template-rows 0.3s` — no more layout jump. `prefers-reduced-motion` disables both.
 2. **Row collapse is now animated** — `toggleGenetics`/`toggleTerpene` collapse via a new closing state (`closingGeneticsRows`/`closingTerpeneRows` sets): row stays in DOM 300ms with `.closing`, then removed. Guarded by `isCompact()` (compact layout keeps rows always-expanded, as before).
 3. **Field-change flash on Save** — `saveEnrichedGenetics`/`saveEnrichedTerpene` diff old vs. enriched values (type/origin/parent1/parent2/thcRange/terpenes/effects/description; terpene: scent/effects/description) → `flashGenetics`/`flashTerpenes` maps → `.field-flash` class (green `--color-success` background pulse, 0.6s, separate keyframe for `.detail-full`) on the changed fields only, then cleared.
@@ -968,6 +1117,7 @@ No `!important` needed — live check confirmed PrimeNG base leaves `transform: 
 **User report:** when saving a card after Regenerate, the layout jumped and the card vanished instantly — wanted a smooth exit animation.
 
 **Fix (frontend, strain-hunter-settings):**
+
 - The "תוצאות LLM" panel already had an entry animation (`slide-right`); added the global `.slide-out-right` exit animation (0.3s, from `_animations.css`) via a new closing state: `closingGenetics`/`closingTerpenes` signal sets + `isGeneticsClosing`/`isTerpeneClosing` helpers.
 - `saveEnrichedGenetics`/`saveEnrichedTerpene`/`discardEnrichedGenetics`/`discardEnrichedTerpene` now mark the card as closing (animation plays, buttons disabled) and remove it from the preview map only after `ENRICH_EXIT_MS = 300` — no more instant vanish/layout jump.
 - Save still fires the store update immediately (async PUT + reload happens during the exit animation).
@@ -983,6 +1133,7 @@ No `!important` needed — live check confirmed PrimeNG base leaves `transform: 
 **User report:** Regenerate on strains with missing data (origin "לא ידוע", parents "לא ידוע") returned the same data as the DB — no enrichment, no change.
 
 **Root cause (proven by live logs):**
+
 1. `WebSearchService.simplifyQuery` removes ALL Hebrew from queries → `"33 ספליטר cannabis..."` became `"33 cannabis..."` and `"אובמה ראנטז cannabis..."` became just `"cannabis strain genetics..."` — the strain name vanished.
 2. `getEnglishName` (hardcoded map, genetics) returned `null` for these strains → no English fallback name; terpene has LLM-based `translateToEnglish`, genetics doesn't.
 3. SearXNG then returned garbage (Wikipedia "33 (number)", The 33 movie); the relevant hit ("33 Splitter — Parents: atom splitter x gelato 33") was result #6.
@@ -990,6 +1141,7 @@ No `!important` needed — live check confirmed PrimeNG base leaves `transform: 
 5. Suspicious: Cannlytics returned IDENTICAL lab data for two different strains — likely the loose partial match in `findInCache` (`normalizedName.includes(key)`, e.g. a strain literally named "33" matching "33 ספליטר"). Not fixed — flagged.
 
 **Fix (uncommitted):**
+
 - `WebSearchService.search(query, preserveHebrew = false)` — new optional flag; `simplifyQuery` skips Hebrew removal when set. Default unchanged → zero impact on other callers (controller, ideas cron, etc.).
 - Genetics `searchChunk` + `enrichSingle` and Terpene `searchChunk` + `enrichSingle` now call `search(searchQuery, true)` and pass `slice(0, 8)` results (was 3).
 - New spec: Hebrew stripped by default, preserved with the flag.
@@ -997,11 +1149,14 @@ No `!important` needed — live check confirmed PrimeNG base leaves `transform: 
 **Live re-test (user, 23:05):** "33 ספליטר" — Hebrew name kept in query, relevant results (Cannapedia, StrainWeaver), LLM identified parents (Gelato #33 × Atom Splitter) ✅. "אובמה ראנטז" — search still garbage (Polish Gmail pages) because `enName` null.
 
 **Follow-up fix (per user, same session):**
+
 1. **`enName` resolution** — added `GeneticsService.translateToEnglish(name)`: hardcoded map first, then LLM translation fallback (mirrors Terpene). Used in `enrichSingle`.
 2. **Auto-save removed** — `enrichSingle` (genetics AND terpene) no longer calls `repository.save()`; returns the enriched entity as a preview only, matching the controller docs "Does not persist — caller decides whether to save". Save/Discard in the "תוצאות LLM" panel now actually control persistence.
+
 - Specs updated: no-save assertions + new genetics test for LLM translation fallback.
 
 **Follow-up 2 (live logs 23:11-23:15):** translation works (אוז קוש→Oz Kush ✅, אורנג' ולווט→Orange Velvet ✅) BUT: (a) free model mistransliterated אוראוז→"Aurous" (real: Oreoz); (b) SearXNG returned multilingual garbage (Chinese pizza, Polish Gmail, French Orange telecom) for unrecognized queries; (c) even real strain results (Oreoz ×2) were drowned by the noise since only order-based slicing was used. Fixed:
+
 - `web-search.service.ts` — SearXNG query now sends `language: 'en'` (kills the multilingual junk app-wide).
 - `enrichSingle` (genetics + terpene) — search results ranked by relevance before slicing: strain-name tokens (EN/HE) score 2, cannabis keywords score 1, noise score 0 → top 8 are real strain pages.
 
@@ -1016,6 +1171,7 @@ No `!important` needed — live check confirmed PrimeNG base leaves `transform: 
 **Root cause:** `.sortable-column-header` (the wrapper div around the "Name" `<th>` label + sort icon) had **no CSS rule anywhere in the project** (verified: not in the component CSS, `_primeng-overrides.css`, or globals) → it rendered as a plain block with label and icon flowing inline: no defined gap, icon not vertically centered — unlike `baseUrl`/`Models` headers, which get their spacing from the global `p-sortIcon { margin-inline-start: var(--space-4) }` override. User saw: no spacing between "Name" and the sort icon, icon/text misaligned, inconsistent vs `baseUrl`/`Models`.
 
 **Fix (per user follow-up: global + all sortable headers):**
+
 1. `_primeng-overrides.css` — `.sortable-column-header { display: inline-flex; align-items: center; gap: var(--space-4); p-sortIcon { margin-inline-start: 0; } }` added inside `.p-datatable .p-datatable-thead` (next to the existing `p-sortIcon` margin rule; the `(0,3,1)` specificity beats the global `(0,2,1)` icon-margin rule so spacing doesn't double).
 2. **Wrapper applied to ALL sortable headers app-wide** (12 th's across 4 files, each on one line): `llm-providers-management.html` (6: key/Name, baseUrl, modelsCount, label/Model, active, performanceScore), `users-management.html` (dynamic loop, 1), `strain-hunter.html` (dynamic loop, 1), `strain-hunter-settings.html` (4: שם ×2, סוג, מקור — RTL-safe, gap/margin-inline-start are logical properties).
 3. `llm-providers-management.css` — removed the temporary component-scoped rule (now global).
@@ -1030,10 +1186,12 @@ No `!important` needed — live check confirmed PrimeNG base leaves `transform: 
 ## 2026-08-17 Session (af) — ✅ ADDED: transitions to price-slider (user fixed LTR + restyled)
 
 **User's manual fix between sessions:**
+
 - `direction: ltr` on `.filter-range-slider` — root cause of the curve was the RTL parent context, not just the 1px-height clip. With LTR on the slider container, the handle positions render correctly.
 - Also restyled: `border-radius: var(--radius-xs)` (rounded square handles, not circles), added hover state (range → `primary-400`, handle border + glow expand), added active state (border → `primary-600`).
 
 **What I added (this session):**
+
 - `transition: border-color, background, box-shadow, transform` on `.p-slider-handle` (durations via `--transition-colors` / `--transition-fast`).
 - `transition: background` on `.p-slider-range` (the colored part of the track).
 - `transform: scale(0.94)` on `:active` (drag) — tactile press feedback, transitioned.
@@ -1050,6 +1208,7 @@ No `!important` needed — live check confirmed PrimeNG base leaves `transform: 
 **Root cause:** PrimeNG 21 (via `@primeuix/styles/slider`) puts the slider height = handle height by default (so the full circle renders), with the thin track as a child `.p-slider-track` element. Our custom CSS in `_filters.css` overrode the slider height to `1px` to get a thin track — but didn't restore it for the 14px handle. Result: handle centered on a 1px-tall box → bottom 7px clipped → handles rendered as D-shapes ("curved at the bottom" in the user's words).
 
 **Fix (3 lines, surgical):**
+
 1. `.p-slider.p-slider-horizontal { height: 1px }` → `14px` — match the handle so the full circle has room.
 2. Added `.p-slider-track { height: 1px; }` — the thin track was actually a separate element all along (default 3-4px, which is what PrimeNG was rendering on top of the clipped handle, contributing to the "curved" illusion).
 3. `.filter-range-slider { overflow: visible; }` — defensive, in case any future ancestor clipping sneaks in.
@@ -1065,6 +1224,7 @@ Base style still centers the track vertically in the slider (`.p-slider { displa
 ## 2026-08-17 Session (ad) — 🔎 SearXNG outgoing hardening + proxy scaffolding (decision pending)
 
 **What was done (infra-independent half of the CAPTCHA-storm backlog item):**
+
 1. `docker/searxng/settings.yml` — `outgoing:` extended with doc-confirmed options (docs.searxng.org): `useragent_suffix` (contact info — engine operators less likely to hard-block), `retries: 0` explicit (each retry uses a DIFFERENT proxy/IP, so with a single egress IP retries only re-hammer a blocked engine), commented `proxies:` structure (round-robin, httpx syntax incl. socks5) + `extra_proxy_timeout` guidance. Engine-level `retry_on_http_error: false` set EXPLICITLY on bing/mojeek/qwant — on 429/403 the engine enters SearXNG's automatic cooldown instead of being retried from the same IP.
 2. `backend/.env.example` — web-search section: fixed stale `ensure-searxng.sh` → `ensure-searxng.js` reference (the actual file is .js), documented that SearXNG settings are NOT env-driven and point to `outgoing.proxies` in settings.yml + `docker restart searxng`.
 
@@ -1081,6 +1241,7 @@ Base style still centers the track vertically in the slider (`.p-slider { displa
 ## 2026-08-17 Session (ac) — 🧹 seeds relocated: core boundary inversion resolved
 
 **What was done:**
+
 1. `git mv` all 4 seeds from `core/seeds/` next to their own modules (audit's own recommendation): `user.seed` → `modules/users/seeds/`, `terpene.seed` → `modules/terpene/seeds/`, `genetics.seed` → `modules/genetics/seeds/`, `llm-providers.seed` → `modules/llm-provider/seeds/`. `core/seeds/` deleted. 100% renames, only the relative import paths changed inside each file.
 2. `main.ts` seed imports updated; also removed dead `LlmModelEntity`/`LlmProviderEntity` imports (leftover from the commented-out `seedLlmProviders` call — unused in main.ts).
 3. **Over-export sweep: nothing left.** Audit's remaining "Not applied" items were exactly 3: decorator relocation (done, session y), seeds relocation (done now), and `tsconfig.spec.new.json` — RETRACTED per LOG A8 (it is the ACTIVE vitest config, not dead). 12 symbols + math.utils were already cleaned earlier.
@@ -1094,6 +1255,7 @@ Base style still centers the track vertically in the slider (`.p-slider { displa
 ## 2026-08-17 Session (ab) — 🎉 FRONTEND 492/492 GREEN — 16 pre-existing failures resolved
 
 **What was done (5 spec files, all stale-test fixes — zero production code touched):**
+
 1. `app.spec.ts` (2) — PrimeNG `<p-confirm-dialog>` subscribes to `confirmationService.requireConfirmation$`; the mock `{ confirm: vi.fn() }` crashed. Fixed: real `MessageService` + `ConfirmationService` classes in providers.
 2. `auth.guard.spec.ts` (1) — mock `user` was `vi.fn()` without `.set`; guard calls `authStore.user.set(user)`. Fixed: `Object.assign(vi.fn(), { set: vi.fn() })`.
 3. `auth.interceptor.spec.ts` (2) — the retry/single-flight tests mocked the handler as ALWAYS-success (`vi.fn(nextWith(ok))`) so the 401 path never fired (refresh 0 calls). Fixed: per-URL first-call-401-then-ok handler. Single-flight additionally needed an async refresh (`delay(10)`) — a synchronous `of()` completes + finalizes the shared in-flight observable before the second concurrent 401 lands, breaking the window (production refresh is an HTTP call).
@@ -1111,6 +1273,7 @@ Base style still centers the track vertically in the slider (`.p-slider { displa
 ## 2026-08-17 Session (aa) — 🎉 BACKEND 399/399 GREEN — 8 pre-existing failures resolved
 
 **What was done (3 suites + 1 real security hardening):**
+
 1. `swagger-tools.parser.spec` (1) — stale tool-count tolerance [66,68] vs real spec (75 tools → 73 after denylist) → band updated to [71,75] with comment. **11/11 now genuinely green** (the manager's gate from the decorator task).
 2. `agent-session.service.spec` (3) — `saveMessage` gained a `createQueryBuilder().update(ChatSession)...execute()` updatedAt touch; the mockRepo lacked `createQueryBuilder` → added chained mock. Mock-only, prod code untouched.
 3. `llm-client.service.spec` (4) — **REAL BUG found & fixed (SSRF hardening):** `assertSafeUrl` had `if (isDev && isLocalhost) return` — fail-open for localhost/127.0.0.1/0.0.0.0 in dev (NODE_ENV≠production), which the C3 tests (dc1d909) assert must be blocked. History: 82d9baa added dev-allow → 021224b reverted → 31eadd9 re-added (breaking C3). Fix: dev-allow is now OPT-IN (`opts.allowDevLocalhost`), passed only by the two provider-baseUrl TOCTOU call sites (OmniRoute at localhost in dev); `downloadBuffer` (user-supplied sourceVideoUrl) stays strict in ALL environments. The DNS mock in the spec also fixed: loopback hostnames/literals resolve to 127.0.0.1 like real dns.lookup.
@@ -1172,6 +1335,7 @@ Base style still centers the track vertically in the slider (`.p-slider { displa
 **Root cause (reproduced in tests):** `UsersStore.users = computed(() => usersResource.value()?.result ?? [])` — per documented Angular behavior, **reading `resource.value()` THROWS when the resource is in an error state**. Any failed GET /users (backend watch-mode restart, network blip) put the resource in error state → `users()` computed threw → every consumer broke (pageState, dashboard ticker) → dashboard stuck broken/empty — and httpResource never auto-retries, so it stayed broken until reload. Backend itself was verified working live (login + GET /users → 200, 8 users); the bug was purely frontend timing/failure-state.
 
 **Fix (5 files, all from the same `50e11c0` httpResource refactor):**
+
 - `users.store.ts` — `users` computed now guards `value()` with `hasValue()`; `pageState` also surfaces `usersResource.error()` → Error state instead of silently Empty.
 - Same unguarded pattern fixed in sibling stores from the same commit: `terpene.store.ts`, `genetics.store.ts`, `llm-provider.store.ts` (llm-provider pageState also gets resource-error check).
 
@@ -1195,6 +1359,7 @@ Base style still centers the track vertically in the slider (`.p-slider { displa
 ## 2026-08-17 Session (v) — Full regression sweep + 3 audits (no code changes to app)
 
 **Stage 1 — Regression baseline (all green, zero new regressions):**
+
 - `npx tsc --noEmit`: backend exit 0; frontend ×3 (solution/app/spec) exit 0.
 - `npx jest --runInBand`: **381 pass / 8 fail / 389** — the 8 failures are byte-identical to the pre-commit baseline (agent-session 3, llm-client 4, swagger-parser 1) → all pre-existing, none from last night's commits. Nothing to fix.
 - Hook suite `bash backend/scripts/test-hook-suite.sh`: **92/92**, exit 0.
@@ -1205,6 +1370,7 @@ Base style still centers the track vertically in the slider (`.p-slider { displa
 **Stage 3 — Dependency map + dead code → `documents/audit-dependency-map.md`:** 11 graph-level cycles ALL type-level (entities/DTOs/decorators/seeds) — zero runtime DI cycles, zero forwardRef, zero orphan modules/services. Findings: `core/utils/math.utils.ts` is a dead file; 16 over-exported symbols (incl. backend mirror of frontend's `getUserRoleData`); `RequiresConfirmation` decorator owned by admin-agent but consumed by llm-provider+users (suggest core/decorators/); core/seeds import feature entities (inverted boundary); `frontend/tsconfig.spec.new.json` = dead vitest leftover (tracked). Findings only — nothing modified.
 
 **Stage 4 — SearXNG engine pool (BACKLOG, not fixed):**
+
 - Fresh probe 2026-08-17: brave `too many requests`, ddg `CAPTCHA`, qwant `CAPTCHA`, startpage `Suspended: CAPTCHA`, mojeek responds but returns 0 results, **google cse newly suspended** (`too many requests` — was the site:-honoring workhorse on 08-16). Live engines = **bing only**, which ignores `site:` → the client-side post-filter (Session t) is currently the ONLY correctness layer for domain-restricted queries.
 - Root cause: single static egress IP (`5.29.22.109`, docker bridge network, NO `outgoing.proxies` in `docker/searxng/settings.yml`, `image_proxy: false`) — every upstream rate-limits/CAPTCHAs the same IP under nightly-cron load.
 - **Proposed fix (needs user decision):** add `outgoing.proxies` (rotating/residential SOCKS5/HTTP) to `docker/searxng/settings.yml`, global or per-engine; alternatives: engine-level cooldown rotation, or replacing self-hosted scraping with a paid search API.
@@ -1226,12 +1392,13 @@ Base style still centers the track vertically in the slider (`.p-slider { displa
 **What was done:** Implemented the fixes chosen from Session (s) investigation:
 
 1. **site: enforcement in `WebSearchService.search()`** (`backend/src/modules/web-search/web-search.service.ts`): new `parseSiteOperators()` extracts `site:X` (require) and `-site:X` (exclude) hosts from the ORIGINAL query — supports multiple operators, operators inside parens, strips trailing punctuation. `urlMatchesSite()` = exact hostname or subdomain match (www.reddit.com matches site:reddit.com); unparseable URLs fail positive filters. Filter applied to merged SearXNG results — neutralizes bing's operator-ignoring garbage while google cse/brave results pass through unchanged.
-2. **PullPush removed entirely**: deleted `searchRedditArchive()`, `enqueuePullPush()`, PULLPUSH_* constants, cooldown fields, `PullPushPost`/`PullPushResponse` types from `web-search.service.ts`; removed the channel from both pipelines in `ideas.service.ts` (`discoverTopics` + signal gathering → now 2 channels: SearXNG + HN Algolia); removed 5 PullPush spec tests.
+2. **PullPush removed entirely**: deleted `searchRedditArchive()`, `enqueuePullPush()`, PULLPUSH\_\* constants, cooldown fields, `PullPushPost`/`PullPushResponse` types from `web-search.service.ts`; removed the channel from both pipelines in `ideas.service.ts` (`discoverTopics` + signal gathering → now 2 channels: SearXNG + HN Algolia); removed 5 PullPush spec tests.
 3. **New spec tests (5)** in `web-search.service.spec.ts` using the EXACT live-investigation cases: `site:reddit.com (shopify amazon etsy) "losing money"` (shopify.com/wikipedia dropped, reddit kept incl. bare-host + subdomain), `site:indiehackers.com "churn"` (chatgpt.com/openai.com dropped), no-operator = no filtering, `-site:reddit.com` exclusion, unparseable-URL drop.
 
 **Known issue (SEPARATE investigation, NOT fixed now):** SearXNG engine pool mostly suspended from residential IP: brave "Suspended: too many requests", duckduckgo "CAPTCHA", qwant "CAPTCHA", startpage "Suspended: CAPTCHA", mojeek "Suspended: access denied". Live engines ≈ bing (ignores site:) + google cse + intermittently brave. Options for later: rotating proxy for SearXNG outgoing, engine resets, or different engine set.
 
 **Verification:**
+
 - `npx tsc --noEmit` (backend) → exit 0, zero errors.
 - Targeted: `npx jest src/modules/web-search src/modules/ideas` → 4 suites / **44 tests, all pass** (was 39: −5 PullPush, +5 site-filter).
 - Full suite (`npx jest --runInBand`): **Test Suites: 3 failed, 40 passed, 43 total; Tests: 8 failed, 381 passed, 389 total.** NOTE: default-worker jest runs crash silently mid-run in this environment (no summary, exit 1, reproducible pre-changes) — `--runInBand` is the reliable mode.
@@ -1426,6 +1593,7 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 ## 2026-08-16 Session (e) — Round 4: in-queue cooldown check + discovery 4096
 
 **What was done:** 6th log (16:43, fresh server with circuit breaker). Findings + fixes:
+
 1. **Circuit breaker fired but late for in-flight calls** — all 4 PullPush calls entered the queue before the first cooldown opened, so each still burned its own 3s retry (~30s total waste). **Fixed:** cooldown check added INSIDE `enqueuePullPush`'s queued task — calls queued before the circuit opened now fail fast instead of retrying against a dead channel.
 2. **Discovery empty-content is NOT input-size dependent** — failed BOTH attempts with a single 280-char snippet. Cross-run evidence: heavy `TOPIC_DISCOVERY_PROMPT` fails at 1024/2048/3072 regardless of input; the equally-heavy `IDEA_GENERATION_PROMPT` succeeds at 4096 (4706-char outputs). Reasoning burn scales with system-prompt complexity. **Fixed:** discovery retry budget 3072 → **4096** (the empirically working budget for heavy prompts on OmniRoute `auto`).
 3. Note: SearXNG yield is flaky run-to-run (30 trusted results one run, 1 the next — engine rotation); PullPush external IP block outlasts our 10-min cooldown → one probe per 10min while blocked, by design.
@@ -1441,6 +1609,7 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 ## 2026-08-16 Session (d) — Round 3: PullPush circuit breaker + discovery prompt trim
 
 **What was done:** User re-triggered after server restart (fresh compile of Sessions b+c). Log showed: SearXNG **recovered** (30 results for the Etsy-suspension query, kept 26 trusted r/Etsy posts), queue stopped the 429 storm, discovery retry fired. Two defects remained, both fixed:
+
 1. **PullPush IP hard-blocked** — every call 429'd, and each retry (3s backoff) 429'd too; the serialized queue then burned ~30s per phase waiting on a dead channel. **Fixed:** circuit breaker — when the 429 retry ALSO fails, PullPush opens a 10-minute cooldown (`pullPushCooldownUntil`); calls during cooldown return failure instantly with no HTTP; any success clears it.
 2. **Discovery LLM empty-content correlates with input size** — evidence across runs: 4 snippets @2048 → success; 11 @2048 → fail; 26 snippets @2048 AND @3072 → both fail (reasoning model burns budget proportional to prompt). Bigger budget alone didn't help. **Fixed:** discovery snippets capped at 280 chars each and prompt trimmed from `slice(0, 30)` → `slice(0, 12)`.
 
@@ -1455,6 +1624,7 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 ## 2026-08-16 Session (c) — Round 2 fixes: PullPush 429 throttle/retry + double site: + discovery retry
 
 **What was done:** User re-triggered after Session (b). Big progress visible in logs — sanitized PullPush queries returned 5/3/2/1 results, discovery produced topics, signals extracted, ideas generated + validated. But 4 new defects surfaced, all fixed:
+
 1. **PullPush 429 rate-limit** — parallel fan-out fires 5+ PullPush calls in one burst → mid-run all calls 429 (`PullPush search failed: ... 429` ×5) → `kept 0` → ungrounded. **Fixed:** all PullPush calls now go through a serialized in-service queue (`enqueuePullPush`, 1500ms min interval) + one retry after 3000ms backoff on 429 only.
 2. **Double `site:` operator** — LLM `searchQuery` already contains `site:reddit.com`; `buildSignalQueries` prepends its own → `site:reddit.com site:reddit.com ...` confused SearXNG (verified in logs). **Fixed:** `buildSignalQueries` term cleanup now strips `site:`/`domain:`, `-exclusions`, `OR` before composing its own operators.
 3. **Discovery LLM still flaky empty-content** — run 1 failed `Returned no content or tool calls` at 2048; run 2 succeeded (intermittent reasoning-model behavior). **Fixed:** `discoverTopics` retries the LLM once (second attempt `maxTokens: 3072`).
@@ -1471,6 +1641,7 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 ## 2026-08-16 Session (b) — Nightly ideas still 0: 3-layer fix (direct-API query sanitize + discovery budget + gatherSignals fan-out)
 
 **What was done:** User re-triggered `/ideas/nightly/trigger` twice after the previous session's HN/PullPush addition — still `0 grounded sessions`. Diagnosed from pasted logs, found 3 stacked causes:
+
 1. **Direct APIs got raw search syntax** — `searchHackerNews`/`searchRedditArchive` received queries like `site:reddit.com ecommerce "abandoned cart" OR "conversion"`. HN Algolia + PullPush do literal text search: `site:reddit.com` becomes a dead token → 0 results (and PullPush returned HTTP 400 on an unbalanced quote emitted by the LLM). **Fixed:** new private `toDirectApiQuery()` in `web-search.service.ts` strips `site:`/`domain:` operators, `-exclusions`, `OR`, quotes, parens before both direct-API calls.
 2. **Topic-discovery LLM returned empty content** — run 1 kept 1 trusted result but the `TOPIC_DISCOVERY_PROMPT` call at `maxTokens: 1024` threw `Returned no content or tool calls from AI model` (OmniRoute `auto` reasoning model burns budget on `reasoning_content` — same documented pattern as 2026-08-12). **Fixed:** `maxTokens: 1024 → 2048` in `discoverTopics` (same budget as `gatherSignals`).
 3. **`gatherSignals` was still SearXNG-only** — even with 1+2 fixed, per-topic grounding depended entirely on SearXNG (engines suspended → ~0 trusted results) → every candidate dropped as ungrounded → 0 sessions. **Fixed:** `gatherSignals` now fans each of its 5 queries to SearXNG + HN Algolia + PullPush in parallel (same pattern as `discoverTopics`).
@@ -1486,6 +1657,7 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 ## 2026-08-16 Session — Nightly ideas run produced 0 sessions (log diagnosis + fallback fix)
 
 **What was done:** Diagnosed the user-pasted nightly-run logs (`/ideas/nightly/trigger` → `0 grounded sessions`, two runs). Chained root causes:
+
 1. **DB data (fixed by user):** `IdeasTasksService.resolveModel()` → `findFirstActiveTextModel()` returned `{provider: 'openrouter', key: 'google'}` — invalid OpenRouter model ID → `400` → discovery fell to static fallback. User switched the active model to OmniRoute `auto` — LLM query generation now works (verified in second log).
 2. **Code (fixed):** `FALLBACK_DISCOVERY_QUERIES` had no `site:` operators → SearXNG returned 40 generic blog results → `TRUSTED_SIGNAL_DOMAINS` dropped ALL 40 → 0 topics. Fixed: fallback queries now `site:`-scoped to trusted domains.
 3. **SearXNG engines (infrastructure):** even with `site:` queries, ALL self-hosted SearXNG general engines died under bot detection — `brave`/`google cse`: "Suspended: too many requests", `duckduckgo`/`startpage`: CAPTCHA (verified live via `localhost:8080/search?format=json`). Also enabled `bing`/`mojeek`/`qwant` in `docker/searxng/settings.yml` — bing answers but silently IGNORES `site:` (generic results), mojeek/qwant dead. Conclusion: SearXNG alone cannot serve trusted-domain discovery.
@@ -1502,6 +1674,7 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 ## 2026-08-14 Session — Ideas validation overhaul (riskPenalty + card UX + solo-dev fields)
 
 **What was done:** Implemented the 4-phase upgrade plan from the product review:
+
 1. **riskPenalty** — `VALIDATION_PROMPT` now requires a `riskPenalty` (0–3) in `validationBreakdown` (with a calibration example where risk drops an idea from 8 to 5). Server computes `score = competition + signalFit + feasibility + marketSize − riskPenalty`, clamped 1–10. Missing penalty (old model output) defaults to 0.
 2. **Competitor chips** — competitor names render as clickable `.tag` chips linking to a Google search (`competitorSearchUrl`), replacing full-width `<li>` rows (dead-space fix).
 3. **2-column grid** — `.idea-card-details-inner` switched from flex-column to a 2-column grid (collapses to 1 column ≤640px) to cut scroll fatigue.
@@ -1512,6 +1685,7 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 **Verification:** backend ideas suite 33/33 ✅ (baseline was 28); frontend ideas suite 32/32 ✅; frontend `tsc --noEmit` ✅; no mojibake. **Stale spec mocks fixed in the same session:** ideas-history store mock was missing `isSessionLoading` (9 tests) and `toggleExpand` tests didn't await the async method; ideas-form `domain` mock was a plain `vi.fn` while `canGenerate` is a `computed` that cached forever — replaced with a real `signal('')` (1 test). **Remaining pre-existing failures (unrelated, not touched):** app.spec (2), auth.interceptor (2), with-credentials.interceptor (4), auth.guard (1), strain-hunter-settings (7), backend 8 tests in llm-client/other suites.
 
 **Decisions made:**
+
 - Score penalty computed server-side, not prompt-only — the LLM cannot inflate scores by omitting the penalty.
 - No migration file for the 3 new nullable columns — TypeORM `synchronize: true` applies them (same precedent as `validationBreakdown` column).
 - Grid uses DOM auto-placement rather than explicit per-section column assignment (keeps DOM order accessible, no template surgery).
@@ -1539,12 +1713,14 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 **What was done:** Fixed a subtle but visible first-click layout shift in the Ideas History accordion. The fix required four layered changes because the visible flicker had four cooperating root causes, not one.
 
 **Root causes (in order of impact):**
+
 1. **`loadSession` toggled `historyLoading` → `historyPageState` flipped from `Ready` to `Loading` → the entire `@switch` block unmounted/remounted the whole sessions list, including the `stagger` animations.** This was the main flicker — even a single async toggle of `historyLoading` rebuilds the whole DOM subtree.
 2. **DOM insertion + grid animation in the same paint frame.** Calling `await loadSession()` then `expandedSessionId.set()` mounted the `<app-idea-card>` children and toggled the grid `0fr → 1fr` transition at the same time, so the browser couldn't interpolate cleanly.
 3. **Unnecessary `::ng-deep` override in `ideas-history.css`** that fought with `glass-effect`'s `transform: translateZ(0)`. Caused a style-recalculation flash on every first mount of `<app-idea-card>`. The override was solving a problem that didn't exist — `.idea-card` had no `position: absolute` anywhere, and `.idea-card-wrapper` doesn't even exist in the DOM.
 4. **`backdrop-filter: blur()` on `.glass-effect::before`** is GPU-expensive on first paint. The first time N glass cards became visible in the same frame, the browser did N concurrent compositing passes → brief flash.
 
 **Files touched (modified):**
+
 - `frontend/src/app/core/store/ideas.store.ts` — added `loadingSessionIds: signal<Set<number>>` + `isSessionLoading(id)` helper; `loadSession()` no longer touches `historyLoading`. `loadSessions()` (full-list) still uses `historyLoading` as before, so the page-level loading state is preserved for the right caller.
 - `frontend/src/app/features/ideas/ideas-history/ideas-history.ts` — `toggleExpand()` is now `async`: `await loadSession()` → `await requestAnimationFrame()` → `expandedSessionId.set()`. The DOM paints the cards before the grid animation begins.
 - `frontend/src/app/features/ideas/ideas-history/ideas-history.html` — added `ideasStore.isSessionLoading(session.id)` to the loader `@if` so `triggerNightly`'s post-call `loadSession` also shows a local spinner (the accordion stays open, only the inner content swaps).
@@ -1554,6 +1730,7 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 **Verification:** `npx ng build` (frontend) ✅. ideas-history chunk 51.31 → 50.98 kB (smaller after the `::ng-deep` removal). No backend changes. No new tests needed — the fix is in the signal/state boundary, not in business logic.
 
 **Decisions made:**
+
 - Separate signals for page-level (`historyLoading`) vs per-session (`loadingSessionIds`) loading. The store now exposes a granular API that the UI can consume without side effects on the page-level state. The same pattern is reusable for any "load one item from a list" operation.
 - The `requestAnimationFrame` gap before `expandedSessionId.set()` is a 1-frame (~16ms) delay. Imperceptible to users, but gives the browser a separate paint cycle to commit the new `<app-idea-card>` elements before the grid animation tries to interpolate to their height.
 - Removed `::ng-deep` block entirely rather than patching it — it targeted `.idea-card-wrapper` which doesn't exist in the template (verified by grep). Dead code that was causing real harm.
@@ -1584,6 +1761,7 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 **Objective:** align the Ideas feature UI with `css-conventions` / `css-deduplicate` skills; unify the duplicate star-button styling.
 
 **Nightly banner (`ideas-page.css` / `.html`):**
+
 - Fixed two broken tokens (`--color-primary-bg`, `--color-primary-border` did not exist) → now `var(--color-primary-glow-bg)` tint + `var(--glass-border)` (later removed as redundant with `.glass-effect`) + `border-inline-start: 3px solid var(--color-primary)` accent + `box-shadow: var(--glass-shadow), 0 0 12px var(--color-primary-glow)`.
 - Layout: `display:flex; justify-content: space-between; gap: var(--space-4); padding: var(--space-6)`.
 - Wrapped icon + label in `.nightly-banner-content` (nested inside `.nightly-banner`, per mandatory nesting rule) with `display:flex; align-items:center; gap: var(--space-2)`.
@@ -1592,9 +1770,11 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 - No architecture-diagram change (CSS-only).
 
 **IdeaCard CSS (`idea-card.css`):**
+
 - Merged the duplicate flat `.idea-card` block into the one nested under `.idea-card-wrapper`; nested `.fav-btn` into `.idea-card-meta`; removed a redundant `transform: scale(0.99)` line that was immediately overwritten. Pure structure change, values unchanged.
 
 **star-btn unification (the key cleanup):**
+
 - Root cause: `fav-btn` (local in `idea-card.css`) and `star-btn` were doing the same job (star toggle) but as two separate classes. `star-btn` was actually **nested inside `li.p-select-option`** in `_primeng-overrides.css`, so it only reached star buttons inside a PrimeNG `p-select` option — NOT the IdeaCard's plain button.
 - Promoted `button.star-btn` to a real **global** rule in `_buttons.css` (section 4c), targeting both `.ph` and `span.ph` icons. Keeps the token-based `--color-warning` (chat + ideas-form) instead of `fav-btn`'s hard-coded `#f59e0b`.
 - Switched `idea-card.html`: `fav-btn` → `star-btn`, `[class.active]` → `[class.star-active]`, icon `<i>` → `<span class="ph">` to match the styled selector.
@@ -1611,7 +1791,6 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 ## ⚠️ Lesson: Every non-trivial commit must be reviewed individually
 
 `82d9baa` ("skip SSRF validation in dev mode") was committed as part of a batch without individual review. It added a **total SSRF bypass** when `NODE_ENV !== 'production'` — not just localhost. Worse, if `NODE_ENV` is unset, the bypass activates silently. Caught and reverted (`021224b`) only because each commit was examined separately before closing the session.
-
 
 ## 2026-08-12 Session — Glass Effect Rendering Fix (Banding)
 
@@ -1631,11 +1810,13 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 **Objective:** eliminate the layout shift and flicker when expanding a history session accordion for the first time.
 
 **Root cause (3 combined):**
+
 1. `@if (expandedSessionId() === session.id)` mounted/unmounted the whole `.ideas-list` DOM on every expand → sudden reflow.
 2. `loadSession` is async — the section expanded first, then items populated a microtask later → content jump.
 3. No height transition — hard snap.
 
 **Fix:**
+
 - Removed the `@if` around `.ideas-list`; it now stays in the DOM always with `[class.expanded]`, wrapped in `.ideas-list-inner`.
 - Animated open via `grid-template-rows: 0fr → 1fr` + `opacity` transition (same pattern as `IdeaCard` details), so the structure is pre-calculated.
 - Moved `border/background/padding` onto `.ideas-list-inner` (with `min-height: 0; overflow: hidden`) so it collapses/expands cleanly with the grid row.
@@ -1643,11 +1824,10 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 - Files touched: `frontend/src/app/features/ideas/ideas-history/ideas-history.html`, `frontend/src/app/features/ideas/ideas-history/ideas-history.css`.
 - Verification: `npx ng build` (frontend) ✅.
 
-
-
 **Objective:** unify the entire frontend (IdeaCard, ideas-grid, ideas-history) on `SavedIdea` as the single source of truth; eliminate `BusinessIdea`/`IdeaCardData` from UI components; normalize nullable arrays at the store boundary; fix the `apiKey` transformer so an empty PATCH doesn't NULL a stored key; remove duplicated CSS in `ideas-history.css`.
 
 **Completed:**
+
 - `saved-idea.model.ts`: `risks`/`competitors`/`nextSteps`/`signalsReferenced` and `validationReason` normalized to non-null (clean contract).
 - `ideas.store.ts`: `ideas` signal → `SavedIdea[]`; SSE `BusinessIdea[]` mapped to `SavedIdea` via `toSavedIdea` (null arrays → `[]`, `validationReason` → `''`); added `normalizeSaved`; `loadSessions`/`loadSession` normalize history ideas at the boundary. The 4 nullable-array computeds were removed from `IdeaCard`.
 - `ideas-grid.ts`: input → `SavedIdea[]`; removed `toCardData()` boilerplate.
@@ -1659,6 +1839,7 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 **Verification:** `npx ng build` (frontend) ✅. Only pre-existing unrelated warning: `strain-hunter.css` budget.
 
 **Decisions made:**
+
 - Kept `BusinessIdea` as the SSE DTO in `idea.interface.ts` (user-sanctioned) — mapped to `SavedIdea` once at the store boundary. Changing the SSE contract to return the persisted `SavedIdea` (with `id`) would require restructuring the backend generate/save flow + `ideas.service.spec.ts`, so deferred.
 - Generated (live, unsaved) ideas have no `id` → `IdeaCard` favorite toggle hidden; only persisted history ideas (with `id`) show it.
 - 4 pre-existing modified files were committed separately at session close (not part of the SavedIdea/apiKey work): `backend/src/modules/ideas/ideas-tasks.service.ts`, `backend/src/modules/llm/llm.module.ts`, `frontend/src/app/core/store/llm-provider.store.ts`, `frontend/src/app/features/llm-providers-management/llm-providers-management.ts`.
@@ -1676,18 +1857,21 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 **Objective:** fix bug #1 (ideas generation hangs on the research/signal step with SSE timeout) and bug #2 (top bar not styled well).
 
 **Root cause of bug #1 (confirmed by repro):**
+
 - `gatherSignals` → `llm.generateResponse` → `client.chat.completions.create` was **non-streaming** with `timeout: 60_000`. The active provider is `AI_PROVIDER=omniroute` → DB model `auto/best-free`, which routes to a **reasoning model** (`hy3-free`).
 - Reproduced end-to-end: a non-streaming call to `auto/best-free` took **161s** (SDK waits for the entire body incl. reasoning tokens) → always exceeds the 60s `OVERALL_TIMEOUT_MS` → OpenAI SDK `APIConnectionTimeoutError` → "Request timed out" surfaced as `Idea generation failed` / `Signal extraction failed — fallback mode`.
 - SearXNG (`:8080`) was NOT the cause — axios/curl to it return in ~500ms. The timeout string was the OpenAI SDK message, not web search.
 - The reasoning model also burns its whole `max_tokens` budget on `reasoning_content` and returns empty `content` at the default budgets (1024/2048/3072) → JSON parse fails → fallback "stuck on research".
 
 **Fix (bug #1):**
+
 - `llm-client.service.ts` `generateResponse`: switched to **streaming** (`stream: true`) and accumulate `content`/`tool_calls`/`finish_reason` from deltas (same mechanism as `generateStream`). Keeps the `LlmResponse` contract; `rawCompletion` now a minimal object so the existing debug `JSON.stringify(res.rawCompletion)` logs stay safe.
 - `llm-client.service.ts` `getClient`: `timeout` 60_000 → 180_000.
 - `ideas.service.ts`: `OVERALL_TIMEOUT_MS` 60_000 → 150_000; signal-gathering `maxTokens` 1024 → 2048; idea-generation 2048 → 4096; validation 3072 → 4096 (so the reasoning model finishes and emits real JSON content).
 - Verified streaming call to `auto/best-free` returns content in ~25–65s (vs 161s non-streaming hang). With 4096 budget it produces valid JSON.
 
 **Bug #2 (header):**
+
 - Verified `header.css` is correctly scoped (ViewEncapsulation), bundled into `main.js`, and **all design tokens it uses resolve** in `_variables.css`. No code defect found — it's a purely visual issue I could not see (no browser automation tool available in this environment).
 - Applied a safe visual improvement: `.shell-header` now uses `border: 1px solid var(--glass-border)` (top + inline sides removed, only bottom separator) and `min-height: var(--space-20)` so the bar is clearly delineated instead of blending into the background. Purely cosmetic; frontend build ✅.
 - **Open question for user:** exact visual symptom still unknown (user didn't answer the prompt). If it persists, need a screenshot or description (width / background / spacing / user-menu).
@@ -1724,13 +1908,14 @@ then restart backend + re-trigger. Scoped to the nightly pipeline only — chat/
 - **SearXNG dev setup** (operational, not code): local `docker run -d -p 8080:8080` with a checked-in `docker/searxng/settings.yml` (limiter:false + json enabled) to stop 403s; `.gitignore` negation added so the settings file is tracked while the searxng data dir stays ignored. Fixed duplicate `SEARXNG_URL` in `backend/.env` (8888 was overriding 8080).
 - Verification: `npm run build` ✅, `npx jest ideas` 12/12 ✅, frontend build ✅.
 - Commits: `f3f6c51` (persistence feature), `036d98a` (chat-history fix), `98039c7` (UI polish), `f784e71` (env docs + searxng config), `1e1de52` (topic discovery upgrade) — all pushed to origin/main.
-- Architecture: no diagram update needed for the cron-internal discovery change (no new module boundary; already documented cron flow). 
+- Architecture: no diagram update needed for the cron-internal discovery change (no new module boundary; already documented cron flow).
 
 ## 2026-08-11 Session — Ideas Persistence + Nightly Generation (COMPLETED)
 
 Completed the full `ideas-persistence-plan.md` (7-phase plan) for auto-saving generated ideas, history, favorites, and nightly cron generation.
 
 **What was done this session:**
+
 - **Backend (Phases 0–3):**
   - Phase 0: Created `SavedIdeaSession` + `SavedIdea` entities with `ON DELETE CASCADE`, migration `AddSavedIdeasTables1786451852660.ts`, and wired `TypeOrmModule` into `IdeasModule`.
   - Phase 1: Added `saveGeneration()` to `IdeasService` (transactional session+ideas write, skips empty results), plus `listSessions`, `getSession`, `deleteSession`, `setFavorite`, `unreadNightlyCount`, `markNightlyRead` — all ownership-checked via `ForbiddenException`.
@@ -1750,6 +1935,7 @@ Completed the full `ideas-persistence-plan.md` (7-phase plan) for auto-saving ge
 Completed the full `ideas-persistence-plan.md` (7-phase plan) for auto-saving generated ideas, history, favorites, and nightly cron generation.
 
 **What was done this session:**
+
 - **Backend (Phases 0–3):**
   - Phase 0: Created `SavedIdeaSession` + `SavedIdea` entities with `ON DELETE CASCADE`, migration `AddSavedIdeasTables1786451852660.ts`, and wired `TypeOrmModule` into `IdeasModule`.
   - Phase 1: Added `saveGeneration()` to `IdeasService` (transactional session+ideas write, skips empty results), plus `listSessions`, `getSession`, `deleteSession`, `setFavorite`, `unreadNightlyCount`, `markNightlyRead` — all ownership-checked via `ForbiddenException`.
@@ -1763,6 +1949,7 @@ Completed the full `ideas-persistence-plan.md` (7-phase plan) for auto-saving ge
 - **Phase 7 (docs):** Updated `architecture-diagram.md` (entities + cron flow), `STATUS.md`, `ideas-persistence-plan.md` (all phases marked complete).
 
 **Verification:**
+
 - `npm run build` (backend) ✅
 - `npx ng build` (frontend) ✅ (budget warnings only, pre-existing)
 - `npx jest ideas.service.spec.ts` — 6/6 pass ✅
@@ -1770,6 +1957,7 @@ Completed the full `ideas-persistence-plan.md` (7-phase plan) for auto-saving ge
 - Mojibake scan clean on all touched files ✅
 
 **Known issues:**
+
 - `ideas-tasks.service.spec.ts`: 2 tests fail because `enabled` is evaluated at module construction (before `beforeEach` sets `IDEAS_NIGHTLY_ENABLED`). Fix: move env setup before `Test.createTestingModule`. Low priority.
 - Environment variable documentation: `IDEAS_NIGHTLY_ENABLED`, `IDEAS_NIGHTLY_DOMAINS`, `IDEAS_NIGHTLY_COUNT`, `IDEAS_NIGHTLY_MODEL` need to be added to the project's `.env.example` or deployment docs.
 
@@ -1806,7 +1994,7 @@ The commit `31eadd9` ("Add HTML-in-Canvas proposal and review calendar documenta
 - **Files touched backend:** `genetics.controller.ts`, `terpene.controller.ts`
 - **Files touched frontend:** `strain-hunter-settings.ts`, `strain-hunter-settings.html`, `llm-providers-management.ts`, `llm-providers-management.html`
 - **Verification:** `npm run build` backend ✅, `npx ng build` frontend ✅ (only pre-existing budget warnings).
-- **Decisions made:** 
+- **Decisions made:**
   - Method-level `@UseGuards(AdminGuard)` over class-level `@UseGuards(JwtAuthGuard)` — GET endpoints remain accessible to all authenticated users (catalog is public read), only write/enrich gated.
   - `@if (isAdmin())` over `[accessTo]` directive — directive is not reactive (evaluated once at @Input set), while `@if` with computed signal reacts to auth state changes.
   - `setDefaultModel` also hidden for non-admin (it calls PATCH on the model).
@@ -2096,12 +2284,11 @@ documents/
 - **GenUI video block:** Added `RenderSpecType.AgnesVideo` + `video.render-spec.ts`, mappings for `LlmController_getVideo` and `LlmController_createVideo`. Frontend: new `agnes-video-card` block (ts/html/css) registered in `render-host.component.ts` (case `agnes-video`) showing an inline `<video>` player + model/seconds pills.
 - **Video polls to completion:** `LlmClientService.createVideoTaskAndWait` submits the task then polls `getVideoResult` until `completed` (timeout 150s), so `createVideo` returns a real `.mp4` URL — the agent can no longer hallucinate a broken link. `getVideo` controller also returns `model`.
 - **Frame-continuation feature (`extendVideo`):** Added `ffmpeg-static` dependency. New `LlmClientService.extendVideo` downloads the source video (by `sourceVideoId` re-polled via `getVideoResult`, or `sourceVideoUrl`), extracts the last frame via ffmpeg (`-sseof -1 -frames:v 1`) to a PNG, base64-encodes it, and submits an image-to-video task with that frame. New `POST /llm/video/extend` (`ExtendVideoDto`) with tool name `LlmController_extendVideo`, render mapping → `AgnesVideo`. Verified empirically that Agnes accepts base64 image input for video (STATUS 200), so no external image hosting is needed. Live test: agent called `extendVideo`, rendered an inline `agnes-video` card with the real `.mp4`.
-- **Verification:** backend `npm run build` passes; frontend `npx ng build` passes (pre-existing unrelated warnings only). 
+- **Verification:** backend `npm run build` passes; frontend `npx ng build` passes (pre-existing unrelated warnings only).
 - **Files touched:** `backend/src/modules/admin-agent/render-spec/render-spec.interface.ts`, `image.render-spec.ts` (new), `video.render-spec.ts` (new), `render-spec.service.ts`, `backend/src/modules/llm/services/llm-client.service.ts` (image logging path, `createVideoTaskAndWait`, `extendVideo`, `downloadBuffer`, ffmpeg imports), `backend/src/modules/llm/llm.controller.ts` (image model log, `getVideo`/`createVideo`/`extendVideo` return `model`, new `extendVideo` endpoint), `backend/src/modules/llm/dto/extend-video.dto.ts` (new), `backend/package.json` (`ffmpeg-static`), `frontend/src/app/features/chat/blocks/agnes-image-card/*` (new), `frontend/src/app/features/chat/blocks/agnes-video-card/*` (new), `frontend/src/app/features/chat/render-host/render-host.component.ts`.
 - **Architecture diagram updated:** added Agnes AI to External Providers, Agnes multimodal edges + `ffmpeg-static` frame-extract node in System Architecture, an `Agnes Multimodal Generation Flow` sequence diagram, an `agnes-image`/`agnes-video` RenderSpec → chat block path in GenUI Rendering Path, and Agnes notes in Current Architecture Notes.
-- **Next exact step:** feature complete; no further action unless the user requests changes (e.g. video continuation from a specific frame index, or audio). 
+- **Next exact step:** feature complete; no further action unless the user requests changes (e.g. video continuation from a specific frame index, or audio).
 - **Open questions for the user:** none.
-
 
 ## 2026-07-18 Session — Agnes AI Multimodal Plan Implemented (Phases 1-6)
 
@@ -2138,6 +2325,7 @@ documents/
 - Open questions for the user: none for the plan itself. Implementation-time questions (rate limiting, free-tier cost, image upload UX) remain open and are noted in the plan's "Out of Scope" section.
 
 **2026-07-18 MCP Bridge — Phase 4 complete, Hebrew UI labels, architecture diagram**
+
 - Phase 4 completed: deleted `backend/src/modules/weather/` directory (controller, service, module, 4 DTOs), removed `WeatherModule` from `AppModule`, removed old `WeatherController_getWeather`/`getForecast` render-spec mappings, updated `render-spec.service.spec.ts` (error tests now use Swagger tools since MCP path is more permissive), verified 92/92 tests pass and `tsc --noEmit` clean.
 - Live test confirmed: both `get_forecast` and `get_current_conditions` dispatch via MCP (no `[GET]` logs), weather cards render with real data.
 - Added MCP tool Hebrew descriptions in `agent-tool-executor.service.ts`: `get_current_conditions` → "מקבל מזג אוויר נוכחי", `get_forecast` → "מקבל תחזית מזג אוויר", `check_service_status` → "בודק סטטוס שירות".
@@ -2152,6 +2340,7 @@ documents/
 - Open questions for the user: none.
 
 **2026-07-18 MCP Bridge — SDK import fix, error detection, plan doc update**
+
 - Fixed SDK runtime import: `@modelcontextprotocol/sdk/client/stdio` fails at runtime in Node 24 because the SDK's `exports` map `./*` wildcard maps to `./dist/cjs/client/stdio` (no `.js` extension) and Node 24 doesn't auto-append it. Fix: resolve via `@modelcontextprotocol/sdk/client` (which works), navigate to `stdio.js` in the same directory.
 - Fixed MCP error detection in `buildRenderSpec`: added JSON error envelope check for MCP source (attempts `JSON.parse` on the string; if the result is an object with `error: true`, returns `null`). Previously the error check was completely skipped for MCP source.
 - Added snapshot-style tests for MCP render-spec: field-existence assertions against pinned fixtures, error-envelope tests.
@@ -2162,6 +2351,7 @@ documents/
 - Open questions for the user: none.
 
 **2026-07-03 GenUI Progressive Streaming Rendering Plan**
+
 - Added `documents/features/todo/genui-progressive-streaming-rendering-plan.md`.
 - What was done this session: created a focused implementation plan for progressive GenUI rendering in `AiFormat`, covering partial component extraction, partial CSS/HTML sanitization, skeleton fallback, tests, smoke testing, risks, DoD, and open decisions.
 - Exact next step: implement Step 1 in `frontend/src/app/core/directives/ai-format.directive.ts` by adding `extractProgressiveComponentParts(...)`, then add focused directive tests in `frontend/src/app/core/directives/ai-format.directive.spec.ts`.
@@ -2170,6 +2360,7 @@ documents/
 - Open questions for the user: whether progressive rendering should support only the active open component in version 1 or multiple sequential open components.
 
 **Completed Fixes**
+
 - Implemented clickable strain-symbol filters in `StrainHunter`:
   - Updated `strain-hunter.html` to make symbols accessible buttons calling `applyDataFilter('symbols', symbol.alt)`.
   - Updated `strain-hunter.ts` `items` computed property to support `symbols` field by joining symbol `alt` values into a searchable string.
@@ -2184,15 +2375,16 @@ documents/
 - Ran `ng build` – builds succeed with existing warnings.
 
 **Next Steps**
+
 - No further action required for this fix unless additional PATCH endpoints return unexpected fields.
 - Monitor for any UI flicker issues related to provider/model updates.
 - Consider adding unit tests for store merge behavior if test coverage is needed.
 
 **Next Steps**
+
 - No further action required for this fix unless additional PATCH endpoints return unexpected fields.
 - Monitor for any UI flicker issues related to provider/model updates.
 - Consider adding unit tests for store merge behavior if test coverage is needed.
-
 
 - `documents/incomplete/` remains as a compatibility folder, but new work should prefer `documents/features/`.
 - Do not move `documents/done/` or `documents/audit/` unless explicitly asked.
@@ -2832,7 +3024,6 @@ documents/
 - Verification: `npx ng build` passes; no code changes needed.
 - Decisions made: Close completed plan; no architecture diagram update needed.
 - Open questions for the user: none.
-
 
 ## 2026-07-01 Session
 

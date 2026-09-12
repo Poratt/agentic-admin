@@ -498,6 +498,7 @@
 .row-label {
   font-weight: var(--font-weight-medium);
   font-size: var(--font-size-sm);
+  line-height: 1;
   color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -755,6 +756,12 @@
     min-height: 44px;
     object-fit: cover;
     border-radius: 4px;
+  }
+
+  .app-tooltip-text {
+    /* flex child must be allowed to shrink, and long URLs must wrap */
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   &::before {

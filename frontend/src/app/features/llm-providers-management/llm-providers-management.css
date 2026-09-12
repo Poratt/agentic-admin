@@ -78,6 +78,7 @@
         display: flex;
         gap: var(--space-4);
         justify-content: flex-end;
+        align-items: center;
     }
 
     .count-value {
@@ -96,7 +97,8 @@
         display: inline-flex;
         align-items: center;
         gap: var(--space-5);
-        width: 200px;
+        width: 220px;
+        height: 16px;
         flex-grow: 1;
 
         button {
@@ -151,7 +153,7 @@
 
     .nested-panel-row {
         .nested-panel-cell {
-            background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+            background: color-mix(in srgb, var(--color-text-primary) var(--expand-opacity), transparent);
             padding: var(--space-6) var(--space-12) var(--space-8) calc(var(--space-12) + 48px);
         }
     }
@@ -261,16 +263,5 @@
             font-size: var(--font-size-sm);
             color: var(--color-text-muted);
         }
-    }
-}
-:host {
-    .show-inactive-toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-3);
-        font-size: var(--font-size-sm);
-        color: var(--color-text-muted);
-        cursor: pointer;
-        white-space: nowrap;
     }
 }

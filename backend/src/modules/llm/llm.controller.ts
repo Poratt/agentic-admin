@@ -53,6 +53,34 @@ export class LlmController {
     private readonly client: LlmClientService,
   ) {}
 
+  @Post('providers/:id/test-all')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Test all active text models of a provider in the background',
+    summaryHe: 'בודקים ברקע את כל המודלים הפעילים של הספק ושומרים תוצאות',
+    toolIcon: 'ph-lightning',
+  } as CustomApiOperationOptions)
+  @ApiOkResponse({ description: 'Background test run started; results stream into the test history' })
+  async testProviderModels(@Param('id') id: string) {
+    return this.healthService.testProviderModels(+id);
+  }
+
+  @Get('providers/:id/test-all/status')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Whether a background test run is in flight for this provider',
+    summaryHe: 'האם ריצת בדיקות רקע פעילה עבור הספק',
+    toolIcon: 'ph-lightning',
+  } as CustomApiOperationOptions)
+  @ApiOkResponse({ description: 'Returns { running: boolean }' })
+  async testProviderModelsStatus(@Param('id') id: string) {
+    return {
+      success: true,
+      message: 'Test run status',
+      result: { running: this.healthService.isProviderTestRunning(+id) },
+    };
+  }
+
   @Post('models/:id/test')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({

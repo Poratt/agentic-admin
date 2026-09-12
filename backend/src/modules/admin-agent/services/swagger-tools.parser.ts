@@ -58,6 +58,10 @@ export class SwaggerToolsParser {
     'GoogleCalendarController_callback',
     // Irreversible destructive bulk delete (provider + all its models) — admin UI only.
     'LlmProviderController_deleteProvider',
+    // Bulk model add — additive but noisy; the sync dialog is the admin's tool, not the agent's.
+    'LlmProviderController_syncModels',
+    // Minutes-long background test runs — the admin UI's job, not the agent's.
+    'LlmController_testProviderModels',
   ]);
 
   getTools(): LlmToolSchema[] {

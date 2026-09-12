@@ -85,3 +85,4 @@ backup_*.sql
 # logs churn every session, so tracking them would add noise to every diff.
 # Un-ignore a specific path with a negation rule if the team should share it.
 .workbuddy-ai/
+.env.bak*

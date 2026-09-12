@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { LlmHealthService } from './llm-health.service';
 import { LlmClientService } from './llm-client.service';
 import { LlmProviderConfigService } from './llm-provider-config.service';
@@ -148,6 +148,20 @@ describe('LlmHealthService', () => {
       expect(dbProviderService.findModelById).toHaveBeenCalledWith(42);
       expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(42, expect.any(Number), 'success', null);
     });
+
+    it('saves the error result and throws BadRequest on daily-quota exhaustion', async () => {
+      const client = makeClientService();
+      const dbProviderService = makeDbProviderService();
+      (client.generateResponse as jest.Mock).mockRejectedValue(new Error('429 Rate limit exceeded: free-models-per-day. Add 10 credits'));
+      (dbProviderService.findModelById as jest.Mock).mockResolvedValue({ id: 42, capability: 'text' });
+      (dbProviderService.saveTestResult as jest.Mock).mockResolvedValue({});
+
+      const service = makeHealthService({ client, dbProviderService });
+
+      await expect(service.testLlm('openrouter', 'gpt-4o', 'Hello', 'ctx', 42)).rejects.toThrow(BadRequestException);
+      // the failed attempt is still recorded before the throw
+      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(42, expect.any(Number), 'error', expect.stringContaining('free-models-per-day'));
+    });
   });
 
   describe('testAllModels', () => {
@@ -267,6 +281,53 @@ describe('LlmHealthService', () => {
       const result = await service.testAllModels();
 
       expect(result.result![0].available).toBe(false);
+    });
+  });
+
+  describe('testProviderModels', () => {
+    it('rejects a second concurrent run for the same provider', async () => {
+      const client = makeClientService();
+      const providerConfig = makeProviderConfigService();
+      const dbProviderService = makeDbProviderService();
+      (dbProviderService.findProviders as jest.Mock).mockResolvedValue({
+        success: true,
+        result: [
+          {
+            id: 12,
+            key: 'nvidia',
+            active: true,
+            models: [{ id: 1, key: 'moonshotai/kimi-k2.6', active: true, capability: 'text' }],
+          },
+        ],
+      });
+      (client.generateResponse as jest.Mock).mockResolvedValue({ content: 'OK' });
+
+      const service = makeHealthService({ client, providerConfig, dbProviderService });
+      const first = await service.testProviderModels(12);
+      expect(first.result!.tested).toBe(1);
+
+      await expect(service.testProviderModels(12)).rejects.toThrow(BadRequestException);
+    });
+
+    it('returns tested 0 with no background run when the provider has no active text models', async () => {
+      const dbProviderService = makeDbProviderService();
+      (dbProviderService.findProviders as jest.Mock).mockResolvedValue({
+        success: true,
+        result: [{ id: 12, key: 'nvidia', active: true, models: [] }],
+      });
+
+      const service = makeHealthService({ dbProviderService });
+      const result = await service.testProviderModels(12);
+
+      expect(result.result!.tested).toBe(0);
+    });
+
+    it('throws NotFound for an unknown provider', async () => {
+      const dbProviderService = makeDbProviderService();
+      (dbProviderService.findProviders as jest.Mock).mockResolvedValue({ success: true, result: [] });
+
+      const service = makeHealthService({ dbProviderService });
+      await expect(service.testProviderModels(99)).rejects.toThrow(NotFoundException);
     });
   });
 });

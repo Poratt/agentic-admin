@@ -86,7 +86,7 @@
   --space-34: 68px;
 
   /* Border opacity for panel cells (audit 1.6) */
-  --expand-opacity: 2%;
+  --expand-opacity: 1.5%;
 
   --search-width: 320px;
   --field-icon-padding: 40px;

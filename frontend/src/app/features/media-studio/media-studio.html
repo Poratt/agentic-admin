@@ -13,7 +13,7 @@
                 <div class="media-item">
                     <div class="media-item-prompt">{{ imagePrompt() }}</div>
                     @if (imageLoading()) {
-                        <div class="media-item-meta"><span class="ph ph-circle-notch ph-spin"></span> יוצר תמונה...</div>
+                        <div class="media-item-meta"><span class="ph ph-spinner-gap ph-spin"></span> יוצר תמונה...</div>
                     } @else if (result) {
                         @if (result.url) {
                             <img [src]="result.url" alt="תוצאת תמונה" class="media-item-image" />
@@ -52,7 +52,7 @@
                                 <span>ID: {{ task.videoId }}</span>
                             }
                             @if (videoPolling()) {
-                                <span class="ph ph-circle-notch ph-spin"></span>
+                                <span class="ph ph-spinner-gap ph-spin"></span>
                             }
                         </div>
                     }
