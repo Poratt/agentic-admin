@@ -1,0 +1,8 @@
+{
+  "name": "agentic-admin",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ]
+}
