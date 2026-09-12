@@ -2,6 +2,10 @@
 
 Last updated: 2026-09-12
 
+## 2026-09-12 — ✅ CLOSED (user decision): SearXNG proxy backlog item obsolete
+
+- User: the project moved off SearXNG to a different search mechanism (the new web-search channels — Tavily / Reddit / HN Algolia, see the squashed web-search commits). The long-open "rotating proxy pool" decision is moot — no action needed. Historical backlog mentions in older entries stay as records.
+
 ## 2026-09-12 — ✅ DONE: inactive providers sink to bottom of management table
 
 - `llmProviders` computed orders `[...active, ...inactive]` when "Show inactive" is on. +1 spec.
