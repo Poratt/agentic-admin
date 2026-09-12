@@ -1,4 +1,84 @@
 # Documentation Handoff
+## 2026-09-12 — ✅ DONE: test button spinner while testing
+
+- `llm-providers-management.html` — test-now button icon swaps to `ph-circle-notch ph-spin` (existing global spin utility) while `testingModelId() === model.id`; `[disabled]` + "Testing..." tooltip already in place. User confirmed the misroute fix works live ("test now תקין").
+- **Verified:** targeted **39/39** · `npx ng build` exit 0. No architecture-diagram change. No commit/push.
+
+---
+## 2026-09-12 — ✅ DONE: inactive providers sink to the bottom of the management table
+
+- `llm-providers-management.ts` — `llmProviders` computed now orders `[...active, ...inactive]` when "Show inactive" reveals them (default listing; a column sort by the user still re-orders normally).
+- spec — +1 (inactive-first input renders active first). 
+- **Verified:** targeted llm-providers-management **39/39** (+1) · `npx ng build` exit 0. No architecture-diagram change. No commit/push.
+
+---
+## 2026-09-12 — ✅ FIXED: test-now result saved to wrong model + toast direction/design
+
+**User report (3 items):** (1) toast text direction broken; (2) toast restyle — theme background, severity color on icon only; (3) "test now" reports success but no result appears in the UI.
+
+**Bug 3 root cause (misrouted save):** `POST /llm/models/:id/test` resolved the model correctly BY ID but passed only KEYS to `testLlm`, which re-looked-up the row via `findModelByKey(model)` — key is unique only per `(providerId, key)`. Seed has duplicate keys across providers (`openai/gpt-oss-20b` under openrouter AND nvidia) → the result row was saved to an arbitrary same-key model → the tested model showed nothing. Also the capability gate used the same ambiguous lookup.
+
+**Fix (modelId flows end-to-end):**
+- `llm-health.service.ts` — `testLlm(provider, model, prompt, systemContext, modelId?)`: single DB lookup — `findModelById(modelId)` when id given (UI/test-all), legacy `findModelByKey` fallback; capability gate + `saveTestResult` both use that row (removed the second key lookup).
+- `llm.controller.ts` — passes `dbModel.id`. `llm.service.ts` wrapper — `modelId?` passthrough.
+- `llm.types.ts` — `LlmModelCheckTarget.id?`; `getModelCheckTargets` sets it; `testAllModels` passes it (scheduled health checks also stop misrouting).
+- Specs: health +1 (id 42 must win over wrong key-match id 7); controller spec expectation updated to 5 args.
+
+**Toasts (frontend, `_primeng-overrides.css` new "Toasts" section — none existed):**
+- Direction: `.p-toast { direction: ltr; text-align: left }` — toast texts are English app-wide; matches the existing dialogs convention (`direction: ltr`), fixes the ".Model test completed successfully" bidi artifact.
+- Design: message = `var(--color-surface-elevated)` + `--color-border` + `--radius-md` + `--shadow-soft`; summary `--color-text-primary`, detail `--color-text-secondary`; ONLY the icon carries severity (`-success`→`--color-success`, `-error`→`--color-danger`, `-warn`→`--color-warning`, `-info`→`--color-primary`); close button neutral. Theme-aware (dark/light tokens both defined).
+
+**Verified:** backend llm suites **106/106**; full `npx jest --runInBand` **518/518 (48 suites)** · `npm run build` exit 0; frontend `npx ng build` exit 0 (CSS-only change this round — no frontend TS touched). Mojibake clean. graphify updated. No architecture-diagram change (in-module bugfix + styling).
+
+**Next exact step:** restart :3000 (backend change), re-test a model whose key exists on two providers (e.g. `openai/gpt-oss-20b`) → result must appear on THAT model's row; visually check toast (neutral surface, green icon, LTR text). No commit/push performed.
+
+---
+## 2026-09-12 — ✅ DONE (D+E): provider hard delete endpoint + active-state toggle switches app-consistent
+
+**User decisions this session:** (1) "why no provider delete + why do deactivated providers vanish from the UI?" → investigation: management page filtered `p.active` (`llm-providers-management.ts:100`), `toggleProviderActive` existed but was never wired (dead code), backend had NO provider delete endpoint. (2) Chose D+E. (3) Design pass: ugly INACTIVE badge + raw checkbox rejected → `p-toggleswitch` everywhere for consistency (same component as the dialogs' Active fields). (4) Models' Active column dropped too (redundant with the row toggle).
+
+**Backend (4 files):**
+- `llm-provider.service.ts` — NEW `deleteProvider(id)`: findOneBy → 404 if missing → `providerRepo.delete({id})`. DB-level FK cascades do the work: `llm_models.provider_id` CASCADE → `llm_model_test_results.model_id` CASCADE → `user_llm_defaults.model_id` CASCADE. All three verified in entities.
+- `llm-provider.controller.ts` — NEW `DELETE :id` (AdminGuard, swagger, summaryHe).
+- `seeds/llm-providers.seed.ts` — **bootstrap-only seeding**: early return when `providerRepo.count() > 0`. Previously per-provider existence checks resurrected a deleted seeded provider (+ its full model list) on every restart; now permanent deletion sticks. Edge: deleting ALL providers → full reseed on restart (documented in swagger description).
+- `swagger-tools.parser.ts` — `LlmProviderController_deleteProvider` added to `HIDDEN_FROM_LLM` (irreversible bulk delete — admin UI only, agent can't call it).
+- Specs: `llm-provider.service.spec.ts` +2 (delete happy path, 404), NEW `seeds/llm-providers.seed.spec.ts` +2 (skip when non-empty = no resurrection; seeds 5 providers when empty).
+
+**Frontend (7 files):**
+- `core/services/llm-provider.service.ts` — NEW `deleteProvider(id)` → `DELETE /llm-provider/:id`.
+- `core/store/llm-provider.store.ts` — `deleteProvider` now calls the real delete (was `update(id, {active:false})`).
+- `llm-providers-management.ts` — `showInactive` signal + `llmProviders` filters by it (inactive no longer invisible); `toggleShowInactive(boolean)`; NEW `setProviderActive`/`setModelActive` (no-op on unchanged); `deleteProvider` dialog → "Delete Provider Permanently" with cannot-be-undone warning; **removed** `deleteModel` (soft-deactivate dialog — replaced by the model toggle); FormsModule import added for row `[ngModel]`.
+- `llm-providers-management.html` — toolbar: native checkbox → `p-toggleswitch` ("Show inactive"); provider row: pencil (sm) + `p-toggleswitch` bound to `provider.active` + red trash "Delete permanently"; model row: star + pencil + `p-toggleswitch` bound to `model.active` + red trash "Delete permanently"; **removed** the models-table Active column (`col-status` th+td).
+- `llm-providers-management.css` — `.show-inactive-toggle` rule added; orphaned `.col-status` + `.status-dot` rules removed (my deletion's orphans).
+- Specs: component +4 tests (provider permanent-delete dialog + toast, setProviderActive ×2 incl. skip-unchanged with `mockClear`, setModelActive, showInactive filter); store `deleteProvider` describe rewritten for real delete.
+
+**Still true:** `toggleProviderActive` in the component TS is now unused again (was dead pre-session; left in place per no-dead-code-deletion rule — candidate for removal on request). Backend `softDeleteModel`/store `softDeleteModel` remain (PATCH `{active:false}` path, still reachable via API).
+
+**Verified:** targeted component+store **47/47**; full frontend `npx ng test --watch=false` **526/526 (57 files)** · `npx ng build` exit 0 (pre-existing strain-hunter.css budget warning only); backend `npm run build` exit 0 · full `npx jest --runInBand` **517/517 (48 suites)**. Mojibake clean. graphify updated. **No architecture-diagram change** — diagram doesn't enumerate REST endpoints/seed behavior; module boundaries, entities and external integrations unchanged.
+
+**Next exact step:** visual review — provider row: pencil + toggle + red trash (all `sm`); model row: star + pencil + toggle + red trash; models table has no Active column; toolbar toggle reveals INACTIVE providers (toggle switches them back on). No commit/push performed.
+
+---
+## 2026-09-12 — ✅ DONE: permanent model delete in UI + provider "delete" dialog now honest (deactivation)
+
+**Context (user):** models/providers could only be "soft deleted" from the UI. Investigation: backend `DELETE /llm-provider/models/:id` (hard delete, `modelRepo.remove` at `llm-provider.service.ts:186`) exists but the UI never called it (`softDeleteModel` = PATCH `{active:false}`); providers have NO delete endpoint at all and the UI dialog lied ("Delete Provider" → actually deactivated); seed recreates the 5 seeded providers only if the provider row is missing (deleting a single model stays deleted; a provider row deleted directly in DB resurrects with its models on backend restart).
+
+**Fix (Option C — frontend only, 5 files):**
+- `core/services/llm-provider.service.ts` — NEW `deleteModel(modelId)` → `DELETE /llm-provider/models/:id`; stale comment on `softDeleteModel` updated (no longer claims the UI never calls the hard route).
+- `core/store/llm-provider.store.ts` — NEW `hardDeleteModel(providerId, modelId)` mirroring `softDeleteModel` (reload + error signal).
+- `llm-providers-management.ts` — NEW `hardDeleteModel(...)` confirm dialog: header "Delete Model Permanently", warning "Permanently delete this model, its test history and all user defaults? This cannot be undone."; toast "Model has been permanently deleted." `deleteProvider` dialog reworded: header "Deactivate Provider", message "deactivate this provider?", accept label "Deactivate" + power icon, toast "Deactivated" (was the lying "Deleted").
+- `llm-providers-management.html` — provider row: trash/danger → power/transparent ("Deactivate provider"). Model row: old trash button → power icon ("Deactivate model") + NEW trash/danger button "Delete permanently" → `hardDeleteModel`.
+- spec — mock store +3 tests: provider accept → deactivation toast (not "Deleted"); `hardDeleteModel` dialog header/warning asserted; accept → `store.hardDeleteModel(1,2)` + toast.
+
+**Model hard-delete cascades (backend, pre-existing):** test results (relation `cascade: true`) + `user_llm_defaults` rows (FK `onDelete: CASCADE`). Nothing blocks the delete.
+
+**Still true (by scope decision):** no provider hard delete — backend has no endpoint; the 5 seeded providers (OmniRoute/openrouter/agnes-ai/requesty/nvidia) resurrect if their DB row is deleted directly (seed checks provider existence only).
+
+**Verified:** targeted llm-providers-management **35/35** (+3, was 32); full frontend `npx ng test --watch=false` **523/523 (57 files)**, zero failures; `npx ng build` exit 0 (pre-existing `strain-hunter.css` budget warning only, 8.89KB vs 8KB). Mojibake clean, no banned patterns (`*ngIf`/`constructor(`...), graphify updated. No architecture-diagram change (UI wiring only, no new endpoint/architecture).
+
+**Next exact step:** visual review — model row should show power icon (deactivate) + red trash (delete permanently); provider row power only, dialog says Deactivate. No commit/push performed.
+
+---
 ## 2026-08-27 — ✅ DONE: comparison dialog cells no longer filter the main table (`feature/strain-comparison`)
 
 **Problem (user review):** every clickable cell in the comparison dialog called `applyDataFilter(...)`, which mutated the main Strain Hunter table's `activeFilters` behind the open dialog — confusing and unwanted while comparing.

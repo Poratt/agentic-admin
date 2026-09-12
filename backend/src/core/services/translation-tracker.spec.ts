@@ -7,7 +7,7 @@ describe('translationTracker — LLM-translation harvest queue', () => {
 
   it('counts distinct genetics map misses (dedup by Hebrew name)', () => {
     translationTracker.recordGeneticsMiss('אוראוז', 'Oreoz');
-    // אותו זן שמתורגם שוב (chunk חוזר / ריצת העשרה נוספת) — עדיין נספר פעם אחת
+    // The same strain translated again (repeated chunk / additional enrichment run) — still counted once
     translationTracker.recordGeneticsMiss('אוראוז', 'Oreoz');
     translationTracker.recordGeneticsMiss('אוז קוש', 'Oz Kush');
 

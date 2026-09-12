@@ -65,10 +65,6 @@
         }
     }
 
-    .col-status {
-        width: 100px;
-    }
-
     .col-perf {
         width: 140px;
     }
@@ -115,30 +111,6 @@
 
     td.clickable:hover .row-subtitle-inline button {
         opacity: 1;
-    }
-
-    .status-dot {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-4);
-        font-size: var(--font-size-xs);
-        font-weight: var(--font-weight-medium);
-
-        &::before {
-            content: '';
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: currentColor;
-        }
-
-        &.status-active {
-            color: var(--color-success);
-        }
-
-        &.status-inactive {
-            color: var(--color-text-muted);
-        }
     }
 
     .metric-cell {
@@ -289,5 +261,16 @@
             font-size: var(--font-size-sm);
             color: var(--color-text-muted);
         }
+    }
+}
+:host {
+    .show-inactive-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-3);
+        font-size: var(--font-size-sm);
+        color: var(--color-text-muted);
+        cursor: pointer;
+        white-space: nowrap;
     }
 }

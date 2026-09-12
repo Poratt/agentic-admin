@@ -100,10 +100,12 @@ describe('LlmController', () => {
         modelId: 10,
       });
 
-      expect(client.generateImage).toHaveBeenCalledWith(expect.objectContaining({
-        prompt: 'a cat',
-        model: 'agnes-image',
-      }));
+      expect(client.generateImage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'a cat',
+          model: 'agnes-image',
+        }),
+      );
       expect(result.success).toBe(true);
       expect(result.result).toHaveProperty('url', 'https://img.test/img.png');
       expect(result.result).toHaveProperty('model', 'agnes-image');
@@ -127,10 +129,12 @@ describe('LlmController', () => {
         modelId: 14,
       });
 
-      expect(client.createVideoTaskAndWait).toHaveBeenCalledWith(expect.objectContaining({
-        prompt: 'ocean waves',
-        model: 'agnes-video',
-      }));
+      expect(client.createVideoTaskAndWait).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'ocean waves',
+          model: 'agnes-video',
+        }),
+      );
       expect(result.success).toBe(true);
       expect(result.result).toHaveProperty('videoId', 'vid_1');
     });
@@ -172,10 +176,12 @@ describe('LlmController', () => {
         modelId: 14,
       });
 
-      expect(client.extendVideo).toHaveBeenCalledWith(expect.objectContaining({
-        sourceVideoId: 'vid_1',
-        prompt: 'continue the scene',
-      }));
+      expect(client.extendVideo).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceVideoId: 'vid_1',
+          prompt: 'continue the scene',
+        }),
+      );
       expect(result.success).toBe(true);
       expect(result.result).toHaveProperty('videoId', 'vid_2');
     });
@@ -185,9 +191,9 @@ describe('LlmController', () => {
       (dbProviderService.findModelById as jest.Mock).mockResolvedValue(VIDEO_MODEL);
 
       const controller = makeController({ dbProviderService });
-      await expect(
-        controller.extendVideo({ prompt: 'continue', modelId: 14 }),
-      ).rejects.toThrow('extendVideo requires sourceVideoId or sourceVideoUrl');
+      await expect(controller.extendVideo({ prompt: 'continue', modelId: 14 })).rejects.toThrow(
+        'extendVideo requires sourceVideoId or sourceVideoUrl',
+      );
     });
   });
 
@@ -204,12 +210,7 @@ describe('LlmController', () => {
       const controller = makeController({ healthService, dbProviderService });
       const result = await controller.testModel('1');
 
-      expect(healthService.testLlm).toHaveBeenCalledWith(
-        'openrouter',
-        'gpt-4o',
-        expect.any(String),
-        expect.any(String),
-      );
+      expect(healthService.testLlm).toHaveBeenCalledWith('openrouter', 'gpt-4o', expect.any(String), expect.any(String), TEXT_MODEL.id);
       expect(result.success).toBe(true);
     });
 
@@ -228,10 +229,7 @@ describe('LlmController', () => {
       (dbProviderService.setUserDefaultModel as jest.Mock).mockResolvedValue(undefined);
 
       const controller = makeController({ dbProviderService });
-      const result = await controller.setDefaultModel(
-        42,
-        { user: { sub: 1 } } as any,
-      );
+      const result = await controller.setDefaultModel(42, { user: { sub: 1 } } as any);
 
       expect(dbProviderService.setUserDefaultModel).toHaveBeenCalledWith(1, 42);
       expect(result).toEqual({ success: true, message: 'Default model set' });
@@ -239,16 +237,12 @@ describe('LlmController', () => {
 
     it('throws BadRequestException when modelId is missing', async () => {
       const controller = makeController();
-      await expect(
-        controller.setDefaultModel(undefined as any, { user: { sub: 1 } } as any),
-      ).rejects.toThrow('modelId is required');
+      await expect(controller.setDefaultModel(undefined as any, { user: { sub: 1 } } as any)).rejects.toThrow('modelId is required');
     });
 
     it('throws UnauthorizedException when user is missing', async () => {
       const controller = makeController();
-      await expect(
-        controller.setDefaultModel(1, { user: undefined } as any),
-      ).rejects.toThrow();
+      await expect(controller.setDefaultModel(1, { user: undefined } as any)).rejects.toThrow();
     });
   });
 

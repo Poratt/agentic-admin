@@ -23,7 +23,7 @@ export class LlmProviderService {
     private readonly testResultRepo: Repository<LlmModelTestResultEntity>,
     @InjectRepository(UserLlmDefaultEntity)
     private readonly userDefaultRepo: Repository<UserLlmDefaultEntity>,
-  ) { }
+  ) {}
 
   /**
    * Resolves the effective provider and model for a request, applying user-level defaults.
@@ -139,18 +139,28 @@ export class LlmProviderService {
     return { success: true, message: 'Provider updated', result: updated };
   }
 
+  async deleteProvider(id: number): Promise<ServiceResultContainer<void>> {
+    const provider = await this.providerRepo.findOneBy({ id });
+    if (!provider) throw new NotFoundException(`Provider with ID ${id} not found`);
+
+    // DB-level FK cascades remove the provider's models, their test results
+    // and any user_llm_defaults rows pointing at those models.
+    await this.providerRepo.delete({ id });
+    return { success: true, message: 'Provider deleted', result: undefined };
+  }
+
   async findProviders(): Promise<ServiceResultContainer<LlmProviderEntity[]>> {
-    // 🚀 אנחנו מנחים את TypeORM לטעון באופן אקטיבי גם את הבדיקות של המודלים, ולסדר אותן מהחדשה לישנה 🚀
+    // 🚀 We instruct TypeORM to eagerly load the model test results as well, and order them newest to oldest 🚀
     const providers = await this.providerRepo.find({
       relations: ['models', 'models.testResults'],
       order: {
         models: {
           sortOrder: 'ASC',
           testResults: {
-            createdAt: 'DESC' // הבדיקה הכי חדשה תופיע ראשונה ב-UI!
-          }
-        }
-      }
+            createdAt: 'DESC', // newest test result shows first in the UI!
+          },
+        },
+      },
     });
 
     return { success: true, message: 'Providers retrieved', result: providers };
@@ -196,19 +206,19 @@ export class LlmProviderService {
     return { success: true, message: 'Models retrieved', result: models };
   }
 
-  // 🚀 שולף מודל ספציפי לפי מפתח (Key) 🚀
+  // 🚀 Fetches a specific model by key (Key) 🚀
   async findModelByKey(key: string): Promise<LlmModelEntity | null> {
     return this.modelRepo.findOne({ where: { key } });
   }
 
-  // 🚀 שולף מודל ספציפי לפי ID כולל פרטי הספק שלו 🚀
+  // 🚀 Fetches a specific model by ID including its provider details 🚀
   async findModelById(id: number): Promise<LlmModelEntity | null> {
     return this.modelRepo.findOne({
       where: { id },
       relations: ['provider'],
     });
   }
-  // 🚀 שומר את תוצאת הבדיקה במסד הנתונים 🚀
+  // 🚀 Saves the test result to the database 🚀
   async saveTestResult(
     modelId: number,
     responseTimeMs: number,
@@ -254,5 +264,4 @@ export class LlmProviderService {
     });
     return { success: true, message: 'Test results retrieved', result: { results, total } };
   }
-
 }

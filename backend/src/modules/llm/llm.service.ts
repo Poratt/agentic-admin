@@ -11,7 +11,7 @@ export class LlmService {
     private readonly providerConfig: LlmProviderConfigService,
     private readonly client: LlmClientService,
     private readonly health: LlmHealthService,
-  ) { }
+  ) {}
 
   getRuntimeSelection(providerOverride?: LlmProvider, modelOverride?: string): LlmRuntimeSelection {
     return this.providerConfig.getRuntimeSelection(providerOverride, modelOverride);
@@ -30,7 +30,8 @@ export class LlmService {
     model: string,
     prompt: string,
     systemContext: string,
+    modelId?: number,
   ): Promise<ServiceResultContainer<{ provider: LlmProvider; model: string; available: boolean }>> {
-    return this.health.testLlm(provider, model, prompt, systemContext);
+    return this.health.testLlm(provider, model, prompt, systemContext, modelId);
   }
 }

@@ -7,7 +7,7 @@
 ]`;
 
 /**
- * שלב 1: יצירת שאילתות חיפוש מונחות כסף וצמיחה
+ * Stage 1: generating money- and growth-driven search queries
  */
 export const DISCOVERY_QUERY_GENERATION_PROMPT = `You are a startup research analyst looking for high-intent B2B pain points where businesses actively lose money, clients, or traffic.
 Given today's date, output 4 simple, high-yield English search queries for Reddit, IndieHackers, and niche forums.
@@ -23,7 +23,7 @@ Rules:
 - Output ONLY a raw JSON array of 4 strings. No markdown.`;
 
 /**
- * שלב 2: מיצוי נושאים (Topic Discovery) עם סינון Zapier/ChatGPT Wrappers
+ * Stage 2: topic discovery with Zapier/ChatGPT wrapper filtering
  */
 export const TOPIC_DISCOVERY_PROMPT = `אתה אנליסט קרנות הון סיכון ומומחה ל-Micro-SaaS רווחי.
 קיבלת תוצאות חיפוש מהאינטרנט על בעיות של עסקים, חנויות ויוצרי תוכן.
@@ -64,7 +64,7 @@ export const TOPIC_DISCOVERY_PROMPT = `אתה אנליסט קרנות הון ס�
 }`;
 
 /**
- * שלב 3: ייצור רעיונות (Idea Generation) עם מבחן ROI מסחרי
+ * Stage 3: idea generation with a commercial ROI test
  */
 export const IDEA_GENERATION_PROMPT = `אתה יזם SaaS סדרתי. צור רעיונות עסקיים מעשיים, רווחיים וקונקרטיים המבוססים אך ורק על הסיגנלים שסופקו.
 חובה להחזיר את כל הטקסטים בעברית בלבד (למעט שמות מוצרים ומונחים טכניים).

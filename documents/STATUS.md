@@ -1,6 +1,31 @@
 # Project Documentation Status
 
-Last updated: 2026-08-27
+Last updated: 2026-09-12
+
+## 2026-09-12 — ✅ DONE: inactive providers sink to bottom of management table
+
+- `llmProviders` computed orders `[...active, ...inactive]` when "Show inactive" is on. +1 spec.
+- **Verified:** targeted **39/39** · `ng build` exit 0. No commit/push.
+
+## 2026-09-12 — ✅ FIXED: test-now misrouted result + toast direction/design
+
+- **Test-now bug:** `POST /llm/models/:id/test` passed only KEYS to `testLlm` → `findModelByKey` (unique only per provider) saved the result to a wrong same-key model (e.g. `openai/gpt-oss-20b` exists under openrouter AND nvidia) → UI showed nothing. **Fix:** `modelId` flows controller → testLlm → capability gate + saveTestResult (`findModelById`); testAllModels passes target id too. +1 regression spec.
+- **Toasts (`_primeng-overrides.css`, new section):** `direction: ltr` (English texts, dialogs convention) fixes the bidi ".Model..." artifact; message = theme `--color-surface-elevated` + neutral border/text; only the icon is severity-colored (success/error/warn/info).
+- **Verified:** backend **518/518 (48 suites)** + build 0; frontend `ng build` exit 0 (CSS-only). graphify updated. No architecture-diagram change. No commit/push. **✅ User-verified live (2026-09-12): "test now תקין".**
+
+## 2026-09-12 — ✅ DONE (D+E): provider hard delete + active toggle switches + show-inactive
+
+- **Problem:** no provider delete endpoint at all; deactivated providers invisible in the management page (`filter(p => p.active)`) with no way to re-activate from UI (`toggleProviderActive` was dead code); provider dialog lied about deleting.
+- **Backend:** NEW `DELETE /llm-provider/:id` (AdminGuard) — DB cascades: models → test results → user defaults. Seed now **bootstrap-only** (skips when table non-empty) → deleted providers stay deleted. `LlmProviderController_deleteProvider` hidden from the LLM agent. +4 backend tests.
+- **Frontend:** store/service `deleteProvider` → real delete; `showInactive` toggle (p-toggleswitch, "Show inactive") reveals + re-activates providers; row active state = `p-toggleswitch` for providers AND models (consistent with dialogs); models-table Active column removed (redundant); provider "Delete permanently" dialog (cannot be undone); removed orphaned soft `deleteModel` dialog + `.status-dot`/`.col-status` CSS.
+- **Verified:** frontend **526/526 (57 files)** + `ng build` exit 0; backend **517/517 (48 suites)** + `npm run build` exit 0. Mojibake clean. graphify updated. No architecture-diagram change. No commit/push.
+
+## 2026-09-12 — ✅ DONE: permanent model delete in UI + provider dialog honest (deactivation)
+
+- **Problem:** UI could only "soft delete" — models got PATCH `{active:false}` while a hard `DELETE /llm-provider/models/:id` existed unused; provider dialog said "Delete Provider" but only deactivated (backend has NO provider delete endpoint).
+- **Fix (frontend only, 5 files):** service `deleteModel()` → real DELETE route; store `hardDeleteModel()`; component `hardDeleteModel()` confirm ("Permanently delete this model, its test history and all user defaults? This cannot be undone."); HTML — model row: power (deactivate) + red trash (delete permanently), provider row: power ("Deactivate provider") + dialog/toast reworded to Deactivated.
+- **Cascades on model hard delete (pre-existing):** test results + `user_llm_defaults` (FK CASCADE). Seeds: single-model delete sticks; deleting a seeded provider's DB row resurrects it on restart.
+- **Verified:** targeted 35/35 (+3); full frontend `npx ng test --watch=false` **523/523 (57 files)**; `npx ng build` exit 0 (pre-existing strain-hunter.css budget warning, 8.89KB). Mojibake clean. No architecture-diagram change. No commit/push.
 
 ## 2026-08-27 — ✅ DONE: comparison dialog cells no longer filter the main table
 

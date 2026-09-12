@@ -73,9 +73,9 @@ export class IdeasTasksService {
       // for a working one that just hasn't finished.
       this.logger.warn('Nightly ideas generation produced 0 grounded sessions — nothing to save');
       if (this.telegramNotifyService.isEnabled()) {
-        // גם ריצה ריקה נושאת את בלוק קציר התרגומים — אחרת יום בלי רעיונות
-        // יבלע לחלוטין את הדיווח על חטאות מפה (buildTranslationTrackerSection
-        // מחזיר מחרוזת ריקה כשאין רשומות, אז ההודעה נשארת כמו שהייתה).
+        // Even an empty run carries the translation-harvest block — otherwise a day with no ideas
+        // would completely swallow the report on map misses (buildTranslationTrackerSection
+        // returns an empty string when there are no records, so the message stays as it was).
         await this.telegramNotifyService.sendMessage(
           '🌙 ריצת הלילה הסתיימה בלי רעיונות grounded — לא נוצרו שמירות חדשות. אפשר לנסות שוב מאוחר יותר.' +
             buildTranslationTrackerSection(),

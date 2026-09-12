@@ -29,6 +29,7 @@ describe('LlmProvidersManagement', () => {
         createModel: vi.fn(),
         updateModel: vi.fn(),
         softDeleteModel: vi.fn(),
+        hardDeleteModel: vi.fn(),
         deleteTestResult: vi.fn(),
         deleteAllTestResults: vi.fn(),
         setDefaultModel: vi.fn(),
@@ -239,8 +240,15 @@ describe('LlmProvidersManagement', () => {
                 { id: 1, key: 'test', label: 'Test Provider', baseUrl: 'https://test.com', active: true, models: [] },
             ]);
             component.openEditProviderDialog({
-                id: 1, key: 'test', label: 'Test Provider', baseUrl: 'https://test.com', active: true,
-                models: [], modelsCount: 0, createdAt: '', updatedAt: '',
+                id: 1,
+                key: 'test',
+                label: 'Test Provider',
+                baseUrl: 'https://test.com',
+                active: true,
+                models: [],
+                modelsCount: 0,
+                createdAt: '',
+                updatedAt: '',
             });
             expect(component.providerDialogTitle()).toContain('Edit Provider');
             expect(component.providerDialogTitle()).toContain('Test Provider');
@@ -264,16 +272,83 @@ describe('LlmProvidersManagement', () => {
     });
 
     describe('deleteProvider', () => {
-        it('should call confirmService.confirm', () => {
+        it('should open a permanent-delete confirm dialog', () => {
             component.deleteProvider(1);
-            expect(mockConfirmService.confirm).toHaveBeenCalled();
+            const conf = mockConfirmService.confirm.mock.calls.at(-1)![0];
+            expect(conf.header).toBe('Delete Provider Permanently');
+            expect(conf.message).toContain('cannot be undone');
+        });
+
+        it('should call store.deleteProvider and toast on accept', () => {
+            component.deleteProvider(1);
+            const conf = mockConfirmService.confirm.mock.calls.at(-1)![0];
+            conf.accept();
+            expect(mockProviderStore.deleteProvider).toHaveBeenCalledWith(1);
+            expect(mockMessageService.add).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    summary: 'Deleted',
+                    detail: 'Provider has been permanently deleted.',
+                }),
+            );
         });
     });
 
-    describe('deleteModel', () => {
-        it('should call confirmService.confirm', () => {
-            component.deleteModel(1, 2);
-            expect(mockConfirmService.confirm).toHaveBeenCalled();
+    describe('setProviderActive / setModelActive', () => {
+        it('should update provider active state via the store', () => {
+            component.setProviderActive({ id: 1, active: true } as any, false);
+            expect(mockProviderStore.updateProvider).toHaveBeenCalledWith(1, { active: false });
+        });
+
+        it('should skip the store when the state is unchanged', () => {
+            mockProviderStore.updateProvider.mockClear();
+            component.setProviderActive({ id: 1, active: true } as any, true);
+            expect(mockProviderStore.updateProvider).not.toHaveBeenCalled();
+        });
+
+        it('should update model active state via the store', () => {
+            component.setModelActive(7, { id: 2, active: false } as any, true);
+            expect(mockProviderStore.updateModel).toHaveBeenCalledWith(7, 2, { active: true });
+        });
+    });
+
+    describe('showInactive filter', () => {
+        it('should hide inactive providers by default and show them when toggled', () => {
+            mockProviderStore.providers.mockReturnValue([
+                { id: 1, active: true, models: [] },
+                { id: 2, active: false, models: [] },
+            ]);
+            expect(component.llmProviders().map((p) => p.id)).toEqual([1]);
+            component.toggleShowInactive(true);
+            expect(component.llmProviders().map((p) => p.id)).toEqual([1, 2]);
+        });
+
+        it('should sort inactive providers to the bottom when shown', () => {
+            mockProviderStore.providers.mockReturnValue([
+                { id: 2, active: false, models: [] },
+                { id: 1, active: true, models: [] },
+                { id: 3, active: false, models: [] },
+            ]);
+            component.toggleShowInactive(true);
+            expect(component.llmProviders().map((p) => p.id)).toEqual([1, 2, 3]);
+        });
+    });
+
+    describe('hardDeleteModel', () => {
+        it('should call confirmService.confirm with a permanent-delete warning', () => {
+            component.hardDeleteModel(1, 2);
+            const conf = mockConfirmService.confirm.mock.calls.at(-1)![0];
+            expect(conf.header).toBe('Delete Model Permanently');
+            expect(conf.message).toContain('cannot be undone');
+        });
+
+        it('should call store.hardDeleteModel and toast on accept', () => {
+            component.hardDeleteModel(1, 2);
+            const conf = mockConfirmService.confirm.mock.calls.at(-1)![0];
+            conf.accept();
+            expect(mockProviderStore.hardDeleteModel).toHaveBeenCalledWith(1, 2);
+            expect(mockMessageService.add).toHaveBeenCalledWith(
+                expect.objectContaining({ summary: 'Deleted', detail: 'Model has been permanently deleted.' }),
+            );
         });
     });
 });

@@ -99,7 +99,7 @@ export class Chat implements OnInit, OnDestroy {
 
     currentUserProfile = this.userStore.currentUserProfile;
 
-    // 🚀 כאן אנחנו שואבים רק מודלים עם יכולת טקסט (צ'אט) מה-Store 🚀
+    // 🚀 Here we pull only text-capable (chat) models from the store 🚀
     models = this.llmProviderStore.chatModels;
 
     promptText = signal('');
@@ -282,7 +282,7 @@ export class Chat implements OnInit, OnDestroy {
             return;
         }
 
-        // PrimeNG שומר את ה-ID המספרי בזכות ה- optionValue="id"
+        // PrimeNG keeps the numeric ID thanks to optionValue="id"
         const selectedModelId = Number(this.chatForm.value.model);
         const modelSelection = this.getModelSelection(selectedModelId);
         this.chatForm.patchValue({ prompt: '' });

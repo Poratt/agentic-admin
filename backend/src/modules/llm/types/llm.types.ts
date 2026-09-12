@@ -103,6 +103,7 @@ export type LlmRuntimeSelection = {
 };
 
 export type LlmModelCheckTarget = {
+  id?: number;
   provider: LlmProvider;
   name: string;
   active: boolean;

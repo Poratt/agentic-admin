@@ -55,6 +55,10 @@
                             </span>
                         </div>
                     </div>
+                    <label class="show-inactive-toggle" for="show-inactive">
+                        <p-toggleswitch [ngModel]="showInactive()" (ngModelChange)="toggleShowInactive($event)" inputId="show-inactive" />
+                        Show inactive
+                    </label>
                     @if (isAdmin()) {
                         <button type="button" class="primary-btn filled sm" (click)="openAddProviderDialog()">
                             <i class="ph ph-plus"></i>
@@ -107,7 +111,7 @@
                                     <div class="row-actions">
                                         <button
                                             type="button"
-                                            class="icon-only transparent-btn"
+                                            class="icon-only transparent-btn sm"
                                             aria-label="Edit"
                                             appTooltip
                                             [text]="'Edit provider'"
@@ -115,12 +119,17 @@
                                         >
                                             <i class="ph ph-pencil-simple"></i>
                                         </button>
+                                        <p-toggleswitch
+                                            [ngModel]="provider.active"
+                                            (ngModelChange)="setProviderActive(provider, $event)"
+                                            [ariaLabel]="provider.active ? 'Deactivate provider' : 'Activate provider'"
+                                        />
                                         <button
                                             type="button"
-                                            class="icon-only danger-btn"
-                                            aria-label="Delete"
+                                            class="icon-only danger-btn sm"
+                                            aria-label="Delete provider permanently"
                                             appTooltip
-                                            [text]="'Delete provider'"
+                                            [text]="'Delete permanently'"
                                             (click)="deleteProvider(provider.id)"
                                         >
                                             <i class="ph ph-trash"></i>
@@ -181,9 +190,6 @@
                                                     <th pSortableColumn="label">
                                                         <div class="sortable-column-header">Model <p-sort-icon field="label" /></div>
                                                     </th>
-                                                    <th class="col-status" pSortableColumn="active">
-                                                        <div class="sortable-column-header">Active <p-sort-icon field="active" /></div>
-                                                    </th>
                                                     <th class="col-perf" pSortableColumn="performanceScore">
                                                         <div class="sortable-column-header">
                                                             Performance <p-sort-icon field="performanceScore" />
@@ -229,15 +235,6 @@
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td class="col-status">
-                                                        <span
-                                                            class="status-dot"
-                                                            [class.status-active]="model.active"
-                                                            [class.status-inactive]="!model.active"
-                                                        >
-                                                            {{ model.active ? 'Active' : 'Inactive' }}
-                                                        </span>
-                                                    </td>
                                                     <td class="col-perf">
                                                         @if (model.hasTests) {
                                                             <div class="metric-cell">
@@ -267,7 +264,13 @@
                                                                 [text]="testingModelId() === model.id ? 'Testing...' : 'Test model'"
                                                                 (click)="testModel(model.id)"
                                                             >
-                                                                <i class="ph ph-lightning"></i>
+                                                                <i
+                                                                    [class]="
+                                                                        testingModelId() === model.id
+                                                                            ? 'ph ph-circle-notch ph-spin'
+                                                                            : 'ph ph-lightning'
+                                                                    "
+                                                                ></i>
                                                             </button>
                                                         }
                                                     </td>
@@ -303,13 +306,18 @@
                                                                 >
                                                                     <i class="ph ph-pencil-simple"></i>
                                                                 </button>
+                                                                <p-toggleswitch
+                                                                    [ngModel]="model.active"
+                                                                    (ngModelChange)="setModelActive(provider.id, model, $event)"
+                                                                    [ariaLabel]="model.active ? 'Deactivate model' : 'Activate model'"
+                                                                />
                                                                 <button
                                                                     type="button"
                                                                     class="icon-only danger-btn sm"
-                                                                    aria-label="Delete model"
+                                                                    aria-label="Delete model permanently"
                                                                     appTooltip
-                                                                    [text]="'Deactivate model'"
-                                                                    (click)="deleteModel(provider.id, model.id)"
+                                                                    [text]="'Delete permanently'"
+                                                                    (click)="hardDeleteModel(provider.id, model.id)"
                                                                 >
                                                                     <i class="ph ph-trash"></i>
                                                                 </button>

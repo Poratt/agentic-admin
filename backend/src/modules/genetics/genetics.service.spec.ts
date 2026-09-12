@@ -340,7 +340,7 @@ describe('GeneticsService', () => {
         repo.findOne.mockResolvedValue(existing);
         repo.save.mockResolvedValue(existing);
 
-        // לא במפה הקשיחה — fallback לתרגום LLM
+        // Not in the hardcoded map — fallback to LLM translation
         cannlyticsService.getEnglishName.mockReturnValue(null);
         cannlyticsService.getStrain.mockResolvedValue(null);
         httpService.get.mockReturnValue(of({ data: { data: [] } }) as any);
@@ -349,7 +349,7 @@ describe('GeneticsService', () => {
           result: { results: [], answer: undefined },
         } as any);
 
-        // קריאה 1: תרגום → 'Obama Runtz'; קריאה 2: העשרה
+        // Call 1: translation → 'Obama Runtz'; call 2: enrichment
         llmClientService.generateResponse
           .mockResolvedValueOnce({ content: 'Obama Runtz' } as any)
           .mockResolvedValueOnce({
@@ -412,7 +412,7 @@ describe('GeneticsService', () => {
           success: true,
           result: { results: [], answer: undefined },
         } as any);
-        // קריאה 1: תרגום → 'Obama Runtz'; קריאה 2: העשרה
+        // Call 1: translation → 'Obama Runtz'; call 2: enrichment
         llmClientService.generateResponse
           .mockResolvedValueOnce({ content: 'Obama Runtz' } as any)
           .mockResolvedValueOnce({
@@ -445,7 +445,7 @@ describe('GeneticsService', () => {
         repo.findOne.mockResolvedValue(existing);
         repo.save.mockResolvedValue(existing);
 
-        cannlyticsService.getEnglishName.mockReturnValue('Gorilla Glue'); // map hit — חינם, לא LLM
+        cannlyticsService.getEnglishName.mockReturnValue('Gorilla Glue'); // map hit — free, no LLM
         cannlyticsService.getStrain.mockResolvedValue(null);
         httpService.get.mockReturnValue(of({ data: { data: [] } }) as any);
         webSearchService.search.mockResolvedValue({
@@ -515,7 +515,7 @@ describe('GeneticsService', () => {
           success: true,
           result: { results: [], answer: undefined },
         } as any);
-        // תרגום (בדיוק פעם אחת) + העשרה
+        // Translation (exactly once) + enrichment
         llmClientService.generateResponse
           .mockResolvedValueOnce({ content: 'Obama Runtz' } as any)
           .mockResolvedValueOnce({
@@ -529,7 +529,7 @@ describe('GeneticsService', () => {
         const result = await service.enrichMissing();
 
         expect(result.total).toBe(1);
-        // תרגום + העשרה = 2 — לא תרגום נפרד לכל chunk-method (searchChunk/Cannlytics/Demarily)
+        // Translation + enrichment = 2 — not a separate translation per chunk-method (searchChunk/Cannlytics/Demarily)
         expect(llmClientService.generateResponse).toHaveBeenCalledTimes(2);
         expect(cannlyticsService.getStrain).toHaveBeenCalledWith('Obama Runtz');
         expect(webSearchService.search).toHaveBeenCalledWith(expect.stringContaining('Obama Runtz'), true);

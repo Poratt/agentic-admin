@@ -64,4 +64,52 @@ describe('parseLlmJson', () => {
     const result = parseLlmJson(input, 'test');
     expect(result).toEqual({ key: 'value' });
   });
+
+  describe('almost-JSON recovery', () => {
+    it('recovers an unescaped ASCII quote inside a Hebrew string value', () => {
+      // `מע"מ` (VAT) is normally typed with a plain quote. Inside a JSON string that
+      // quote terminates the value early, which is what produced the production
+      // failure "Expected ',' or '}' after property value".
+      const input = '[{"title":"מחשבון מע"מ","description":"כלי לפרילנסרים"}]';
+      const result = parseLlmJson<{ title: string; description: string }[]>(input, 'test');
+      expect(result).toEqual([{ title: 'מחשבון מע"מ', description: 'כלי לפרילנסרים' }]);
+    });
+
+    it('recovers several Hebrew abbreviations in one payload', () => {
+      const input = '```json\n[\n  {\n    "title": "מחשבון מע"מ",\n    "targetMarket": "סוכני נדל"ן",\n  },\n]\n```';
+      const result = parseLlmJson<{ title: string; targetMarket: string }[]>(input, 'test');
+      expect(result).toEqual([{ title: 'מחשבון מע"מ', targetMarket: 'סוכני נדל"ן' }]);
+    });
+
+    it('escapes raw newlines inside string values', () => {
+      const input = '{"description":"שורה ראשונה\nשורה שנייה"}';
+      const result = parseLlmJson<{ description: string }>(input, 'test');
+      expect(result).toEqual({ description: 'שורה ראשונה\nשורה שנייה' });
+    });
+
+    it('drops trailing commas before closing brackets', () => {
+      const input = '{"a":[1,2,],"b":"c",}';
+      const result = parseLlmJson(input, 'test');
+      expect(result).toEqual({ a: [1, 2], b: 'c' });
+    });
+
+    it('ignores prose wrapped around the JSON payload', () => {
+      const input = 'הנה הרעיונות שביקשת:\n[{"title":"כלי"}]\nמקווה שזה עוזר!';
+      const result = parseLlmJson(input, 'test');
+      expect(result).toEqual([{ title: 'כלי' }]);
+    });
+
+    it('leaves valid JSON with properly escaped quotes untouched', () => {
+      const input = '{"note":"say \\"hi\\""}';
+      const result = parseLlmJson<{ note: string }>(input, 'test');
+      expect(result).toEqual({ note: 'say "hi"' });
+    });
+
+    it('does not resurrect genuinely broken input', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const result = parseLlmJson('no brackets or json here', 'test');
+      expect(result).toBeNull();
+      consoleSpy.mockRestore();
+    });
+  });
 });

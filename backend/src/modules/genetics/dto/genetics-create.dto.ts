@@ -6,7 +6,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
  *
  * The `name` must be unique and will be used as the lookup key from the frontend.
  * `color` must be a valid hex color string (e.g., `#228B22`).
- * `type` must be one of: היברידי | סאטיבה | אינדיקה
+ * `type` must be one of the Hebrew values for: hybrid | sativa | indica
  * `parent1`, `parent2`, `origin`, `description` are optional.
  */
 export class GeneticsCreateDto {

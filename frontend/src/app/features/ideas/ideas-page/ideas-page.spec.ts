@@ -2,6 +2,29 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { IdeasPage } from './ideas-page';
 import { IdeasStore } from '../../../core/store/ideas.store';
+import { PageStates } from '../../../core/enums/page-states.enum';
+import { SavedIdea } from '../../../core/models/saved-idea.model';
+
+/**
+ * Builds the exact shape IdeasStore.toSavedIdea() produces for a freshly streamed
+ * idea: every field is populated except id/userId/sessionId, which only exist once
+ * the backend has persisted the idea.
+ */
+function liveIdea(title: string): SavedIdea {
+  const idea = new SavedIdea();
+  idea.title = title;
+  idea.description = `${title} description`;
+  idea.targetMarket = 'developers';
+  idea.validationScore = 7;
+  idea.validationReason = '';
+  idea.risks = [];
+  idea.competitors = [];
+  idea.nextSteps = [];
+  idea.signalsReferenced = [];
+  idea.groundedInSignals = true;
+  idea.isFavorite = false;
+  return idea;
+}
 
 describe('IdeasPage', () => {
   let component: IdeasPage;
@@ -70,5 +93,33 @@ describe('IdeasPage', () => {
 
   it('should call loadNightlyUnread on init', () => {
     expect(ideasStoreMock.loadNightlyUnread).toHaveBeenCalled();
+  });
+
+  it('renders every freshly streamed idea even though none of them has an id yet', () => {
+    // Regression for NG0955: `track idea.id` resolved to undefined for all five ideas
+    // (toSavedIdea deliberately leaves id unset), so the repeater saw five identical
+    // empty keys. Angular reports that as a logged NG0955 rather than a thrown error,
+    // so the assertion has to look at the console output, not just the rendered DOM.
+    ideasStoreMock.pageState.mockReturnValue(PageStates.Ready);
+    ideasStoreMock.ideas.mockReturnValue(['A', 'B', 'C', 'D', 'E'].map(liveIdea));
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // A fresh fixture is required: the one from beforeEach is still attached to the
+    // ApplicationRef and would be re-checked against the newly mocked store state.
+    fixture.destroy();
+    const listFixture = TestBed.createComponent(IdeasPage);
+    listFixture.detectChanges();
+
+    const reported = [...consoleError.mock.calls, ...consoleWarn.mock.calls]
+      .map((call) => call.map((part) => String(part)).join(' '))
+      .filter((message) => message.includes('NG0955'));
+
+    expect(reported).toEqual([]);
+    expect(listFixture.nativeElement.querySelectorAll('app-idea-card').length).toBe(5);
+
+    consoleError.mockRestore();
+    consoleWarn.mockRestore();
   });
 });

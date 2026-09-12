@@ -1330,6 +1330,39 @@
           "LLM Provider"
         ],
         "toolIcon": "ph-pencil-simple"
+      },
+      "delete": {
+        "description": "Permanently deletes an LLM provider. DB-level cascades remove its models, their test results and user default-model rows. Note: built-in seeded providers are only re-created when the providers table is completely empty.",
+        "operationId": "LlmProviderController_deleteProvider",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider deleted successfully"
+          },
+          "401": {
+            "description": "JWT token missing or invalid"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete provider",
+        "summaryHe": "מוחקים ספק לצמיתות יחד עם כל המודלים שלו",
+        "tags": [
+          "LLM Provider"
+        ],
+        "toolIcon": "ph-trash"
       }
     },
     "/llm-provider/{id}/models": {

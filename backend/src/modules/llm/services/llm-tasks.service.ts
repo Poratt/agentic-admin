@@ -13,14 +13,14 @@ export class LlmTasksService {
         private readonly providerService: LlmProviderService,
     ) { }
 
-    // 🚀 הרצה כל שעתיים 🚀
+    // 🚀 Runs every two hours 🚀
     @Cron('0 0 */2 * * *')
     async handleNightlyLlmHealthCheck() {
         if (!this.LLM_HEALTH_CHECK_ENABLED) return;
         this.logger.log('--- Starting Nightly LLM Auto-Health Check Cron Job ---');
 
         try {
-            // מריץ את בדיקת הבריאות לכל המודלים הפעילים ב-DB (ששומרת אוטומטית לטבלה החדשה שלנו!)
+            // Runs the health check for all active models in the DB (which saves automatically to our new table!)
             const result = await this.healthService.testAllModels();
 
             this.logger.log(
@@ -31,7 +31,7 @@ export class LlmTasksService {
         }
     }
 
-    // 🚀 ניקוי יומי של תוצאות בדיקות מודלים ישנות מ-30 יום — רץ כל יום ב-03:00 🚀
+    // 🚀 Daily cleanup of model test results older than 30 days — runs every day at 03:00 🚀
     @Cron('0 0 3 * * *')
     async cleanupOldLlmModelTestResults() {
         this.logger.log('--- Starting LLM Model Test Results Retention Cleanup ---');

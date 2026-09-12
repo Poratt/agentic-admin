@@ -1,5 +1,14 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiOkResponse, ApiCreatedResponse, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiOkResponse,
+  ApiCreatedResponse,
+  ApiBadRequestResponse,
+  ApiUnauthorizedResponse,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { LlmProviderService } from './llm-provider.service';
 import { CreateLlmProviderDto } from './dto/create-llm-provider.dto';
 import { UpdateLlmProviderDto } from './dto/update-llm-provider.dto';
@@ -26,7 +35,12 @@ export class LlmProviderController {
 
   @Post()
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Create new provider', summaryHe: 'רושמים ספק מודלים (Provider) חדש במערכת', toolIcon: 'ph-database', description: 'Adds a new LLM provider to the system configuration.' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Create new provider',
+    summaryHe: 'רושמים ספק מודלים (Provider) חדש במערכת',
+    toolIcon: 'ph-database',
+    description: 'Adds a new LLM provider to the system configuration.',
+  } as CustomApiOperationOptions)
   @ApiCreatedResponse({ description: 'Provider created successfully' })
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
   async create(@Body() dto: CreateLlmProviderDto): Promise<ServiceResultContainer<LlmProviderEntity>> {
@@ -34,7 +48,12 @@ export class LlmProviderController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all providers', summaryHe: 'מציגים את כל ספקי ה-AI והמודלים המוגדרים במערכת', toolIcon: 'ph-list-bullets', description: 'Retrieves a list of all configured LLM providers.' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Get all providers',
+    summaryHe: 'מציגים את כל ספקי ה-AI והמודלים המוגדרים במערכת',
+    toolIcon: 'ph-list-bullets',
+    description: 'Retrieves a list of all configured LLM providers.',
+  } as CustomApiOperationOptions)
   @ApiOkResponse({ description: 'List of providers retrieved' })
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
   async findAll(): Promise<ServiceResultContainer<LlmProviderEntity[]>> {
@@ -43,7 +62,12 @@ export class LlmProviderController {
 
   @Patch(':id')
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Update provider', summaryHe: 'מעדכנים את הגדרות החיבור, הכתובת והמפתח של הספק', toolIcon: 'ph-pencil-simple', description: 'Updates an existing LLM provider configuration.' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Update provider',
+    summaryHe: 'מעדכנים את הגדרות החיבור, הכתובת והמפתח של הספק',
+    toolIcon: 'ph-pencil-simple',
+    description: 'Updates an existing LLM provider configuration.',
+  } as CustomApiOperationOptions)
   @ApiOkResponse({ description: 'Provider updated successfully' })
   @ApiBadRequestResponse({ description: 'Invalid provider ID' })
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
@@ -51,9 +75,29 @@ export class LlmProviderController {
     return this.service.updateProvider(+id, dto);
   }
 
+  @Delete(':id')
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: 'Delete provider',
+    summaryHe: 'מוחקים ספק לצמיתות יחד עם כל המודלים שלו',
+    toolIcon: 'ph-trash',
+    description:
+      'Permanently deletes an LLM provider. DB-level cascades remove its models, their test results and user default-model rows. Note: built-in seeded providers are only re-created when the providers table is completely empty.',
+  } as CustomApiOperationOptions)
+  @ApiOkResponse({ description: 'Provider deleted successfully' })
+  @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
+  async deleteProvider(@Param('id') id: string): Promise<ServiceResultContainer<void>> {
+    return this.service.deleteProvider(+id);
+  }
+
   @Post(':id/models')
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Add model to provider', summaryHe: 'מוסיפים מודל חדש תחת ספק ה-LLM שנבחר', toolIcon: 'ph-plus-circle', description: 'Creates a new model associated with the specified provider.' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Add model to provider',
+    summaryHe: 'מוסיפים מודל חדש תחת ספק ה-LLM שנבחר',
+    toolIcon: 'ph-plus-circle',
+    description: 'Creates a new model associated with the specified provider.',
+  } as CustomApiOperationOptions)
   @ApiCreatedResponse({ description: 'Model created successfully' })
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
   async createModel(@Param('id') id: string, @Body() dto: CreateLlmModelDto): Promise<ServiceResultContainer<LlmModelEntity>> {
@@ -62,7 +106,12 @@ export class LlmProviderController {
 
   @Patch('models/:id')
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Update model', summaryHe: 'מעדכנים את ההגדרות, התפקיד והסטטוס הפעיל של מודל קיים', toolIcon: 'ph-sliders', description: 'Updates an existing LLM model configuration.' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Update model',
+    summaryHe: 'מעדכנים את ההגדרות, התפקיד והסטטוס הפעיל של מודל קיים',
+    toolIcon: 'ph-sliders',
+    description: 'Updates an existing LLM model configuration.',
+  } as CustomApiOperationOptions)
   @ApiOkResponse({ description: 'Model updated successfully' })
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
   async updateModel(@Param('id') id: string, @Body() dto: UpdateLlmModelDto): Promise<ServiceResultContainer<LlmModelEntity>> {
@@ -71,7 +120,12 @@ export class LlmProviderController {
 
   @Delete('models/:id')
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Delete model', summaryHe: 'מכבים או מוחקים מודל לצמיתות מהספק שלו', toolIcon: 'ph-trash', description: 'Deletes an LLM model by ID.' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Delete model',
+    summaryHe: 'מכבים או מוחקים מודל לצמיתות מהספק שלו',
+    toolIcon: 'ph-trash',
+    description: 'Deletes an LLM model by ID.',
+  } as CustomApiOperationOptions)
   @ApiOkResponse({ description: 'Model deleted successfully' })
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
   async deleteModel(@Param('id') id: string): Promise<ServiceResultContainer<void>> {
@@ -80,7 +134,12 @@ export class LlmProviderController {
 
   @Delete('models/:modelId/test-results')
   @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Delete all test results for model', summaryHe: 'מנקים את כל היסטוריית בדיקות החיבור של המודל', toolIcon: 'ph-eraser', description: 'Deletes all test results associated with the specified model.' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Delete all test results for model',
+    summaryHe: 'מנקים את כל היסטוריית בדיקות החיבור של המודל',
+    toolIcon: 'ph-eraser',
+    description: 'Deletes all test results associated with the specified model.',
+  } as CustomApiOperationOptions)
   @ApiOkResponse({ description: 'Number of deleted rows' })
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
   async deleteTestResultsForModel(@Param('modelId') modelId: string): Promise<ServiceResultContainer<number>> {
@@ -88,7 +147,12 @@ export class LlmProviderController {
   }
 
   @Get(':id/models')
-  @ApiOperation({ summary: 'Get models for provider', summaryHe: 'מציגים את כל המודלים המשויכים לספק שנבחר', toolIcon: 'ph-cube', description: 'Retrieves all models associated with the given provider.' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Get models for provider',
+    summaryHe: 'מציגים את כל המודלים המשויכים לספק שנבחר',
+    toolIcon: 'ph-cube',
+    description: 'Retrieves all models associated with the given provider.',
+  } as CustomApiOperationOptions)
   @ApiOkResponse({ description: 'List of models retrieved' })
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
   async findModels(@Param('id') id: string): Promise<ServiceResultContainer<LlmModelEntity[]>> {
@@ -98,7 +162,12 @@ export class LlmProviderController {
   @Post('cleanup-test-results')
   @UseGuards(AdminGuard)
   @RequiresConfirmation()
-  @ApiOperation({ summary: 'Delete old test results', summaryHe: 'מנקים בדיקות חיבור ישנות מהארכיון על בסיס תקופת שימור', toolIcon: 'ph-broom', description: 'Manually triggers cleanup of LLM test results older than retention period.' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Delete old test results',
+    summaryHe: 'מנקים בדיקות חיבור ישנות מהארכיון על בסיס תקופת שימור',
+    toolIcon: 'ph-broom',
+    description: 'Manually triggers cleanup of LLM test results older than retention period.',
+  } as CustomApiOperationOptions)
   @ApiQuery({ name: 'retentionDays', required: false, type: Number, description: 'Delete results older than N days (default: 30)' })
   @ApiOkResponse({ description: 'Number of deleted rows' })
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
@@ -112,7 +181,12 @@ export class LlmProviderController {
   }
 
   @Get('test-results')
-  @ApiOperation({ summary: 'Get test results', summaryHe: 'מציגים את ההיסטוריה המלאה של בדיקות החיבור במערכת', toolIcon: 'ph-activity', description: 'Retrieves paginated list of LLM model test results with total count.' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Get test results',
+    summaryHe: 'מציגים את ההיסטוריה המלאה של בדיקות החיבור במערכת',
+    toolIcon: 'ph-activity',
+    description: 'Retrieves paginated list of LLM model test results with total count.',
+  } as CustomApiOperationOptions)
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max results to return (default: 50)' })
   @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Offset for pagination (default: 0)' })
   @ApiOkResponse({ description: 'Test results list with total count' })
@@ -123,5 +197,4 @@ export class LlmProviderController {
   ): Promise<ServiceResultContainer<{ results: import('./entities/llm-model-test-results.entity').LlmModelTestResultEntity[]; total: number }>> {
     return this.service.findTestResults(limit ?? 50, offset ?? 0);
   }
-
 }

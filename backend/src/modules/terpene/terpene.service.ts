@@ -290,9 +290,9 @@ export class TerpeneService {
             });
             const translated = response.content?.trim();
             if (translated && !HEBREW_REGEX.test(translated)) {
-                // לטרפנים אין מפה קשיחה — כל תרגום LLM נרשם בטראקר כך
-                // שהסיכום הלילי בטלגרם בונה בהדרגה את הבסיס למפת טרפנים
-                // עתידית (איזה שמות בכלל עוברים דרך ה-LLM).
+                // Terpenes have no hardcoded map — every LLM translation is recorded in the tracker so
+                // that the nightly Telegram summary gradually builds the basis for a future
+                // terpene map (which names even pass through the LLM).
                 translationTracker.recordTerpeneTranslation(name, translated);
                 this.logger.debug(`[translate] terpene "${name}" → LLM: "${translated}"`);
                 return translated;
@@ -305,8 +305,8 @@ export class TerpeneService {
     }
 
     /**
-     * מתרגם רשימת שמות לאנגלית פעם אחת לכל chunk — כך searchChunk לא
-     * קורא ל-LLM שוב על שמות שכבר תורגמו ב-enrichMissing/enrichBatch.
+     * Translates a list of names to English once per chunk — so searchChunk does not
+     * call the LLM again on names already translated in enrichMissing/enrichBatch.
      */
     private async resolveEnglishNames(names: string[]): Promise<Map<string, string>> {
         const map = new Map<string, string>();
@@ -317,8 +317,8 @@ export class TerpeneService {
     }
 
     /**
-     * מדרג תוצאות חיפוש לפי רלוונטיות: שם הטרפן (אנגלית/עברית) קודם, אחר כך
-     * מילות קנאביס — כך רעש לא מדלל את ההקשר שמועבר ל-LLM.
+     * Ranks search results by relevance: the terpene name (English/Hebrew) first, then
+     * cannabis keywords — so noise does not dilute the context passed to the LLM.
      */
     private rankSearchResults(
         enName: string,
@@ -488,8 +488,8 @@ Return JSON only:
             colorLight,
         });
 
-        // תצוגה מקדימה בלבד — אין שמירה אוטומטית (הלקוח מחליט לשמור דרך Update),
-        // בהתאם לתיעוד ה-endpoint: "Does not persist — caller decides whether to save."
+        // Preview only — no automatic save (the client decides to save via Update),
+        // per the endpoint docs: "Does not persist — caller decides whether to save."
         return existing;
     }
 }

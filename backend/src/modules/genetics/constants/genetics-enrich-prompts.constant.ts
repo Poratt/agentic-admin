@@ -43,7 +43,7 @@ Return format:
  * Builds the user prompt for a genetics batch enrichment request.
  *
  * @param names The list of strain names to enrich. Assumed to be already
- *   deduplicated and filtered (empty / "לא ידוע" values removed upstream).
+ *   deduplicated and filtered (empty / "לא ידוע" (unknown) values removed upstream).
  * @param searchResults Optional map of strain name → web search results text.
  */
 export function buildGeneticsEnrichUserPrompt(

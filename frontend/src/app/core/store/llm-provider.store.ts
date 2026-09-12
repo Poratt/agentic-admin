@@ -18,7 +18,7 @@ export interface GroupedLlmProvider {
 }
 
 @Injectable({
-    providedIn: 'root'
+    providedIn: 'root',
 })
 export class LlmProviderStore {
     private llmProviderService = inject(LlmProviderService);
@@ -26,21 +26,28 @@ export class LlmProviderStore {
     providersResource = httpResource<ServiceResultContainer<LlmProvider[]>>(() => `${environment.apiUrl}/llm-provider`);
 
     providers = computed(() =>
-        this.providersResource.hasValue() ? this.providersResource.value()?.result ?? [] : []
+        this.providersResource.hasValue() ? (this.providersResource.value()?.result ?? []) : [],
     );
     loading = computed(() => this.providersResource.isLoading());
     error = signal<string | null>(null);
 
     defaultModelId = signal<number | null>(null);
 
+    // True once the saved default has been fetched, successfully or not. Consumers
+    // that auto-select a model must wait for this, otherwise they fall back to the
+    // first model in the list before the user's default is even known.
+    defaultModelResolved = signal(false);
+
     loadUserDefaultModel(): void {
         this.llmProviderService.getUserDefaultModel().subscribe({
             next: (res) => {
                 this.defaultModelId.set(res.result?.id ?? null);
+                this.defaultModelResolved.set(true);
             },
             error: () => {
                 this.defaultModelId.set(null);
-            }
+                this.defaultModelResolved.set(true);
+            },
         });
     }
 
@@ -51,75 +58,86 @@ export class LlmProviderStore {
             },
             error: (err) => {
                 this.error.set(err?.error?.message ?? 'Failed to set default model');
-            }
+            },
         });
     }
 
     groupedProviders = computed<GroupedLlmProvider[]>(() => {
         return this.providers()
-            .filter(provider => provider.active)
-            .map(provider => {
-                const activeModels = (provider.models ?? []).filter(model => model.active);
+            .filter((provider) => provider.active)
+            .map((provider) => {
+                const activeModels = (provider.models ?? []).filter((model) => model.active);
                 return {
                     label: provider.label,
                     count: activeModels.length,
                     items: activeModels
-                        .map(model => {
+                        .map((model) => {
                             const results = model.testResults || [];
                             const totalTests = results.length;
                             if (totalTests === 0) {
-                                return { ...model, performanceScore: -1, performancePercentage: 0, latencyAverageMs: 0 };
+                                return {
+                                    ...model,
+                                    performanceScore: -1,
+                                    performancePercentage: 0,
+                                    latencyAverageMs: 0,
+                                };
                             }
-                            const successfulTests = results.filter(r => r.status === 'success').length;
+                            const successfulTests = results.filter((r) => r.status === 'success').length;
                             const successPercentage = Math.round((successfulTests / totalTests) * 100);
-                            const successfulResults = results.filter(r => r.status === 'success');
+                            const successfulResults = results.filter((r) => r.status === 'success');
                             let latencyAverage = 0;
                             if (successfulResults.length > 0) {
-                                const totalLatency = successfulResults.reduce((sum, r) => sum + (r.responseTimeMs || 0), 0);
+                                const totalLatency = successfulResults.reduce(
+                                    (sum, r) => sum + (r.responseTimeMs || 0),
+                                    0,
+                                );
                                 latencyAverage = Math.round(totalLatency / successfulResults.length);
                             }
                             return {
                                 ...model,
-                                performanceScore: (successPercentage * 100000) - latencyAverage,
+                                performanceScore: successPercentage * 100000 - latencyAverage,
                                 performancePercentage: successPercentage,
-                                latencyAverageMs: latencyAverage
+                                latencyAverageMs: latencyAverage,
                             };
                         })
-                        .sort((a, b) => b.performanceScore - a.performanceScore)
+                        .sort((a, b) => b.performanceScore - a.performanceScore),
                 };
             })
-            .filter(provider => (provider.items?.length ?? 0) > 0);
+            .filter((provider) => (provider.items?.length ?? 0) > 0);
     });
 
     // Chat only targets text-capability models; image/video models are surfaced
     // elsewhere (media studio, out of scope for this change).
     chatModels = computed<GroupedLlmProvider[]>(() => {
-        return this.groupedProviders().map(provider => {
-            const textItems = (provider.items ?? []).filter(item => item.capability === 'text');
-            return {
-                label: provider.label,
-                count: textItems.length,
-                items: textItems,
-            };
-        }).filter(provider => (provider.items?.length ?? 0) > 0);
+        return this.groupedProviders()
+            .map((provider) => {
+                const textItems = (provider.items ?? []).filter((item) => item.capability === 'text');
+                return {
+                    label: provider.label,
+                    count: textItems.length,
+                    items: textItems,
+                };
+            })
+            .filter((provider) => (provider.items?.length ?? 0) > 0);
     });
 
     // Flat lists of image/video-capable models for the media studio.
     imageModels = computed<LlmModel[]>(() => {
         return this.providers()
-            .filter(p => p.active)
-            .flatMap(p => p.models ?? [])
-            .filter(m => m.active && m.capability === 'image');
+            .filter((p) => p.active)
+            .flatMap((p) => p.models ?? [])
+            .filter((m) => m.active && m.capability === 'image');
     });
 
     videoModels = computed<LlmModel[]>(() => {
         return this.providers()
-            .filter(p => p.active)
-            .flatMap(p => p.models ?? [])
-            .filter(m => m.active && m.capability === 'video');
+            .filter((p) => p.active)
+            .flatMap((p) => p.models ?? [])
+            .filter((m) => m.active && m.capability === 'video');
     });
 
-    pageState = computed<PageStates>(() => {        if (this.loading() && this.providers().length === 0) {
+    pageState = computed<PageStates>(() => {
+        if (this.loading() && this.providers().length === 0) {
             return PageStates.Loading;
         }
 
@@ -150,7 +168,7 @@ export class LlmProviderStore {
             error: (err: HttpErrorResponse) => {
                 this.error.set(err?.error?.message ?? 'Failed to create provider');
                 this.providersResource.reload();
-            }
+            },
         });
     }
 
@@ -162,19 +180,19 @@ export class LlmProviderStore {
             error: (err: HttpErrorResponse) => {
                 this.error.set(err?.error?.message ?? 'Failed to update provider');
                 this.providersResource.reload();
-            }
+            },
         });
     }
 
     deleteProvider(providerId: number) {
-        this.llmProviderService.update(providerId, { active: false }).subscribe({
+        this.llmProviderService.deleteProvider(providerId).subscribe({
             next: () => {
                 this.providersResource.reload();
             },
             error: (err: HttpErrorResponse) => {
                 this.error.set(err?.error?.message ?? 'Failed to delete provider');
                 this.providersResource.reload();
-            }
+            },
         });
     }
 
@@ -186,7 +204,7 @@ export class LlmProviderStore {
             error: (err: HttpErrorResponse) => {
                 this.error.set(err?.error?.message ?? 'Failed to create model');
                 this.providersResource.reload();
-            }
+            },
         });
     }
 
@@ -198,7 +216,19 @@ export class LlmProviderStore {
             error: (err: HttpErrorResponse) => {
                 this.error.set(err?.error?.message ?? 'Failed to delete model');
                 this.providersResource.reload();
-            }
+            },
+        });
+    }
+
+    hardDeleteModel(providerId: number, modelId: number) {
+        this.llmProviderService.deleteModel(modelId).subscribe({
+            next: () => {
+                this.providersResource.reload();
+            },
+            error: (err: HttpErrorResponse) => {
+                this.error.set(err?.error?.message ?? 'Failed to delete model');
+                this.providersResource.reload();
+            },
         });
     }
 
@@ -210,7 +240,7 @@ export class LlmProviderStore {
             error: (err: HttpErrorResponse) => {
                 this.error.set(err?.error?.message ?? 'Failed to delete test result');
                 this.providersResource.reload();
-            }
+            },
         });
     }
 
@@ -222,7 +252,7 @@ export class LlmProviderStore {
             error: (err: HttpErrorResponse) => {
                 this.error.set(err?.error?.message ?? 'Failed to delete test results');
                 this.providersResource.reload();
-            }
+            },
         });
     }
 
@@ -234,7 +264,7 @@ export class LlmProviderStore {
             error: (err: HttpErrorResponse) => {
                 this.error.set(err?.error?.message ?? 'Failed to update model');
                 this.providersResource.reload();
-            }
+            },
         });
     }
 }

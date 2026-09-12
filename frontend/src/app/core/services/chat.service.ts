@@ -120,7 +120,7 @@ export class ChatService {
 								buffer += decoder.decode(value, { stream: true });
 								const lines = buffer.split('\n');
 
-								// שומרים את השורה האחרונה למקרה שהיא מקוטעת
+								// Keep the last line in case it is fragmented
 								buffer = lines.pop() || '';
 
 								for (const line of lines) {
@@ -136,7 +136,7 @@ export class ChatService {
 								}
 							}
 
-							// עיבוד השאריות שנותרו בחוצץ
+							// Process the leftovers remaining in the buffer
 							if (buffer.trim()) {
 								try {
 									const parsed = JSON.parse(buffer.trim());

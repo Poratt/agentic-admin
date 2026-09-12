@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, getDataSourceToken } from '@nestjs/typeorm';
 import { ForbiddenException } from '@nestjs/common';
 import { Repository } from 'typeorm';
-import { IdeasService } from './ideas.service';
+import { IdeasService, MAX_PARALLEL_SEARCH, SEARCH_STAGGER_MS } from './ideas.service';
 import { SavedIdeaSession } from './entities/saved-idea-session.entity';
 import { SavedIdea } from './entities/saved-idea.entity';
 import { GenerateIdeasResponse } from './interfaces/idea.interface';
@@ -270,6 +270,155 @@ describe('IdeasService — persistence (Phase 1)', () => {
       const garbage = await runValidation(undefined, { estimatedMvpDays: 'שבועיים', techStackSuggestion: '   ' });
       expect(garbage!.estimatedMvpDays).toBeUndefined();
       expect(garbage!.techStackSuggestion).toBeUndefined();
+    });
+  });
+
+  // Regression guard for the CAPTCHA/burst bug: the nightly pipeline used to
+  // fire every search query at once, producing a 100+ request burst from a
+  // single egress IP. These tests prove the SearXNG channel is now throttled.
+  describe('search throttling (anti-CAPTCHA)', () => {
+    type SearchState = {
+      inFlight: number;
+      maxInFlight: number;
+      searchStarts: number[];
+      searchCalls: string[];
+      hnCalls: string[];
+    };
+
+    // Replaces the WebSearchService with a tracker that records concurrency.
+    // `search` (SearXNG) yields once so overlapping calls would be observable.
+    function installTrackingSearch(): SearchState {
+      const state: SearchState = {
+        inFlight: 0,
+        maxInFlight: 0,
+        searchStarts: [],
+        searchCalls: [],
+        hnCalls: [],
+      };
+      const empty = { success: true, message: 'ok', result: { results: [] } };
+      const search = jest.fn(async (q: string) => {
+        state.inFlight += 1;
+        state.maxInFlight = Math.max(state.maxInFlight, state.inFlight);
+        state.searchStarts.push(Date.now());
+        state.searchCalls.push(q);
+        await Promise.resolve();
+        state.inFlight -= 1;
+        return empty;
+      });
+      const searchHackerNews = jest.fn(async (q: string) => {
+        state.hnCalls.push(q);
+        return empty;
+      });
+      (service as any).webSearch = {
+        search,
+        searchHackerNews,
+        // Mirrors the production routing (WebSearchService.searchChannels): a query
+        // whose only `site:` target is Hacker News is served without SearXNG. Kept in
+        // sync so the call counts asserted below reflect real behaviour. The Google
+        // CSE channel is omitted — it is a no-op unless configured, and the routing
+        // itself is covered in web-search.service.spec.ts.
+        searchChannels: jest.fn((q: string) =>
+          /site:news\.ycombinator\.com/i.test(q) && !/-site:/i.test(q) ? [searchHackerNews(q)] : [search(q), searchHackerNews(q)],
+        ),
+      };
+      return state;
+    }
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('gatherSignals: runs the signal queries serially with a stagger, never all at once', async () => {
+      jest.useFakeTimers();
+      const state = installTrackingSearch();
+      (service as any).llm = { generateResponse: jest.fn() };
+
+      const run = service['gatherSignals']('d', 'term', undefined, Date.now() + 100_000);
+      await jest.advanceTimersByTimeAsync(SEARCH_STAGGER_MS * 20);
+      const result = await run;
+
+      // The Hacker News query is routed around SearXNG, so SearXNG sees 4 of the 5
+      // queries while HN Algolia still sees every one of them.
+      expect(state.searchCalls).toHaveLength(4);
+      expect(state.hnCalls).toHaveLength(5);
+      // The buggy version launched all 5 in the same tick (maxInFlight === 5).
+      expect(state.maxInFlight).toBeLessThanOrEqual(MAX_PARALLEL_SEARCH);
+      expect(state.maxInFlight).toBeLessThan(5);
+      // Successive queries are spaced out by at least the stagger.
+      for (let i = 1; i < state.searchStarts.length; i++) {
+        expect(state.searchStarts[i] - state.searchStarts[i - 1]).toBeGreaterThanOrEqual(SEARCH_STAGGER_MS);
+      }
+      // Empty search results → unchanged early-fallback, no LLM call.
+      expect(result).toEqual({ signals: [], groundedInSignals: false });
+      expect((service as any).llm.generateResponse).not.toHaveBeenCalled();
+    });
+
+    it('discoverTopics: throttles the LLM-generated discovery queries too', async () => {
+      jest.useFakeTimers();
+      const state = installTrackingSearch();
+      const queries = ['site:reddit.com alpha', 'site:reddit.com beta', 'site:reddit.com gamma'];
+      (service as any).llm = {
+        generateResponse: jest.fn().mockResolvedValue({ content: JSON.stringify(queries), finishReason: 'stop' }),
+      };
+
+      const run = service.discoverTopics(2);
+      await jest.advanceTimersByTimeAsync(SEARCH_STAGGER_MS * 20);
+      const topics = await run;
+
+      expect(state.searchCalls).toHaveLength(3);
+      expect(state.hnCalls).toHaveLength(3);
+      expect(state.maxInFlight).toBeLessThanOrEqual(MAX_PARALLEL_SEARCH);
+      expect(state.maxInFlight).toBeLessThan(3);
+      for (let i = 1; i < state.searchStarts.length; i++) {
+        expect(state.searchStarts[i] - state.searchStarts[i - 1]).toBeGreaterThanOrEqual(SEARCH_STAGGER_MS);
+      }
+      // Empty search results → [] without a topic-discovery LLM call.
+      expect(topics).toEqual([]);
+      expect((service as any).llm.generateResponse).toHaveBeenCalledTimes(1);
+    });
+
+    // The old implementation produced its results via
+    // `Promise.allSettled(queries.flatMap(...))`, so the settled array was
+    // grouped per query in query order. The downstream counters walk that array
+    // in sequence, so a reordering would silently change which results are kept.
+    it('returns settled results in the original per-query order', async () => {
+      const settled = await service['runSearchesThrottled'](['a', 'b'], (q: string) => [
+        Promise.resolve(`search:${q}`),
+        Promise.resolve(`hn:${q}`),
+      ]);
+
+      expect(settled.map((s) => (s as PromiseFulfilledResult<string>).value)).toEqual(['search:a', 'hn:a', 'search:b', 'hn:b']);
+    });
+
+    it('starts no further batches once the deadline has already passed', async () => {
+      const settled = await service['runSearchesThrottled'](['q0', 'q1', 'q2', 'q3', 'q4'], (q: string) => [Promise.resolve(q)], Date.now() - 1);
+
+      expect(settled).toHaveLength(0);
+    });
+
+    it('still runs every batch when no deadline is supplied', async () => {
+      const settled = await service['runSearchesThrottled'](['q0', 'q1', 'q2'], (q: string) => [Promise.resolve(q)]);
+
+      expect(settled).toHaveLength(3);
+    });
+  });
+
+  // Reddit used to take four of the five signal slots, which made it the dominant
+  // load source on SearXNG — the channel that was getting CAPTCHA'd. The mix is now
+  // weighted toward sources that have their own API.
+  describe('buildSignalQueries', () => {
+    it('spreads the 5 slots across sources instead of loading Reddit with 4 of them', () => {
+      const queries = service['buildSignalQueries']('inventory management');
+
+      expect(queries).toHaveLength(5);
+      expect(queries.filter((q) => /site:reddit\.com/i.test(q) && !/-site:reddit\.com/i.test(q))).toHaveLength(2);
+      // The remaining targets must be trusted signal domains, otherwise the
+      // downstream trusted-domain filter drops everything they return.
+      expect(queries.filter((q) => q.includes('site:news.ycombinator.com'))).toHaveLength(1);
+      expect(queries.filter((q) => q.includes('site:indiehackers.com'))).toHaveLength(1);
+      // Exactly one query is Hacker-News-only, which is what lets the router skip
+      // SearXNG for it entirely.
+      expect(queries.filter((q) => /site:news\.ycombinator\.com/i.test(q) && !/-site:/i.test(q))).toHaveLength(1);
     });
   });
 });

@@ -56,6 +56,8 @@ export class SwaggerToolsParser {
     'AdminAgentController_confirmAction',
     'AdminAgentController_streamChat',
     'GoogleCalendarController_callback',
+    // Irreversible destructive bulk delete (provider + all its models) — admin UI only.
+    'LlmProviderController_deleteProvider',
   ]);
 
   getTools(): LlmToolSchema[] {
@@ -69,24 +71,24 @@ export class SwaggerToolsParser {
     this.cleanedToolsCache = this.swaggerTools
       .filter((t) => !SwaggerToolsParser.HIDDEN_FROM_LLM.has(t.function?.name ?? ''))
       .map((t) => {
-      const params = t.function?.parameters;
+        const params = t.function?.parameters;
 
-      const cleaned = this.cleanSchema(params);
-      const sanitized = this.sanitizeJson(cleaned);
-      const finalParams = this.filterRequired(sanitized);
+        const cleaned = this.cleanSchema(params);
+        const sanitized = this.sanitizeJson(cleaned);
+        const finalParams = this.filterRequired(sanitized);
 
-      return {
-        ...t,
-        function: {
-          ...t.function,
-          parameters: finalParams ?? {
-            type: 'object',
-            properties: {},
-            additionalProperties: false,
+        return {
+          ...t,
+          function: {
+            ...t.function,
+            parameters: finalParams ?? {
+              type: 'object',
+              properties: {},
+              additionalProperties: false,
+            },
           },
-        },
-      } as LlmToolSchema;
-    });
+        } as LlmToolSchema;
+      });
 
     return this.cleanedToolsCache;
   }
@@ -101,12 +103,7 @@ export class SwaggerToolsParser {
     return this.requiresConfirmationOps.has(operationId);
   }
 
-  resolveArguments(
-    path: string,
-    method: string,
-    args: Record<string, any>,
-    baseUrl: string,
-  ) {
+  resolveArguments(path: string, method: string, args: Record<string, any>, baseUrl: string) {
     let targetUrl = `${baseUrl}${path}`;
     const body: Record<string, any> = {};
     const queryParams: Record<string, any> = {};
@@ -115,7 +112,7 @@ export class SwaggerToolsParser {
       if (path.includes(`{${key}}`)) {
         // H4 SSRF fix: percent-encode path-param values so LLM-supplied input
         // can never add URL structure (/, ?, #, ...). Also encodes Hebrew
-        // names with spaces (e.g. 'גורילה גלו') correctly as UTF-8.
+        // names with spaces (e.g. "Gorilla Glue" in Hebrew) correctly as UTF-8.
         targetUrl = targetUrl.replace(`{${key}}`, encodeURIComponent(String(value)));
       } else if (method.toLowerCase() === 'get') {
         queryParams[key] = value;
@@ -228,9 +225,7 @@ export class SwaggerToolsParser {
     const compositions = ['allOf', 'anyOf', 'oneOf'];
     for (const comp of compositions) {
       if (Array.isArray(cleaned[comp])) {
-        cleaned[comp] = cleaned[comp]
-          .filter((s: any) => !this.hasRef(s))
-          .map((s: any) => this.cleanSchema(s));
+        cleaned[comp] = cleaned[comp].filter((s: any) => !this.hasRef(s)).map((s: any) => this.cleanSchema(s));
 
         if (cleaned[comp].length === 0) {
           delete cleaned[comp];
@@ -281,11 +276,7 @@ export class SwaggerToolsParser {
 
       if (Array.isArray(result.required)) {
         const filtered = result.required.filter((k: string) => {
-          return (
-            nextProperties[k] !== undefined &&
-            nextProperties[k] !== null &&
-            Object.prototype.hasOwnProperty.call(nextProperties, k)
-          );
+          return nextProperties[k] !== undefined && nextProperties[k] !== null && Object.prototype.hasOwnProperty.call(nextProperties, k);
         });
 
         if (filtered.length > 0) {
@@ -330,9 +321,7 @@ export class SwaggerToolsParser {
       try {
         swagger = JSON.parse(fileContent);
       } catch (e) {
-        this.logger.warn(
-          'Failed to parse swagger-spec.json (might be in the middle of being written). Keeping previous tools.'
-        );
+        this.logger.warn('Failed to parse swagger-spec.json (might be in the middle of being written). Keeping previous tools.');
         return;
       }
 
@@ -403,10 +392,7 @@ export class SwaggerToolsParser {
             source: 'swagger',
             function: {
               name: op.operationId,
-              description: [
-                op.summaryHe || op.summary,
-                op.description,
-              ].filter(Boolean).join('\n'),
+              description: [op.summaryHe || op.summary, op.description].filter(Boolean).join('\n'),
               parameters: {
                 type: 'object',
                 properties,

@@ -18,7 +18,7 @@ export class TooltipDirective implements OnDestroy {
     private renderer = inject(Renderer2);
     private tooltipEl: HTMLElement | null = null;
 
-    // משותף לכל ה-instances של הדירקטיבה
+    // Shared across all instances of the directive
     private static activeTooltipEl: HTMLElement | null = null;
 
     onMouseEnter() {

@@ -181,7 +181,7 @@ export class GoogleCalendarService {
       timeMax = new Date(target.getFullYear(), target.getMonth(), target.getDate() + 1);
     } else if (q) {
       // Text search with no date: scan −1 month → +1 year so both past
-      // ("מה היה לי אתמול") and far-future ("פג תוקף תג נכה" months away)
+      // ("what did I have yesterday") and far-future ("disability tag expires" months away)
       // events are included. Uses month arithmetic to avoid DST/leap drift.
       timeMin = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
       timeMax = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());

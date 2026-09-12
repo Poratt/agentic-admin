@@ -246,20 +246,20 @@ export class CannlyticsService implements OnModuleInit {
             return null;
         }
 
-        // התאמה מדויקת קודם
+        // Exact match first
         const exact = this.strainCache.get(normalizedName);
         if (exact) return exact;
 
-        // התאמה חלקית לפי טוקנים — all-or-nothing:
-        // כל טוקן של השאילתה חייב למצוא התאמה במפתח, וטוקן קצר מ-3 תווים
-        // (למשל "33") יכול להתאים רק כמילה מלאה, לא כתת-מחרוזת.
-        // כך "33 ספליטר" לא מתאמת יותר לזן שנקרא פשוט "33" — שהיה מחזיר
-        // את אותם נתוני מעבדה לזנים שונים.
+        // Partial token-based match — all-or-nothing:
+        // Every query token must find a match in the key, and a token shorter than 3 chars
+        // (e.g. "33") can only match as a whole word, not as a substring.
+        // This way "33 splitter" no longer matches a strain simply named "33" — which would
+        // return the same lab data for different strains.
         const queryTokens = normalizedName.split(/[^a-z0-9]+/).filter(Boolean);
         if (queryTokens.length === 0) {
             return null;
         }
-        // שאילתה חד-טוקנית: רק מילה מלאה, ורק לטוקן משמעותי (>= 3 תווים)
+        // Single-token query: whole word only, and only for a significant token (>= 3 chars)
         if (queryTokens.length === 1 && queryTokens[0].length < 3) {
             return null;
         }
@@ -277,7 +277,7 @@ export class CannlyticsService implements OnModuleInit {
                 let tokenMatched = false;
                 for (const keyToken of keyTokens) {
                     if (keyToken === token) {
-                        score += 2; // התאמת מילה מלאה
+                        score += 2; // exact whole-word match
                         tokenMatched = true;
                         break;
                     }
@@ -285,7 +285,7 @@ export class CannlyticsService implements OnModuleInit {
                         (token.length >= 3 && keyToken.includes(token)) ||
                         (keyToken.length >= 3 && token.includes(keyToken))
                     ) {
-                        score += 1; // התאמת תת-מחרוזת (רק כשצד אחד משמעותי)
+                        score += 1; // partial substring match (only when one side is significant)
                         tokenMatched = true;
                         break;
                     }
@@ -297,7 +297,7 @@ export class CannlyticsService implements OnModuleInit {
             }
 
             if (!allMatched) continue;
-            // מפתח עם פחות טוקנים מיותרים = התאמה הדוקה יותר
+            // A key with fewer extra tokens = a tighter match
             score -= keyTokens.length - queryTokens.length;
             if (!best || score > best.score) {
                 best = { score, data: value };

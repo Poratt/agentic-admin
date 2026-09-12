@@ -51,11 +51,15 @@ export class LlmController {
     private readonly healthService: LlmHealthService,
     private readonly dbProviderService: LlmProviderService,
     private readonly client: LlmClientService,
-  ) { }
+  ) {}
 
   @Post('models/:id/test')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Test a single model connectivity and save the result', summaryHe: 'בודקים ומאמתים את מהירות התגובה והחיבור של מודל ה-AI', toolIcon: 'ph-lightning' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Test a single model connectivity and save the result',
+    summaryHe: 'בודקים ומאמתים את מהירות התגובה והחיבור של מודל ה-AI',
+    toolIcon: 'ph-lightning',
+  } as CustomApiOperationOptions)
   async testModel(@Param('id') id: string) {
     const dbModel = await this.dbProviderService.findModelById(+id);
     if (!dbModel) {
@@ -67,19 +71,28 @@ export class LlmController {
       dbModel.key,
       'Hello! This is an interactive connection test.',
       'You are a helpful assistant.',
+      dbModel.id,
     );
   }
 
   @Delete('test-results/:id')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Delete a test result', summaryHe: 'מוחקים היסטוריית בדיקת חיבור בודדת של מודל מהארכיון', toolIcon: 'ph-trash' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: 'Delete a test result',
+    summaryHe: 'מוחקים היסטוריית בדיקת חיבור בודדת של מודל מהארכיון',
+    toolIcon: 'ph-trash',
+  } as CustomApiOperationOptions)
   async deleteTestResult(@Param('id') id: string) {
     return this.dbProviderService.deleteTestResult(+id);
   }
 
   @Post('set-default-model')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Set the authenticated user\'s default LLM model', summaryHe: 'קובעים את מודל ה-AI המועדף עליך כברירת המחדל של המערכת', toolIcon: 'ph-star' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: "Set the authenticated user's default LLM model",
+    summaryHe: 'קובעים את מודל ה-AI המועדף עליך כברירת המחדל של המערכת',
+    toolIcon: 'ph-star',
+  } as CustomApiOperationOptions)
   async setDefaultModel(@Body('modelId') modelId: number, @Req() req: RequestWithUser) {
     if (!req.user) {
       throw new UnauthorizedException();
@@ -93,7 +106,11 @@ export class LlmController {
 
   @Get('default-model')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get the authenticated user\'s default LLM model', summaryHe: 'מציגים את מודל ה-AI המוגדר כברירת המחדל שלך', toolIcon: 'ph-star' } as CustomApiOperationOptions)
+  @ApiOperation({
+    summary: "Get the authenticated user's default LLM model",
+    summaryHe: 'מציגים את מודל ה-AI המוגדר כברירת המחדל שלך',
+    toolIcon: 'ph-star',
+  } as CustomApiOperationOptions)
   async getDefaultModel(@Req() req: RequestWithUser) {
     if (!req.user) {
       throw new UnauthorizedException();
@@ -215,10 +232,7 @@ export class LlmController {
   @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT.' })
   @ApiForbiddenResponse({ description: 'Not applicable for this endpoint.' })
   @ApiInternalServerErrorResponse({ description: 'Upstream Agnes video poll failed.' })
-  async getVideo(
-    @Param('videoId') videoId: string,
-    @Query('modelId') modelId?: string,
-  ) {
+  async getVideo(@Param('videoId') videoId: string, @Query('modelId') modelId?: string) {
     const resolved = await this.resolveCapabilityModel(modelId ? +modelId : undefined, 'video');
     if (!resolved) {
       throw new NotFoundException('No active video model found');
@@ -331,13 +345,8 @@ export class LlmController {
     return null;
   }
 
-  private pickLatestModel(
-    models: LlmModelEntity[],
-    capability: LlmModelCapability,
-  ): LlmModelEntity | undefined {
-    return models
-      .filter((m) => m.active && m.capability === capability)
-      .sort((a, b) => this.extractVersion(b.key) - this.extractVersion(a.key))[0];
+  private pickLatestModel(models: LlmModelEntity[], capability: LlmModelCapability): LlmModelEntity | undefined {
+    return models.filter((m) => m.active && m.capability === capability).sort((a, b) => this.extractVersion(b.key) - this.extractVersion(a.key))[0];
   }
 
   private extractVersion(key: string): number {

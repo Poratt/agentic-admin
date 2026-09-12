@@ -100,8 +100,8 @@ export class IdeasStore {
           this.error.set(msg);
           this.loading.set(false);
         },
-        // הזרם נסגר בלי אירוע done (restart של השרת באמצע, ניתוק רשת) —
-        // בלי הטיפול הזה loading נשאר true לנצח והכפתור תקוע במצב פעיל.
+        // The stream closed without a done event (server restart mid-way, network drop) —
+        // without this handling loading stays true forever and the button stays stuck active.
         complete: () => {
           if (!this.loading()) {
             return;

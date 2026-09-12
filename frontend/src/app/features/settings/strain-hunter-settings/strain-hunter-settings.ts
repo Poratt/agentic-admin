@@ -37,9 +37,9 @@ export class StrainHunterSettings implements OnInit, OnDestroy {
     private readonly mql = window.matchMedia('(max-width: 1599px)');
     private readonly mqlHandler = () => this.isCompact.set(this.mql.matches);
 
-    /** TerpeneStore נפתר lazily: httpResource שולח את ה-GET ברגע שהסטור נוצר,
-     *  לכן הזרקה רגילה הייתה טוענת /terpenes כבר בפתיחת טאב הגנטיקה.
-     *  הסטור נוצר רק בקריאה הראשונה — כלומר כשטאב הטרפנים נפתח לראשונה. */
+    /** TerpeneStore is resolved lazily: httpResource fires the GET as soon as the store is created,
+     *  so a normal injection would load /terpenes already when the genetics tab opens.
+     *  The store is created only on first access — that is, when the terpenes tab opens for the first time. */
     private terpeneStoreInstance: TerpeneStore | null = null;
     private getTerpeneStore(): TerpeneStore {
         return (this.terpeneStoreInstance ??= this.injector.get(TerpeneStore));
@@ -55,8 +55,8 @@ export class StrainHunterSettings implements OnInit, OnDestroy {
     bulkEnriching = signal<'genetics' | 'terpenes' | null>(null);
     bulkResult = signal<{ total: number; enriched: number; errors: number } | null>(null);
     isCompact = signal(false);
-    /** שורות placeholder (כגודל עמוד = 20) — שומרות על גובה הטבלה במהלך טעינה ראשונה כדי למנוע CLS.
-     *  never[] assignable לכל טיפוס שורה (genetics/terpene) — התוכן לא נקרא כשהטבלה בטעינה. */
+    /** Placeholder rows (page size = 20) — keep the table height during the first load to prevent CLS.
+     *  never[] is assignable to any row type (genetics/terpene) — the content is not read while the table is loading. */
     tableSkeletonRows: never[] = Array.from({ length: 20 }, () => null as never);
     geneticsLoading = computed(() => this.geneticsStore.loading());
     terpeneLoading = computed(() => this.getTerpeneStore().loading());

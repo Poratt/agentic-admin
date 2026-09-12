@@ -310,7 +310,7 @@ describe('TerpeneService', () => {
           success: true,
           result: { results: [], answer: undefined },
         } as any);
-        // קריאה 1: תרגום → 'Obama Runtz'; קריאה 2: העשרה
+        // Call 1: translation → 'Obama Runtz'; call 2: enrichment
         llmClientService.generateResponse
           .mockResolvedValueOnce({ content: 'Obama Runtz' } as any)
           .mockResolvedValueOnce({
@@ -352,7 +352,7 @@ describe('TerpeneService', () => {
             answer: undefined,
           },
         } as any);
-        // תרגום (פעם אחת בלבד) + העשרה
+        // Translation (once only) + enrichment
         llmClientService.generateResponse
           .mockResolvedValueOnce({ content: 'Obama Runtz' } as any)
           .mockResolvedValueOnce({
@@ -366,7 +366,7 @@ describe('TerpeneService', () => {
         const result = await service.enrichMissing();
 
         expect(result.total).toBe(1);
-        // קודם: תרגום upfront + שוב בתוך searchChunk + העשרה = 3. עכשיו: 2.
+        // Before: upfront translation + again inside searchChunk + enrichment = 3. Now: 2.
         expect(llmClientService.generateResponse).toHaveBeenCalledTimes(2);
         const prompt = llmClientService.generateResponse.mock.calls[1][0].prompt;
         expect(prompt.indexOf('Obama Runtz terpene profile')).toBeGreaterThan(-1);

@@ -1,6 +1,6 @@
 import { Component, inject, computed, viewChild, ChangeDetectionStrategy, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 
 import { InputTextModule } from 'primeng/inputtext';
 import { Table, TableModule } from 'primeng/table';
@@ -34,6 +34,7 @@ export interface LlmProviderView extends Omit<LlmProvider, 'models'> {
     standalone: true,
     imports: [
         CommonModule,
+        FormsModule,
         ReactiveFormsModule,
         InputTextModule,
         TableModule,
@@ -57,6 +58,8 @@ export class LlmProvidersManagement implements OnInit {
     protected readonly PageStates = PageStates;
     protected readonly globalFilterFields = ['id', 'key', 'label', 'baseUrl', 'createdAt'];
     globalFilter = signal('');
+    // Deactivated providers are hidden by default; admins can reveal them to re-activate.
+    showInactive = signal(false);
 
     ngOnInit(): void {
         this.llmProviderStore.loadUserDefaultModel();
@@ -97,7 +100,10 @@ export class LlmProvidersManagement implements OnInit {
     isAdmin = computed(() => this.authStore.userRole() === UserRole.Admin);
 
     llmProviders = computed<LlmProviderView[]>(() => {
-        const providers = this.llmProviderStore.providers().filter((p) => p.active);
+        const all = this.llmProviderStore.providers();
+        const visible = this.showInactive() ? all : all.filter((p) => p.active);
+        // Inactive providers sink to the bottom of the default listing.
+        const providers = [...visible.filter((p) => p.active), ...visible.filter((p) => !p.active)];
 
         return providers.map((provider) => ({
             ...provider,
@@ -170,16 +176,27 @@ export class LlmProvidersManagement implements OnInit {
         this.table()?.filterGlobal('', 'contains');
     }
 
-    toggleProviderActive(providerId: number, currentStatus: boolean) {
-        this.llmProviderStore.updateProvider(providerId, { active: !currentStatus });
+    toggleShowInactive(value: boolean) {
+        this.showInactive.set(value);
+    }
+
+    setProviderActive(provider: LlmProviderView, active: boolean) {
+        if (provider.active === active) return;
+        this.llmProviderStore.updateProvider(provider.id, { active });
+    }
+
+    setModelActive(providerId: number, model: LlmModelView, active: boolean) {
+        if (model.active === active) return;
+        this.llmProviderStore.updateModel(providerId, model.id, { active });
     }
 
     deleteProvider(providerId: number) {
         let confirm: Confirmation = {
             closeOnEscape: true,
             dismissableMask: true,
-            message: 'Are you sure you want to delete this provider?',
-            header: 'Delete Provider',
+            message:
+                'Permanently delete this provider and all its models, their test history and user defaults? This cannot be undone.',
+            header: 'Delete Provider Permanently',
             icon: 'ph ph-warning',
             acceptIcon: 'ph ph-trash',
             rejectIcon: 'ph ph-x',
@@ -190,7 +207,7 @@ export class LlmProvidersManagement implements OnInit {
                 size: 'small',
             },
             acceptButtonProps: {
-                label: 'Delete',
+                label: 'Delete Permanently',
                 text: true,
                 variant: 'danger',
                 severity: 'danger',
@@ -201,7 +218,7 @@ export class LlmProvidersManagement implements OnInit {
                 this.messageService.add({
                     severity: 'success',
                     summary: 'Deleted',
-                    detail: 'Provider has been deleted successfully.',
+                    detail: 'Provider has been permanently deleted.',
                 });
             },
         };
@@ -376,12 +393,12 @@ export class LlmProvidersManagement implements OnInit {
         this.closeModelDialog();
     }
 
-    deleteModel(providerId: number, modelId: number) {
+    hardDeleteModel(providerId: number, modelId: number) {
         let confirm: Confirmation = {
             closeOnEscape: true,
             dismissableMask: true,
-            message: 'Are you sure you want to deactivate this model?',
-            header: 'Deactivate Model',
+            message: 'Permanently delete this model, its test history and all user defaults? This cannot be undone.',
+            header: 'Delete Model Permanently',
             icon: 'ph ph-warning',
             acceptIcon: 'ph ph-trash',
             rejectIcon: 'ph ph-x',
@@ -392,18 +409,18 @@ export class LlmProvidersManagement implements OnInit {
                 size: 'small',
             },
             acceptButtonProps: {
-                label: 'Deactivate',
+                label: 'Delete Permanently',
                 text: true,
                 variant: 'danger',
                 severity: 'danger',
                 size: 'small',
             },
             accept: () => {
-                this.llmProviderStore.softDeleteModel(providerId, modelId);
+                this.llmProviderStore.hardDeleteModel(providerId, modelId);
                 this.messageService.add({
                     severity: 'success',
-                    summary: 'Deactivated',
-                    detail: 'Model has been deactivated successfully.',
+                    summary: 'Deleted',
+                    detail: 'Model has been permanently deleted.',
                 });
             },
         };

@@ -68,7 +68,7 @@
         transform: rotate(var(--seg-rotation, 0deg));
         cursor: pointer;
         pointer-events: stroke;
-        /* stroke transparent אבל עדיין לוכד mouse events */
+        /* transparent stroke but still captures mouse events */
     }
 
     .db-donut-segment {
@@ -80,7 +80,7 @@
         cursor: pointer;
         stroke-dashoffset: 0;
         animation: drawDonut 650ms var(--ease-out-fluid) forwards;
-        /* הפלח הגלוי לא לוכד אירועים — ה-hit area עושה את זה */
+        /* The visible segment does not capture events — the hit area does that */
         pointer-events: none;
     }
 

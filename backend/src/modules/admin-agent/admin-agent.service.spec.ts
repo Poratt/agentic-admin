@@ -108,7 +108,7 @@ describe('AdminAgentService.truncateForStorage', () => {
     const markerBytes = Buffer.byteLength(marker, 'utf8');
 
     // Set maxBytes so previewBudget = 21.
-    // Byte 21 is the leading byte 0xD6 of 'א' — this is NOT a continuation
+    // Byte 21 is the leading byte 0xD6 of the Hebrew char (U+05D0) — this is NOT a continuation
     // byte, so the char is complete at the boundary. But if we had previewBudget=22,
     // byte 22 is 0xB0 (continuation byte) — the backtrack would fire.
     //

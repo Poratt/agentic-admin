@@ -77,7 +77,9 @@
 
                 @if (viewMode() === 'all') {
                     <div class="ideas-list">
-                        @for (idea of store.ideas(); track idea.id; let i = $index) {
+                        <!-- store.ideas() holds freshly streamed ideas, which have no DB id yet
+                             (see IdeasStore.toSavedIdea), so the only stable unique key is the index. -->
+                        @for (idea of store.ideas(); track $index; let i = $index) {
                             <app-idea-card [idea]="idea" [expanded]="expandedIndex() === i" (toggled)="onToggle(i)" />
                         }
                     </div>

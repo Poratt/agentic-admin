@@ -11,7 +11,7 @@ describe('CannlyticsService', () => {
     let service: CannlyticsService;
     let httpService: jest.Mocked<HttpService>;
 
-    /** ראשון = טעינת cache (limit=1000), כל השאר = fetchByName → נכשל */
+    /** First = cache load (limit=1000), all the rest = fetchByName → fails */
     function mockCache(ids: string[]) {
         httpService.get
             .mockReturnValueOnce(
@@ -45,8 +45,8 @@ describe('CannlyticsService', () => {
         });
 
         it('does NOT return the strain literally named "33" for "33 splitter"', async () => {
-            // הבאג הקלאסי: normalizedName.includes(key) → "33 splitter".includes("33")
-            // → אותו נתוני מעבדה לשני זנים שונים
+            // The classic bug: normalizedName.includes(key) → "33 splitter".includes("33")
+            // → the same lab data for two different strains
             mockCache(['33', '33 splitter', 'blue dream']);
 
             const result = await service.getStrain('33 splitter');
@@ -55,7 +55,7 @@ describe('CannlyticsService', () => {
         });
 
         it('returns null for a 2-char query that would only match a longer name', async () => {
-            // אין זן בשם "33" — שאילתה קצרה כזו לא צריכה להחזיר את "33 splitter"
+            // There is no strain named "33" — such a short query must not return "33 splitter"
             mockCache(['33 splitter', 'blue dream']);
 
             const result = await service.getStrain('33');

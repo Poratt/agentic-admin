@@ -30,7 +30,7 @@ export interface LlmProvider {
 }
 
 @Injectable({
-    providedIn: 'root'
+    providedIn: 'root',
 })
 export class LlmProviderService {
     private http = inject(HttpClient);
@@ -48,6 +48,11 @@ export class LlmProviderService {
         return this.http.patch<ServiceResultContainer<LlmProvider>>(`${this.base}/${id}`, provider);
     }
 
+    // Permanent delete via the backend DELETE route — DB cascades remove models, test results and user defaults.
+    deleteProvider(id: number): Observable<ServiceResultContainer<void>> {
+        return this.http.delete<ServiceResultContainer<void>>(`${this.base}/${id}`);
+    }
+
     createModel(providerId: number, model: Partial<LlmModel>): Observable<ServiceResultContainer<LlmModel>> {
         return this.http.post<ServiceResultContainer<LlmModel>>(`${this.base}/${providerId}/models`, model);
     }
@@ -56,9 +61,16 @@ export class LlmProviderService {
         return this.http.patch<ServiceResultContainer<LlmModel>>(`${this.base}/models/${modelId}`, model);
     }
 
-    // Soft-disable via PATCH {active:false}. The hard DELETE route exists but the UI intentionally never calls it.
+    // Soft-disable via PATCH {active:false} — reversible, keeps the row and its test history.
     softDeleteModel(modelId: number): Observable<ServiceResultContainer<void>> {
-        return this.http.patch<ServiceResultContainer<void>>(`${this.base}/models/${modelId}`, { active: false } as Partial<LlmModel>);
+        return this.http.patch<ServiceResultContainer<void>>(`${this.base}/models/${modelId}`, {
+            active: false,
+        } as Partial<LlmModel>);
+    }
+
+    // Permanent delete via the backend DELETE route — cascades test results (relation cascade) and user_llm_defaults (FK CASCADE).
+    deleteModel(modelId: number): Observable<ServiceResultContainer<void>> {
+        return this.http.delete<ServiceResultContainer<void>>(`${this.base}/models/${modelId}`);
     }
 
     findModels(providerId: number): Observable<ServiceResultContainer<LlmModel[]>> {
@@ -78,10 +90,14 @@ export class LlmProviderService {
     }
 
     setUserDefaultModel(modelId: number): Observable<{ success: boolean; message: string }> {
-        return this.http.post<{ success: boolean; message: string }>(`${environment.apiUrl}/llm/set-default-model`, { modelId });
+        return this.http.post<{ success: boolean; message: string }>(`${environment.apiUrl}/llm/set-default-model`, {
+            modelId,
+        });
     }
 
     getUserDefaultModel(): Observable<{ success: boolean; message: string; result: { id: number } | null }> {
-        return this.http.get<{ success: boolean; message: string; result: { id: number } | null }>(`${environment.apiUrl}/llm/default-model`);
+        return this.http.get<{ success: boolean; message: string; result: { id: number } | null }>(
+            `${environment.apiUrl}/llm/default-model`,
+        );
     }
 }

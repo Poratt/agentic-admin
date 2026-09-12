@@ -37,7 +37,7 @@ Return format:
  * Builds the user prompt for a terpene batch enrichment request.
  *
  * @param names The list of terpene names to enrich. Assumed to be already
- *   deduplicated and filtered (empty / "לא ידוע" values removed upstream).
+ *   deduplicated and filtered (empty / "לא ידוע" (unknown) values removed upstream).
  * @param searchResults Optional map of terpene name → web search results text.
  */
 export function buildTerpeneEnrichUserPrompt(

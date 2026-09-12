@@ -31,6 +31,7 @@ export class IdeasForm implements OnInit {
   canGenerate = computed(() => this.store.domain().trim().length > 0);
 
   ngOnInit(): void {
+    this.llmProviderStore.loadUserDefaultModel();
     this.domainInput?.nativeElement.focus();
   }
 
@@ -51,6 +52,14 @@ export class IdeasForm implements OnInit {
       const groups = this.models();
       const currentSelection = this.ideasForm.get('model')?.value;
       const userDefaultId = this.llmProviderStore.defaultModelId();
+
+      // The model list and the saved default are two independent requests. Selecting
+      // the first model before the default arrives would make it win permanently,
+      // because the `!currentSelection` guard then blocks the real default — so wait
+      // until the default is known (or known to be absent) before auto-selecting.
+      if (!this.llmProviderStore.defaultModelResolved()) {
+        return;
+      }
 
       if (groups.length > 0 && !currentSelection) {
         let modelToSelect = null;

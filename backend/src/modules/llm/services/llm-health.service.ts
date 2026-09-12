@@ -11,17 +11,22 @@ export class LlmHealthService {
     private readonly client: LlmClientService,
     private readonly providerConfig: LlmProviderConfigService,
     private readonly dbProviderService: LlmProviderService,
-  ) { }
+  ) {}
 
   async testLlm(
     provider: LlmProvider,
     model: string,
     prompt: string,
     systemContext: string,
+    modelId?: number,
   ): Promise<ServiceResultContainer<{ provider: LlmProvider; model: string; available: boolean }>> {
     const runtimeSelection = this.providerConfig.getRuntimeSelection(provider, model);
 
-    const dbModel = await this.dbProviderService.findModelByKey(model);
+    // Resolve the DB row once for both the capability gate and result persistence.
+    // When the caller knows the model id (UI "test now"), resolve by it — model
+    // keys are only unique per provider, so a key-only lookup can hit the wrong
+    // provider's row and save the result to a different model.
+    const dbModel = modelId ? await this.dbProviderService.findModelById(modelId) : await this.dbProviderService.findModelByKey(model);
     if (dbModel && dbModel.capability && dbModel.capability !== 'text') {
       throw new BadRequestException(`Model ${model} (${dbModel.capability}) does not support text chat testing`);
     }
@@ -50,7 +55,7 @@ export class LlmHealthService {
       available = false;
       errorMessage = error instanceof Error ? error.message : 'Unknown connection error';
 
-      // זיהוי שגיאות Timeout לפי תוכן השגיאה
+      // Detect Timeout errors by the error content
       if (errorMessage.toLowerCase().includes('timeout') || errorMessage.toLowerCase().includes('aborted')) {
         status = 'timeout';
       } else {
@@ -61,16 +66,10 @@ export class LlmHealthService {
     const endTime = performance.now();
     const responseTimeMs = Math.round(endTime - startTime);
 
-    // 🚀 שמירת התוצאה ב-DB 🚀
+    // 🚀 Save the result to the DB 🚀
     try {
-      const dbModel = await this.dbProviderService.findModelByKey(model);
       if (dbModel) {
-        await this.dbProviderService.saveTestResult(
-          dbModel.id,
-          responseTimeMs,
-          status,
-          errorMessage,
-        );
+        await this.dbProviderService.saveTestResult(dbModel.id, responseTimeMs, status, errorMessage);
       }
     } catch (dbError) {
       console.error('Failed to save LLM test result to database:', dbError);
@@ -103,7 +102,7 @@ export class LlmHealthService {
     // 3 free models per batch → 3 batches × ~8s pause = ~24s total, comfortably
     // within a 1-minute window. Leave 1 slot of headroom.
     const BATCH_SIZE = 3;
-    const BATCH_PAUSE_MS = 8_000;   // pause between batches
+    const BATCH_PAUSE_MS = 8_000; // pause between batches
     const FREE_MODEL_DELAY_MS = 3_000;
     const PAID_MODEL_DELAY_MS = 1_000;
 
@@ -118,6 +117,7 @@ export class LlmHealthService {
           model.name,
           'Hello! This is a connectivity test. Please respond with "OK"',
           'You are a helpful assistant.',
+          model.id,
         );
 
         results.push({
@@ -169,6 +169,7 @@ export class LlmHealthService {
           if (model.capability && model.capability !== 'text') continue;
 
           models.push({
+            id: model.id,
             provider: provider.key as any,
             name: model.key,
             active: provider.key === activeProvider && model.key === activeModel,

@@ -50,7 +50,7 @@
                             role="img"
                             [attr.aria-label]="'תרשים עוגה התפלגות גודל מסד נתונים, סה״כ ' + d.totalSizeFormatted"
                         >
-                            <!-- מסילה אחורית למראה חצי שקוף -->
+                            <!-- Background track for a semi-transparent look -->
                             <circle
                                 cx="50"
                                 cy="50"
@@ -61,9 +61,9 @@
                                 class="db-donut-bg-track"
                             ></circle>
 
-                            <!-- פלחי ה-Donut הדינמיים -->
+                            <!-- The dynamic Donut segments -->
                             @for (seg of chartSegments(); track seg.index) {
-                                <!-- Hit area רחב ושקוף ללכידת hover בכל נקודה על הפלח -->
+                                <!-- Wide, transparent hit area to capture hover anywhere on the segment -->
                                 <circle
                                     cx="50"
                                     cy="50"
@@ -77,7 +77,7 @@
                                     (mouseenter)="setActiveSegment(seg.index)"
                                     (mouseleave)="clearActiveSegment()"
                                 ></circle>
-                                <!-- הפלח הגלוי -->
+                                <!-- The visible segment -->
                                 <circle
                                     cx="50"
                                     cy="50"
@@ -98,7 +98,7 @@
                             }
                         </svg>
 
-                        <!-- חור ה-Donut המרכזי עם טקסט דינמי -->
+                        <!-- The central Donut hole with dynamic text -->
                         <div class="db-donut-hole">
                             <span class="metric-value db-center-value">{{ centerValue() }}</span>
                             <span class="metric-label db-center-label">{{ centerLabel() }}</span>

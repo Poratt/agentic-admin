@@ -79,3 +79,9 @@ backup_*.sql
 
 # Freebuff local tool state
 .freebuff/
+
+# WorkBuddy AI local agent state (project memory + project-level skills).
+# Same category as .freebuff/ above: local tool state, not source. The daily
+# logs churn every session, so tracking them would add noise to every diff.
+# Un-ignore a specific path with a negation rule if the team should share it.
+.workbuddy-ai/

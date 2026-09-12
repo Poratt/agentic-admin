@@ -21,6 +21,20 @@ describe('IdeasForm', () => {
     stopGenerating: ReturnType<typeof vi.fn>;
   };
 
+  // Real signals, so a test can control the order in which the model list and the
+  // saved default model arrive from their two independent requests.
+  let chatModelsSignal: WritableSignal<{ label: string; count: number; items: { id: number }[] }[]>;
+  let defaultModelIdSignal: WritableSignal<number | null>;
+  let defaultModelResolvedSignal: WritableSignal<boolean>;
+  let llmStoreMock: {
+    chatModels: WritableSignal<{ label: string; count: number; items: { id: number }[] }[]>;
+    defaultModelId: WritableSignal<number | null>;
+    defaultModelResolved: WritableSignal<boolean>;
+    loadUserDefaultModel: ReturnType<typeof vi.fn>;
+    providers: ReturnType<typeof vi.fn>;
+    setDefaultModel: ReturnType<typeof vi.fn>;
+  };
+
   beforeEach(async () => {
     storeMock = {
       domain: signal(''),
@@ -33,9 +47,15 @@ describe('IdeasForm', () => {
       stopGenerating: vi.fn(),
     };
 
-    const llmStoreMock = {
-      chatModels: vi.fn().mockReturnValue([]),
-      defaultModelId: vi.fn().mockReturnValue(null),
+    chatModelsSignal = signal([]);
+    defaultModelIdSignal = signal<number | null>(null);
+    defaultModelResolvedSignal = signal(false);
+
+    llmStoreMock = {
+      chatModels: chatModelsSignal,
+      defaultModelId: defaultModelIdSignal,
+      defaultModelResolved: defaultModelResolvedSignal,
+      loadUserDefaultModel: vi.fn(),
       providers: vi.fn().mockReturnValue([]),
       setDefaultModel: vi.fn(),
     };
@@ -110,5 +130,37 @@ describe('IdeasForm', () => {
   it('onStopGenerate should call store.stopGenerating', () => {
     component.onStopGenerate();
     expect(storeMock.stopGenerating).toHaveBeenCalled();
+  });
+
+  it('loads the saved default model on init', () => {
+    expect(llmStoreMock.loadUserDefaultModel).toHaveBeenCalled();
+  });
+
+  it('selects the saved default model even when the model list arrives first', async () => {
+    // Regression: the model list and the default-model request resolve independently.
+    // When the list won the race the form selected its first entry, and the
+    // `!currentSelection` guard then blocked the user's real default forever — which
+    // is why a default picked in this dropdown looked like it was never saved.
+    chatModelsSignal.set([{ label: 'OpenAI', count: 2, items: [{ id: 7 }, { id: 9 }] }]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.ideasForm.value.model).toBeFalsy();
+
+    defaultModelIdSignal.set(9);
+    defaultModelResolvedSignal.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.ideasForm.value.model).toBe(9);
+  });
+
+  it('falls back to the first model when the user has no saved default', async () => {
+    chatModelsSignal.set([{ label: 'OpenAI', count: 2, items: [{ id: 7 }, { id: 9 }] }]);
+    defaultModelResolvedSignal.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.ideasForm.value.model).toBe(7);
   });
 });

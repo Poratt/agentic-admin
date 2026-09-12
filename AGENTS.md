@@ -4,6 +4,13 @@
 
 Conversation responses will be in Hebrew or English — according to the language the user wrote their last message in, or the language used in the recent context. It is strictly forbidden to respond in any third language (such as Chinese) — if this happens by mistake, stop immediately and restart in the correct language (Hebrew/English).
 
+### Bidi Wrapping (chat responses, user request 2026-09-12)
+
+When a chat line mixes Hebrew with English words and/or numbers, wrap the line in U+2067 (RLI) and U+2069 (PDI) — `⁧<line>⁩` — so terminals render the bidi order correctly (Hebrew base direction, embedded LTR runs and digits stay in place).
+
+- Wrap whole Hebrew-dominant lines (or the Hebrew segment when only part of a line needs it).
+- Applies ONLY to chat prose. NEVER put these control characters inside code blocks, file contents, commits, or Telegram JSON payloads.
+
 ## Project Overview
 
 Full-stack monorepo: Angular 22 frontend + NestJS backend.

@@ -32,6 +32,16 @@ const OVERALL_TIMEOUT_MS = 150_000;
 // queries. Cap `searchQuery` to a short, focused phrase so buildSignalQueries
 // produces queries SearXNG can actually index.
 const MAX_SEARCH_QUERY_WORDS = 6;
+// SearXNG sits behind a single egress IP, and every query fans out to each
+// enabled engine. Firing all queries at once (e.g. 5 queries x 2 channels)
+// produces a burst of dozens of requests from one address — which is exactly
+// what triggers the engines' "Suspended: too many requests" / CAPTCHA blocks.
+// Cap concurrency at one query so the request rate stays restrained.
+export const MAX_PARALLEL_SEARCH = 1;
+// Short pause between consecutive queries. Without it, even a concurrency of 1
+// still produces a dense burst; the gap lets the engines breathe and spreads
+// the requests out along the time axis.
+export const SEARCH_STAGGER_MS = 300;
 
 @Injectable()
 export class IdeasService {
@@ -337,9 +347,9 @@ export class IdeasService {
       const res = await this.llm.generateResponse({
         prompt,
         systemContext: DISCOVERY_QUERY_GENERATION_PROMPT,
-        // מודלי thinking (OmniRoute auto, glm-4.7-flash) שורפים חלק ניכר
-        // מהתקציב על טוקנים בלתי-נראים של reasoning — 1024 חתך את ה-JSON
-        // באמצע (finish_reason=length אחרי ~300 תווי content בלבד)
+        // Thinking models (OmniRoute auto, glm-4.7-flash) burn a significant part
+        // of the budget on invisible reasoning tokens — 1024 cut the JSON off
+        // in the middle (finish_reason=length after only ~300 chars of content)
         maxTokens: 3072,
         userId,
         providerOverride,
@@ -362,11 +372,14 @@ export class IdeasService {
   async discoverTopics(count: number, userId?: number, providerOverride?: LlmProvider, modelOverride?: string): Promise<DiscoveredTopic[]> {
     const queries = await this.generateDiscoveryQueries(userId, providerOverride, modelOverride);
 
-    // שני ערוצים במקביל: SearXNG (best-effort — מנועיו נתפסים לעיתים
-    // קרובות כ-bots ומושעים) ו-HN Algolia (API ישיר, אמין, מחזיר רק
-    // דומיינים מהימנים). כך כשל של ערוץ אחד לא מייצר לילה של אפס נושאים.
-    // PullPush (ארכיון Reddit) הוסר — ה-API חוסם agents ב-429 קבוע.
-    const settled = await Promise.allSettled(queries.flatMap((q) => [this.webSearch.search(q), this.webSearch.searchHackerNews(q)]));
+    // Channels per query are decided by WebSearchService.searchChannels: SearXNG
+    // (best-effort — its engines are often flagged as bots and blocked), HN Algolia
+    // (direct API, reliable, returns only trusted domains) and Google CSE. Running
+    // several channels means a failure of one does not produce a night with zero topics.
+    // PullPush (Reddit archive) was removed — the API blocks agents with a permanent 429.
+    // Queries themselves run gradually via runSearchesThrottled, so the engines
+    // are never hit by a burst of requests from a single IP address.
+    const settled = await this.runSearchesThrottled(queries, (q) => this.webSearch.searchChannels(q));
 
     const contents: string[] = [];
     let trustedCount = 0;
@@ -375,9 +388,9 @@ export class IdeasService {
       if (s.status === 'fulfilled' && s.value.success && s.value.result) {
         for (const r of s.value.result.results) {
           if (this.isTrustedSignalUrl(r.url)) {
-            // קיצור סניפט: מודלי reasoning שורפים תקציב ביחס לגודל הקלט —
-            // עם 26+ סניפטים מלאים שני הניסיונות (2048/3072) החזירו content
-            // ריק, ועם 4 סניפטים קצרים זה עבר. גוזרים ל-280 תווים.
+            // Snippet shortening: reasoning models burn budget in proportion to input size —
+            // with 26+ full snippets both attempts (2048/3072) returned empty
+            // content, and with 4 short snippets it passed. Trimming to 280 chars.
             contents.push(`${r.title}: ${r.content.slice(0, 280)}`);
             trustedCount += 1;
           } else {
@@ -404,11 +417,11 @@ export class IdeasService {
 
     const prompt = `תוצאות חיפוש:\n${contents.slice(0, 12).join('\n\n')}\n\n${avoidText}\n\nכמה נושאים לגלות: ${count}`;
     try {
-      // שני אופני כשל של מודלי reasoning בתקציב נמוך: (א) content ריק לגמרי
-      // ("Returned no content or tool calls") — ההשקה זורקת שגיאה; (ב) חיתוך
-      // בסוף התקציב (finish_reason=length) — JSON קטוע שנכשל בפרסור. שניהם
-      // צריכים ניסיון חוזר: הלולאה כוללת גם את הקריאה וגם את הפרסור, והניסיון
-      // השני מקבל 4096 — התקציב שהוכח עובד לפרומפטים כבדים (יצירת רעיונות).
+      // Two failure modes of reasoning models on a low budget: (a) completely empty
+      // content ("Returned no content or tool calls") — the call throws an error; (b) truncation
+      // at the end of the budget (finish_reason=length) — truncated JSON that fails parsing. Both
+      // need a retry: the loop covers both the call and the parsing, and the second
+      // attempt gets 8192 — the budget proven to work for heavy prompts (idea generation).
       let topics: { domain: string; searchQuery?: string; rationale?: string }[] | null = null;
       for (let attempt = 1; attempt <= 2; attempt++) {
         let res;
@@ -471,7 +484,7 @@ export class IdeasService {
    * candidate only if at least one of its ideas is `groundedInSignals`.
    * Candidates that fail to gather real signals are dropped (logged) — we
    * would rather skip a topic than persist a session full of LLM
-   * speculation that shows "⚠️ ללא עיגון מלא" in the UI.
+   * speculation that shows "⚠️ ללא עיגון מלא" ("no full grounding") in the UI.
    *
    * Per-candidate failures are isolated so a single timeout does not abort
    * the whole batch. Returns up to `targetCount` grounded results in
@@ -608,18 +621,65 @@ export class IdeasService {
       .replace(/\s+/g, ' ')
       .trim();
 
-    // Mix: pain-vocabulary + subreddit target. Targets real user complaints on
-    // Reddit (small business / SMB communities) rather than marketing content.
-    // The 5th query intentionally drops the `site:reddit.com` filter so niche
-    // platforms (Webflow Forum, Etsy Seller communities, IndieHackers) are
-    // covered — Reddit has very little chatter for some of these.
+    // Mix: two Reddit queries keep the sharpest pain-signal shapes — a concrete
+    // complaint and an explicit demand for a tool — which is what Reddit is
+    // genuinely good at. Reddit used to take four of the five slots, which made it
+    // the dominant load source on SearXNG, the channel that was getting
+    // rate-limited; the freed slots now target the other trusted signal domains
+    // instead (see TRUSTED_SIGNAL_DOMAINS).
+    //
+    // The Hacker News query never reaches SearXNG: a query whose only `site:`
+    // target is news.ycombinator.com is routed to the keyless Algolia API and to
+    // Google CSE (see WebSearchService.searchChannels), so it costs SearXNG nothing.
     return [
       `site:reddit.com ${term} spreadsheet headache`,
-      `site:reddit.com ${term} "hate" OR frustrating`,
-      `${term} small business "too expensive" alternative site:reddit.com`,
       `site:reddit.com ${term} "wish there was a tool"`,
+      `site:news.ycombinator.com ${term} Ask HN`,
+      `site:indiehackers.com ${term} "too expensive" OR alternative`,
       `${term} forum "wish there was" OR frustrated -site:reddit.com`,
     ];
+  }
+
+  /**
+   * Runs the search queries with bounded concurrency (`MAX_PARALLEL_SEARCH`)
+   * and a pause (`SEARCH_STAGGER_MS`) between batches, instead of dispatching
+   * them all at once. Keeps the request rate low enough that the upstream
+   * engines do not treat the single egress IP as a bot.
+   *
+   * Throttling trades latency for rate: the old all-at-once dispatch could
+   * finish in one timeout window, whereas serial batches can take several. The
+   * optional `deadline` caps that cost — once it passes, the remaining queries
+   * are abandoned and whatever settled so far is returned, leaving budget for
+   * the later pipeline stages. Same guard shape as `validateIdeas`.
+   *
+   * @param queries - Raw query strings to execute.
+   * @param buildTasks - Maps one query to the channel promises to settle for it.
+   * @param deadline - Epoch ms after which no further batches are started.
+   * @returns Settled results in the same order the tasks were created, so
+   * callers can keep iterating them and checking `status` / `value.success`.
+   */
+  private async runSearchesThrottled<T>(
+    queries: string[],
+    buildTasks: (query: string) => Promise<T>[],
+    deadline?: number,
+  ): Promise<PromiseSettledResult<T>[]> {
+    const settled: PromiseSettledResult<T>[] = [];
+    for (let i = 0; i < queries.length; i += MAX_PARALLEL_SEARCH) {
+      if (deadline !== undefined && Date.now() > deadline) {
+        break;
+      }
+      if (i > 0) {
+        await this.delay(SEARCH_STAGGER_MS);
+      }
+      const batch = queries.slice(i, i + MAX_PARALLEL_SEARCH);
+      settled.push(...(await Promise.allSettled(batch.flatMap((q) => buildTasks(q)))));
+    }
+    return settled;
+  }
+
+  /** Minimal async pause — spreads search requests out along the time axis. */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private async gatherSignals(
@@ -634,11 +694,15 @@ export class IdeasService {
     onProgress?.({ phase: 0, status: 'מחפש סיגנלים בשוק...' });
 
     const queries = this.buildSignalQueries(searchTerm);
-    // שני ערוצים במקביל (כמו ב-discoverTopics): SearXNG best-effort +
-    // HN Algolia שמחזיר רק דומיינים מהימנים. PullPush הוסר (429 קבוע
-    // ל-agents). אופרטורי site: בשאילתות נאכפים בסינון בצד שלנו, כך
-    // שזבל ה-bing לא מערער את עיגון הרעיונות.
-    const settled = await Promise.allSettled(queries.flatMap((q) => [this.webSearch.search(q), this.webSearch.searchHackerNews(q)]));
+    // Channels per query come from WebSearchService.searchChannels (as in
+    // discoverTopics): SearXNG best-effort, HN Algolia and Google CSE, all of which
+    // return only trusted domains. PullPush was removed (permanent 429 for agents).
+    // The site: operators in the queries are enforced by our own filtering, so bing's
+    // junk does not undermine the grounding of the ideas.
+    // Queries run gradually (runSearchesThrottled), never as one burst, and the
+    // deadline is passed through so throttling cannot starve the later
+    // generate/validate stages of the shared overall budget.
+    const settled = await this.runSearchesThrottled(queries, (q) => this.webSearch.searchChannels(q), deadline);
 
     const contents: string[] = [];
     let trustedCount = 0;
@@ -875,14 +939,14 @@ export class IdeasService {
         breakdown.competition = Math.min(2, competitors.length);
       }
 
-      // Sanity check #2: אם אין תוצאות חיפוש בכלל, אל תיתן ציון competition גבוה
+      // Sanity check #2: if there are no search results at all, do not give a high competition score
       if (breakdown && competitorCount === 0 && breakdown.competition >= 3) {
         this.logger.warn(`[SANITY] "${idea.title}": competition=${breakdown.competition} but 0 search results → clamping to 2`);
         breakdown.competition = 2;
       }
 
-      // Sanity check #3: אם כל התוצאות הן רעש (זוהה ע"י LLM ב-validationReason),
-      // ודא שהציון לא מנופח
+      // Sanity check #3: if all results are noise (detected by the LLM in validationReason),
+      // make sure the score is not inflated
       if (breakdown && v.validationReason?.includes('לא רלוונטיות') && breakdown.competition > 2) {
         this.logger.warn(`[SANITY] "${idea.title}": irrelevant search results detected → clamping competition to 2`);
         breakdown.competition = 2;
@@ -952,15 +1016,15 @@ export class IdeasService {
   }
 
   /**
-   * בונה שאילתת חיפוש מתחרים נקייה באנגלית בלבד.
-   * מפרידה בין הכותרת/קהל היעד (עברית) לבין ה-searchTerm (אנגלית).
+   * Builds a clean competitor search query in English only.
+   * Separates the title/target audience (Hebrew) from the searchTerm (English).
    */
   private buildCompetitorQuery(idea: RawIdea, searchTerm: string): string {
-    // שלוף רק את החלק האנגלי המשמעותי מה-searchTerm
+    // Extract only the meaningful English part from the searchTerm
     const englishMatches = searchTerm.match(/[a-zA-Z][\w\s-]{3,}/g);
     const englishPart = englishMatches?.join(' ').trim() ?? '';
 
-    // העדף את החלק האנגלי הנקי; fallback לכותרת (שתעבור simplifyQuery)
+    // Prefer the clean English part; fallback to the title (which will go through simplifyQuery)
     const coreTerms = englishPart.length > 10 ? englishPart : idea.title;
 
     return `${coreTerms} software competitors alternative`;

@@ -286,9 +286,9 @@ export class GeneticsService {
     }
 
     /**
-     * מתרגם רשימת שמות לאנגלית פעם אחת לכל chunk — כך batch flows
-     * (searchChunk/fetchCannlyticsChunk/fetchDemarilyChunk) לא קוראים ל-LLM
-     * שלוש פעמים על אותו שם.
+     * Translates a list of names to English once per chunk — so batch flows
+     * (searchChunk/fetchCannlyticsChunk/fetchDemarilyChunk) do not call the LLM
+     * three times on the same name.
      */
     private async resolveEnglishNames(names: string[]): Promise<Map<string, string>> {
         const map = new Map<string, string>();
@@ -299,9 +299,9 @@ export class GeneticsService {
     }
 
     /**
-     * מדרג תוצאות חיפוש לפי רלוונטיות: שם הזן (אנגלית/עברית) קודם, אחר כך
-     * מילות קנאביס — כך רעש (עמודי ג'ימייל/לינקדאין וכו') לא מדלל את ההקשר
-     * שמועבר ל-LLM.
+     * Ranks search results by relevance: the strain name (English/Hebrew) first, then
+     * cannabis keywords — so noise (Gmail/LinkedIn pages etc.) does not dilute the context
+     * passed to the LLM.
      */
     private rankSearchResults(
         enName: string,
@@ -495,7 +495,7 @@ export class GeneticsService {
         if (!HEBREW_REGEX.test(name)) {
             return name;
         }
-        // קודם המפה הקשיחה (חינם), ואם אין — תרגום LLM כמו בטרפנים
+        // Hardcoded map first (free), and if absent — LLM translation as with terpenes
         const mapped = this.cannlyticsService.getEnglishName(name);
         if (mapped) return mapped;
         try {
@@ -508,9 +508,9 @@ export class GeneticsService {
             });
             const translated = response.content?.trim();
             if (translated && !HEBREW_REGEX.test(translated)) {
-                // חטיאת מפה = זן חדש שנכנס למלאי בלי ערך במפה הקשיחה.
-                // נרשם בטראקר כך שהסיכום הלילי בטלגרם ידווח עליו — תור קציר
-                // לעדכון המפה במקום לוג debug שנשכח.
+                // Map miss = a new strain that entered inventory without an entry in the hardcoded map.
+                // Recorded in the tracker so the nightly Telegram summary reports it — a harvest queue
+                // for updating the map instead of a forgotten debug log.
                 translationTracker.recordGeneticsMiss(name, translated);
                 this.logger.debug(`[translate] map miss "${name}" → LLM: "${translated}"`);
                 return translated;
@@ -619,8 +619,8 @@ Return JSON only:
             colorLight,
         });
 
-        // תצוגה מקדימה בלבד — אין שמירה אוטומטית (הלקוח מחליט לשמור דרך Update),
-        // בהתאם לתיעוד ה-endpoint: "Does not persist — caller decides whether to save."
+        // Preview only — no automatic save (the client decides to save via Update),
+        // per the endpoint docs: "Does not persist — caller decides whether to save."
         return existing;
     }
 }

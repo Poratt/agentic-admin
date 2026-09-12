@@ -230,7 +230,7 @@ describe('IdeasTasksService — nightly cron (Phase 3 + discovery + hard gate)',
     const warnSpy = jest.spyOn(Logger.prototype, 'warn');
     await service.runNightly();
 
-    // "ריצה הצליחה, התראה נכשלה" — the run's success must not look like a
+    // "The run succeeded, the notification failed" — the run's success must not look like a
     // silent failure, and the notification failure must not look like a run
     // failure.
     const tgWarn = warnSpy.mock.calls.find((args) => String(args[0]).includes('Telegram'));

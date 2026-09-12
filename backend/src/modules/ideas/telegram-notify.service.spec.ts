@@ -106,7 +106,7 @@ describe('buildTranslationTrackerSection — nightly harvest block', () => {
     expect(section).toContain('1 שמות חדשים');
     expect(section).toContain('אוראוז→Oreoz');
     expect(section).toContain('טרפנים');
-    // parse_mode='HTML' — שמות מ-LLM/מלאי אף פעם לא מהימנים
+    // parse_mode='HTML' — names from the LLM/inventory are never trustworthy
     expect(section).toContain('ריח &lt;גבוה&gt;→Strong &amp; Scent');
   });
 

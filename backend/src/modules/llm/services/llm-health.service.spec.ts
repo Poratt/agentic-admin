@@ -25,6 +25,7 @@ function makeDbProviderService(): LlmProviderService {
   return {
     findProviders: jest.fn(),
     findModelByKey: jest.fn(),
+    findModelById: jest.fn(),
     saveTestResult: jest.fn(),
   } as unknown as LlmProviderService;
 }
@@ -116,9 +117,7 @@ describe('LlmHealthService', () => {
       });
 
       const service = makeHealthService({ dbProviderService });
-      await expect(
-        service.testLlm('openrouter', 'image-model', 'Hello', 'ctx'),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.testLlm('openrouter', 'image-model', 'Hello', 'ctx')).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('saves test result to DB', async () => {
@@ -131,6 +130,22 @@ describe('LlmHealthService', () => {
       const service = makeHealthService({ client, dbProviderService });
       await service.testLlm('openrouter', 'gpt-4o', 'Hello', 'ctx');
 
+      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(42, expect.any(Number), 'success', null);
+    });
+
+    it('saves by model id when provided — duplicate keys across providers must not misroute the result', async () => {
+      const client = makeClientService();
+      const dbProviderService = makeDbProviderService();
+      (client.generateResponse as jest.Mock).mockResolvedValue({ content: 'OK' });
+      // key-only lookup hits the wrong provider's row (id 7); the id lookup is the tested model (id 42)
+      (dbProviderService.findModelByKey as jest.Mock).mockResolvedValue({ id: 7, capability: 'text' });
+      (dbProviderService.findModelById as jest.Mock).mockResolvedValue({ id: 42, capability: 'text' });
+      (dbProviderService.saveTestResult as jest.Mock).mockResolvedValue({});
+
+      const service = makeHealthService({ client, dbProviderService });
+      await service.testLlm('openrouter', 'openai/gpt-oss-20b', 'Hello', 'ctx', 42);
+
+      expect(dbProviderService.findModelById).toHaveBeenCalledWith(42);
       expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(42, expect.any(Number), 'success', null);
     });
   });

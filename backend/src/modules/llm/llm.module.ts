@@ -15,7 +15,7 @@ import { LlmProviderModule } from '../llm-provider/llm-provider.module';
     LlmProviderConfigService,
     LlmClientService,
     LlmHealthService,
-    LlmTasksService // 🚀 רישום שירות הקרון כאן
+    LlmTasksService // 🚀 cron service registration lives here
   ],
   exports: [LlmService, LlmClientService, LlmProviderConfigService],
 })
