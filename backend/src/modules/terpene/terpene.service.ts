@@ -78,6 +78,16 @@ export class TerpeneService {
         return this.terpeneRepository.save(terpene);
     }
 
+    /**
+     * Model selection for enrichment calls. A human trigger passes userId and the call
+     * resolves to that user's default model; background batches have no user, so they use
+     * a pinned healthy free model (the env legacy default is currently unroutable).
+     */
+    private enrichModel(userId?: number): { userId?: number; providerOverride?: 'openrouter'; modelOverride?: string } {
+        if (userId) return { userId };
+        return { providerOverride: 'openrouter', modelOverride: 'google/gemma-4-26b-a4b-it:free' };
+    }
+
     async enrichBatch(names: string[], userId?: number): Promise<void> {
         const filtered = this.filterNames(names);
         if (!filtered.length) {
@@ -118,7 +128,7 @@ export class TerpeneService {
                 const response = await this.llmClientService.generateResponse({
                     prompt: buildTerpeneEnrichUserPrompt(chunk, searchResults),
                     systemContext: TERPENE_ENRICH_SYSTEM_PROMPT,
-                    userId,
+                    ...this.enrichModel(userId),
                     maxTokens: 4096,
                 });
 
@@ -199,7 +209,7 @@ export class TerpeneService {
                 const response = await this.llmClientService.generateResponse({
                     prompt: buildTerpeneEnrichUserPrompt(names, searchResults),
                     systemContext: TERPENE_ENRICH_SYSTEM_PROMPT,
-                    userId,
+                    ...this.enrichModel(userId),
                     maxTokens: 4096,
                 });
 
@@ -282,7 +292,7 @@ export class TerpeneService {
             const response = await this.llmClientService.generateResponse({
                 prompt: `Return ONLY the English name for this Hebrew terpene name: "${name}". No explanation, just the English name.`,
                 systemContext: 'You translate Hebrew terpene names to English. Return only the English name.',
-                userId,
+                ...this.enrichModel(userId),
                 maxTokens: 50,
             });
             const translated = response.content?.trim();
@@ -453,7 +463,7 @@ Return JSON only:
         const response = await this.llmClientService.generateResponse({
             prompt,
             systemContext: TERPENE_ENRICH_SYSTEM_PROMPT,
-            userId,
+            ...this.enrichModel(userId),
             maxTokens: 4096,
         });
 
