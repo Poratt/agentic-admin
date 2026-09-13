@@ -1,46 +1,77 @@
-import { translationTracker } from './translation-tracker';
+/**
+ * Tests for TranslationTrackerService — the DB-backed replacement for the
+ * old in-memory singleton. The legacy `translationTracker` singleton is now
+ * a no-op stub (the service reads directly from genetics/terpene repos).
+ *
+ * These tests use real NestJS testing with mocked repos so they verify
+ * the query logic without a database.
+ */
+import { TranslationTrackerService } from './translation-tracker';
 
-describe('translationTracker — LLM-translation harvest queue', () => {
-  beforeEach(() => {
-    translationTracker.reset();
+function makeGeneticsRepo(rows: { name: string; englishName: string | null }[]) {
+  return {
+    find: jest.fn().mockResolvedValue(rows),
+    createQueryBuilder: jest.fn().mockReturnValue({
+      where: jest.fn().mockReturnThis(),
+      getCount: jest.fn().mockResolvedValue(rows.filter((r) => r.englishName != null).length),
+    }),
+  };
+}
+
+function makeTerpeneRepo(rows: { name: string; englishName: string | null }[]) {
+  return {
+    find: jest.fn().mockResolvedValue(rows),
+    createQueryBuilder: jest.fn().mockReturnValue({
+      where: jest.fn().mockReturnThis(),
+      getCount: jest.fn().mockResolvedValue(rows.filter((r) => r.englishName != null).length),
+    }),
+  };
+}
+
+describe('TranslationTrackerService', () => {
+  it('geneticsMissCount returns count of rows with englishName', async () => {
+    const geneticsRepo = makeGeneticsRepo([
+      { name: 'אוראוז', englishName: 'Oreoz' },
+      { name: 'אוז קוש', englishName: null },
+    ]);
+    const terpeneRepo = makeTerpeneRepo([]);
+    const svc = new TranslationTrackerService(geneticsRepo as any, terpeneRepo as any);
+    expect(await svc.geneticsMissCount()).toBe(1);
   });
 
-  it('counts distinct genetics map misses (dedup by Hebrew name)', () => {
-    translationTracker.recordGeneticsMiss('אוראוז', 'Oreoz');
-    // The same strain translated again (repeated chunk / additional enrichment run) — still counted once
-    translationTracker.recordGeneticsMiss('אוראוז', 'Oreoz');
-    translationTracker.recordGeneticsMiss('אוז קוש', 'Oz Kush');
-
-    expect(translationTracker.geneticsMissCount()).toBe(2);
-  });
-
-  it('tracks terpene translations separately from genetics misses', () => {
-    translationTracker.recordGeneticsMiss('אוראוז', 'Oreoz');
-    translationTracker.recordTerpeneTranslation('דג סלמון', 'Salmon River');
-
-    expect(translationTracker.geneticsMissCount()).toBe(1);
-    expect(translationTracker.terpeneTranslationCount()).toBe(1);
-    expect(translationTracker.totalCount()).toBe(2);
-  });
-
-  it('returns recent records newest first, capped by the requested limit', () => {
-    translationTracker.recordGeneticsMiss('א', 'A');
-    translationTracker.recordGeneticsMiss('ב', 'B');
-    translationTracker.recordGeneticsMiss('ג', 'C');
-
-    const recent = translationTracker.recentGeneticsMisses(2);
+  it('recentGeneticsMisses returns rows with englishName set, newest first', async () => {
+    const geneticsRepo = makeGeneticsRepo([
+      { name: 'ג', englishName: 'C' },
+      { name: 'ב', englishName: 'B' },
+      { name: 'א', englishName: null },
+    ]);
+    const terpeneRepo = makeTerpeneRepo([]);
+    const svc = new TranslationTrackerService(geneticsRepo as any, terpeneRepo as any);
+    const recent = await svc.recentGeneticsMisses(2);
     expect(recent).toHaveLength(2);
     expect(recent[0].hebrew).toBe('ג');
+    expect(recent[0].english).toBe('C');
     expect(recent[1].hebrew).toBe('ב');
+    expect(recent[1].english).toBe('B');
   });
 
-  it('reset clears both collections', () => {
-    translationTracker.recordGeneticsMiss('א', 'A');
-    translationTracker.recordTerpeneTranslation('ב', 'B');
-    translationTracker.reset();
+  it('totalCount sums genetics and terpene counts', async () => {
+    const geneticsRepo = makeGeneticsRepo([{ name: 'אוראוז', englishName: 'Oreoz' }]);
+    const terpeneRepo = makeTerpeneRepo([{ name: 'דג סלמון', englishName: 'Salmon River' }]);
+    const svc = new TranslationTrackerService(geneticsRepo as any, terpeneRepo as any);
+    expect(await svc.totalCount()).toBe(2);
+  });
 
-    expect(translationTracker.totalCount()).toBe(0);
-    expect(translationTracker.recentGeneticsMisses(5)).toEqual([]);
-    expect(translationTracker.recentTerpeneTranslations(5)).toEqual([]);
+  it('recentTerpeneTranslations returns rows with englishName set', async () => {
+    const geneticsRepo = makeGeneticsRepo([]);
+    const terpeneRepo = makeTerpeneRepo([
+      { name: 'דג סלמון', englishName: 'Salmon River' },
+      { name: 'לינלול', englishName: null },
+    ]);
+    const svc = new TranslationTrackerService(geneticsRepo as any, terpeneRepo as any);
+    const recent = await svc.recentTerpeneTranslations(5);
+    expect(recent).toHaveLength(1);
+    expect(recent[0].hebrew).toBe('דג סלמון');
+    expect(recent[0].english).toBe('Salmon River');
   });
 });

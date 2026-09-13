@@ -111,7 +111,14 @@
                                         <i class="ph ph-caret-left"></i>
                                     </button>
                                 </td>
-                                <td class="row-label clickable" (click)="toggleGenetics(g.id)">{{ g.name }}</td>
+                                <td class="clickable" (click)="toggleGenetics(g.id)">
+                                    <div class="row-title">
+                                        <span class="row-label">{{ g.name }}</span>
+                                        @if (g.englishName) {
+                                            <span class="row-subtitle">{{ g.englishName }}</span>
+                                        }
+                                    </div>
+                                </td>
                                 <td>
                                     @if (g.type) {
                                         <span class="badge badge-primary">{{ g.type }}</span>

@@ -34,7 +34,7 @@ Last updated: 2026-09-13
 - **Recovered:** env files + root package.json recreated; 44/47 models restored via label→seed mapping (ids preserved → user defaults intact); 3 unmapped customs deleted (GLM 4.7 Flash, MiniMax M3 dup, x-Alpha); 325 orphaned test results removed (unattributable). Backend boots clean, unique index + FKs recreated; client up. apiKeys restored encrypted from .env (openrouter, nvidia, agnes, OmniRoute, GMI-Cloud, cloudflare). GLM 4.7 Flash re-added on cloudflare (`@cf/zai-org/glm-4.7-flash`, live-verified SUCCESS).
 - **User cleanup (verified live):** NVIDIA — 8 retired checkpoints deleted (NIM catalog drift, 4 remain); requesty provider deleted (no key existed). Final state: 6 providers, 36 models.
 - **Prevention (done, user approved):** AGENTS.md Golden Rule #7 — no branch switch with backend running + mandatory baseline dump; baseline taken: `C:\tmp\db-baselines\my_app-2026-09-12-post-recovery.sql` (2.9MB, 17 tables).
-- **Open:** user re-adds x-Alpha / MiniMax M3 if wanted; root package.json still untracked (decide whether to commit).
+- **Open:** ~~user re-adds x-Alpha / MiniMax M3 if wanted;~~ ✅ CLOSED 2026-09-13 (user decision — no longer relevant). ~~root package.json still untracked (decide whether to commit).~~ ✅ CLOSED 2026-09-13 — root package.json tracked since `13deca4`.
 
 ## 2026-09-12 — ✅ CLOSED (user decision): SearXNG proxy backlog item obsolete
 
@@ -295,7 +295,7 @@ Last updated: 2026-09-13
 - **Done:** user revoked in BotFather + wrote new token to `backend/.env` → I restarted the command bot (kill 35112 → relaunch same interpreter/path). Relay (`TELEGRAM_BOT_TOKEN` @freebuzbot) never exposed, never touched.
 - **False alarm defused:** 19:58 `Unauthorized` in old bridge.log ≠ dead relay — current relay token getMe ok, lock PID alive, state.json mtime today (polling fine); transient window from 22:59 token fix + 23:12 restart, stale log only.
 - **Verified:** new token getMe ok · old token **401** (revoke took) · getUpdates ok · poller alive (PID 32880), zero errors after one-time restart 409 · `--test status` ok · live test message `message_id: 28`.
-- **Open (non-blocking):** who/what fixed `.env` at 22:59 — if not a prior session's manual edit, worth checking for an uncontrolled `.env` writer. Full record: LOG.md BF.
+- **Open (non-blocking):** ~~who/what fixed `.env` at 22:59 — if not a prior session's manual edit, worth checking for an uncontrolled `.env` writer. Full record: LOG.md BF.~~ ✅ CLOSED 2026-09-13 — investigated: the 22:59 write was the user's manual TOKEN_ROTATION that same evening (user wrote new `TELEGRAM_COMMAND_BOT_TOKEN` to `.env` after revoking in BotFather). No uncontrolled writer.
 
 ## 2026-08-20 — ✅ DONE: translation-harvest tracker (Option A) — map misses in the nightly Telegram summary
 

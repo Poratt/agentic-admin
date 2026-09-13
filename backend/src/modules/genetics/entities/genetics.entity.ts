@@ -111,4 +111,12 @@ export class Genetics {
     })
     @Column({ type: 'varchar', length: 7, default: '#808080' })
     colorLight!: string;
+
+    @ApiProperty({
+        description: 'English strain name — learned from the LLM on first translation, persisted for reuse.',
+        example: 'Gorilla Glue',
+        required: false,
+    })
+    @Column({ type: 'varchar', length: 200, nullable: true })
+    englishName!: string | null;
 }

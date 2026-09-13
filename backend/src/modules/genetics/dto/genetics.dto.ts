@@ -18,6 +18,13 @@ export class GeneticsDto {
     name!: string;
 
     @ApiProperty({
+        description: 'English strain name — learned from the LLM on first translation.',
+        example: 'Gorilla Glue',
+        required: false,
+    })
+    englishName?: string;
+
+    @ApiProperty({
         description: 'Short Hebrew description of the strain. Omitted when not set.',
         example: 'זן חזק במיוחד שזכה במקומות ראשונים ב-Cannabis Cup...',
         required: false,
@@ -107,6 +114,7 @@ export function toGeneticsDto(entity: Genetics | null): GeneticsDto | null {
     return {
         id: entity.id,
         name: entity.name,
+        englishName: entity.englishName ?? undefined,
         description: entity.description ?? undefined,
         parent1: entity.parent1 ?? undefined,
         parent2: entity.parent2 ?? undefined,

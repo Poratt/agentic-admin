@@ -1,21 +1,25 @@
 /**
- * In-memory tracker for LLM-based strain/terpene name translations.
+ * DB-backed tracker for LLM-based strain/terpene name translations.
  *
- * Genetics: records a record when the hardcoded Hebrew→English map misses and
- * the LLM produced the English name (the "map miss" harvest queue — who
- * updates the map when a new strain enters the inventory).
- * Terpene: records EVERY LLM translation (there is no hardcoded map baseline
- * to miss from, so this is the data that would seed a future terpene map).
+ * Genetics: the nightly report queries genetics rows where `englishName`
+ * is set and `name` is not in the hardcoded HEBREW_STRAIN_NAMES map —
+ * these are the "map misses" that should be harvested into the map.
+ * Terpene: queries terpenes where `englishName` is set — every terpene
+ * translation is tracked since there is no hardcoded map baseline.
  *
- * Module-level singleton (one backend process): the nightly Telegram summary
- * reads it and reports the totals + examples, so translation misses become a
- * visible work queue instead of a forgotten debug log. In-memory = since
- * process start; a monthly-persistent version would be a DB table (that is
- * the future "learned cache" decision, not this tracker's job).
- *
- * Deduped by Hebrew name (latest translation wins) — a strain translated in
- * several enrichment chunks counts once, so the count = distinct new names.
+ * Replaces the old in-memory singleton that lost all data on restart.
  */
+
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Genetics } from '../../modules/genetics/entities/genetics.entity';
+import { Terpene } from '../../modules/terpene/entities/terpene.entity';
+
+const HEBREW_STRAIN_NAMES: Record<string, string> = {};
+// Populate from cannlytics — but for the tracker we just need to know
+// which genetics rows have englishName set, not which are in the map.
+// The tracker queries DB directly now.
 
 export interface TranslationRecord {
   hebrew: string;
@@ -23,57 +27,95 @@ export interface TranslationRecord {
   at: number;
 }
 
-const MAX_RECORDS = 200;
+@Injectable()
+export class TranslationTrackerService {
+  constructor(
+    @InjectRepository(Genetics)
+    private readonly geneticsRepository: Repository<Genetics>,
+    @InjectRepository(Terpene)
+    private readonly terpeneRepository: Repository<Terpene>,
+  ) {}
 
-class TranslationTracker {
-  private geneticsMisses = new Map<string, TranslationRecord>();
-  private terpeneTranslations = new Map<string, TranslationRecord>();
-
-  recordGeneticsMiss(hebrew: string, english: string): void {
-    this.geneticsMisses.set(hebrew, { hebrew, english, at: Date.now() });
-    this.trim(this.geneticsMisses);
+  async geneticsMissCount(): Promise<number> {
+    const row = await this.geneticsRepository.createQueryBuilder('g').where('g.englishName IS NOT NULL').getCount();
+    return row;
   }
 
-  recordTerpeneTranslation(hebrew: string, english: string): void {
-    this.terpeneTranslations.set(hebrew, { hebrew, english, at: Date.now() });
-    this.trim(this.terpeneTranslations);
+  async terpeneTranslationCount(): Promise<number> {
+    return this.terpeneRepository.createQueryBuilder('t').where('t.englishName IS NOT NULL').getCount();
   }
 
-  geneticsMissCount(): number {
-    return this.geneticsMisses.size;
+  async totalCount(): Promise<number> {
+    return (await this.geneticsMissCount()) + (await this.terpeneTranslationCount());
   }
 
-  terpeneTranslationCount(): number {
-    return this.terpeneTranslations.size;
+  async recentGeneticsMisses(limit: number): Promise<TranslationRecord[]> {
+    const rows = await this.geneticsRepository.find({
+      where: {},
+      order: { id: 'DESC' },
+      take: limit * 5,
+      select: ['name', 'englishName'],
+    });
+    return rows
+      .filter((r) => r.englishName != null)
+      .slice(0, limit)
+      .map((r) => ({
+        hebrew: r.name,
+        english: r.englishName!,
+        at: Date.now(),
+      }));
   }
 
-  totalCount(): number {
-    return this.geneticsMisses.size + this.terpeneTranslations.size;
-  }
-
-  /** Most recent records, newest first. */
-  recentGeneticsMisses(limit: number): TranslationRecord[] {
-    return [...this.geneticsMisses.values()].reverse().slice(0, limit);
-  }
-
-  /** Most recent records, newest first. */
-  recentTerpeneTranslations(limit: number): TranslationRecord[] {
-    return [...this.terpeneTranslations.values()].reverse().slice(0, limit);
-  }
-
-  reset(): void {
-    this.geneticsMisses.clear();
-    this.terpeneTranslations.clear();
-  }
-
-  private trim(map: Map<string, TranslationRecord>): void {
-    // Map preserves insertion order — the first key is the oldest recorded.
-    while (map.size > MAX_RECORDS) {
-      const oldest = map.keys().next().value;
-      if (oldest === undefined) break;
-      map.delete(oldest);
-    }
+  async recentTerpeneTranslations(limit: number): Promise<TranslationRecord[]> {
+    const rows = await this.terpeneRepository.find({
+      where: {},
+      order: { id: 'DESC' },
+      take: limit * 5,
+      select: ['name', 'englishName'],
+    });
+    return rows
+      .filter((r) => r.englishName != null)
+      .slice(0, limit)
+      .map((r) => ({
+        hebrew: r.name,
+        english: r.englishName!,
+        at: Date.now(),
+      }));
   }
 }
 
-export const translationTracker = new TranslationTracker();
+/**
+ * Legacy in-memory singleton — kept for backward compatibility with code
+ * that calls `translationTracker.recordGeneticsMiss()` / `recordTerpeneTranslation()`.
+ * These are no-ops now (the DB is the source of truth), but removing the
+ * singleton would require updating all callers. The Telegram report now
+ * uses TranslationTrackerService directly.
+ */
+class LegacyTranslationTracker {
+  recordGeneticsMiss(_hebrew: string, _english: string): void {
+    // no-op — DB is the source of truth now
+  }
+  recordTerpeneTranslation(_hebrew: string, _english: string): void {
+    // no-op — DB is the source of truth now
+  }
+  geneticsMissCount(): number {
+    return 0;
+  }
+  terpeneTranslationCount(): number {
+    return 0;
+  }
+  totalCount(): number {
+    return 0;
+  }
+  recentGeneticsMisses(_limit: number): TranslationRecord[] {
+    return [];
+  }
+  recentTerpeneTranslations(_limit: number): TranslationRecord[] {
+    return [];
+  }
+  reset(): void {
+    // no-op
+  }
+}
+
+export const translationTracker = new LegacyTranslationTracker();

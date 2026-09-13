@@ -5088,6 +5088,11 @@
             "description": "Hebrew display name. Unique — used as the lookup key from the frontend.",
             "example": "גורילה גלו"
           },
+          "englishName": {
+            "type": "string",
+            "description": "English strain name — learned from the LLM on first translation.",
+            "example": "Gorilla Glue"
+          },
           "description": {
             "type": "string",
             "description": "Short Hebrew description of the strain. Omitted when not set.",
