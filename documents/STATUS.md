@@ -9,7 +9,7 @@ Last updated: 2026-09-13
 - **Stats:** `GET /llm-provider/stats` (ping + real merge, `rankingBasis`, `fastestId`/`mostStableId`); live 500 fixed (camelCase cols); zero-success 0ms no longer wins fastest; 9 sortable columns; badges labelled by basis.
 - **Dropdown:** removed `position: relative !important` on `.p-select-overlay`.
 - **Verified:** frontend **554/554** + build 0; backend **535/535** + build 0. No architecture-diagram change. No commit/push.
-- **Open:** visual review → commit + push.
+- **Open:** ~~visual review → commit + push.~~ ✅ DONE 2026-09-13 — committed `fe2b9fa` + pushed `main`.
 
 ## 2026-09-12 — ✅ DONE: Test All (per-provider, background) + provider row-level click
 

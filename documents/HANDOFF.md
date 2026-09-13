@@ -13,7 +13,7 @@
 **Dropdown fix (2026-09-13, user screenshot):** state-filter panel rendered ~1100px left of trigger. Live-probed (headless Chrome, real login): overlay `left=213` vs trigger `left=1294`. Root cause: PrimeNG 22 positions body-appended overlays with logical `inset-inline-start` (@primeuix/utils `absolutePosition`, `V(t)` = computed direction); toolbar is a `dir="ltr"` island on an RTL page → overlay escapes to `<body>` (RTL) → inline-start resolves to `right` → mirrored. Fix: `appendTo="self"` on this one `p-select` (stays in LTR context, physical coords; no clipping ancestor). Probe after fix: `1294=1294` before AND after stats→providers nav. Guard spec asserts `appendTo=self` (mutation-proven: flip to body → exactly 1 fail; restored → 63/63). Targeted 63/63 + build 0.
 
 
-**Next exact step:** visual review (toolbar both views, stats badges, dropdown position) → commit + push accumulated session.
+**Next exact step:** ~~visual review (toolbar both views, stats badges, dropdown position) → commit + push accumulated session.~~ ✅ DONE 2026-09-13 — screenshots deleted, committed `fe2b9fa`, pushed `main` (30 files, +1649/-271). Left untracked (not session work): `documents/b2b-pivot-review-2026-09-13.md`, `documents/b2b-pivot.diff`, `documents/ideas-logs.md`, `documents/screen-shot.png`, root `package.json`.
 
 ---
 
