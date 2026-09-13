@@ -1,6 +1,6 @@
 import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import { Injectable, inject, signal, computed } from '@angular/core';
-import { LlmProviderService, LlmProvider, LlmModel } from '../../core/services/llm-provider.service';
+import { LlmProviderService, LlmProvider, LlmModel, ModelStats } from '../../core/services/llm-provider.service';
 import { PageStates } from '../../core/enums/page-states.enum';
 import { ServiceResultContainer } from '../../core/models/service-result-container.model';
 import { environment } from '../../environments/environment';
@@ -154,6 +154,35 @@ export class LlmProviderStore {
 
     reload(): void {
         this.providersResource.reload();
+    }
+
+    /**
+     * Model usage statistics for the statistics tab and the leaderboard badges.
+     *
+     * Loaded on demand rather than through `httpResource`: a resource issues its GET the moment the
+     * store is constructed, and this one is a separate endpoint the page may never need.
+     */
+    modelStats = signal<ModelStats | null>(null);
+    modelStatsLoading = signal(false);
+    modelStatsError = signal<string | null>(null);
+
+    loadModelStats(): void {
+        if (this.modelStatsLoading()) {
+            return;
+        }
+
+        this.modelStatsLoading.set(true);
+        this.modelStatsError.set(null);
+        this.llmProviderService.getModelStats().subscribe({
+            next: (res) => {
+                this.modelStats.set(res.result ?? null);
+                this.modelStatsLoading.set(false);
+            },
+            error: (err: HttpErrorResponse) => {
+                this.modelStatsError.set(err?.error?.message ?? 'Failed to load model statistics');
+                this.modelStatsLoading.set(false);
+            },
+        });
     }
 
     clearError() {

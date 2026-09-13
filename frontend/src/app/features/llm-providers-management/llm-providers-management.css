@@ -100,6 +100,7 @@
         width: 220px;
         height: 16px;
         flex-grow: 1;
+        cursor: pointer;
 
         button {
             opacity: 0;
@@ -107,6 +108,12 @@
 
             &:active {
                 transform: scale(0.97);
+            }
+
+            /* The confirmation check has to stay visible once the pointer leaves the row,
+               otherwise the copy feedback would be hidden by the hover-only opacity. */
+            &.copied {
+                opacity: 1;
             }
         }
     }
@@ -262,6 +269,88 @@
             margin: 0;
             font-size: var(--font-size-sm);
             color: var(--color-text-muted);
+        }
+    }
+}
+
+/* ── Statistics tab and leaderboard badges ─────────────────────────────── */
+:host {
+
+    /* The toolbar layout, its view switch (.toggle-group.elevated), the search sizing and the
+       table caption are all global patterns — see _buttons.css, _utilities.css and _forms.css. */
+
+    .stats-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-8);
+    }
+
+    .stats-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-8);
+        font-size: var(--font-size-xs);
+        color: var(--color-text-muted);
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-4);
+
+            strong {
+                font-weight: var(--font-weight-semibold);
+                color: var(--color-text-secondary);
+            }
+        }
+    }
+
+    .stats-table {
+
+        .col-provider {
+            font-family: var(--font-code);
+            color: var(--color-text-secondary);
+        }
+
+        .col-last-call {
+            white-space: nowrap;
+            color: var(--color-text-muted);
+        }
+
+        /* A model that was removed from the configuration keeps its history, greyed out. */
+        .inactive-row {
+            opacity: 0.6;
+        }
+    }
+
+    /* The global .row-title is a column flex, so the badges need their own flex line
+       to sit beside the model name instead of stacking under it. */
+    .row-headline {
+        display: flex;
+        align-items: center;
+        gap: var(--space-5);
+        min-width: 0;
+    }
+
+    .leader-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 2px var(--space-5);
+        font-size: var(--font-size-xxs);
+        font-weight: var(--font-weight-semibold);
+        white-space: nowrap;
+        border-radius: var(--radius-pill);
+
+        &.fastest {
+            color: var(--color-warning);
+            background: var(--color-warning-bg);
+            border: 1px solid var(--color-warning-border);
+        }
+
+        &.stable {
+            color: var(--color-success);
+            background: var(--color-success-bg);
+            border: 1px solid var(--color-success-border);
         }
     }
 }

@@ -187,7 +187,6 @@ p-select.p-select.custom-select {
 }
 
 .p-select-overlay {
-  position: relative !important;
   isolation: isolate;
   /* background: var(--glass-bg) !important; */
   border: 1px solid var(--glass-border) !important;

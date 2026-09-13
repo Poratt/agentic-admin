@@ -111,5 +111,26 @@ describe('parseLlmJson', () => {
       expect(result).toBeNull();
       consoleSpy.mockRestore();
     });
+
+    it('repairs invalid escape sequences (PHP namespaces like League\\Csv)', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      // The model emitted League\Csv with a single backslash inside a JSON string.
+      // The literal needs a doubled backslash so the raw text really carries one —
+      // `'\C'` collapses to `C` in a JS string and the case would pass vacuously.
+      const input = '{"competitors":[{"name":"League\\Csv export tool"}]}';
+      const result = parseLlmJson<{ competitors: Array<{ name: string }> }>(input, 'test');
+      expect(result).toEqual({ competitors: [{ name: 'League\\Csv export tool' }] });
+      consoleSpy.mockRestore();
+    });
+
+    it('recovers a quoted phrase followed by a comma inside a Hebrew value', () => {
+      // Live failure from the ideas pipeline: the single-pass repair has to guess where the
+      // string ends, closes it at the inner quote in `"Audit חודשי",`, and the whole payload —
+      // an entire topic's ideas — is lost.
+      const input = '[\n{"title":"כלי","description":"המערכת מייצרת "Audit חודשי", ומספקת דוח"}\n]';
+      const result = parseLlmJson<{ title: string; description: string }[]>(input, 'test');
+
+      expect(result).toEqual([{ title: 'כלי', description: 'המערכת מייצרת "Audit חודשי", ומספקת דוח' }]);
+    });
   });
 });

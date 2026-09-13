@@ -1,5 +1,22 @@
 # Documentation Handoff
 
+## 2026-09-13 — ✅ DONE: catalog-toolbar redesign + model statistics tab + ranking hardening
+
+**Toolbar (user brief):** stacked 2-floor toolbar — floor 1: elevated segmented view switch (Providers/Statistics) + Add Provider; floor 2 (providers only): search + state filter. New global `.toggle-group.elevated` variant (`_buttons.css`) + `.toolbar-row` (component CSS); base `.toggle-group` untouched (shared ×3). Counter as muted caption above table. No Tailwind in project — brief's Tailwind names translated to token system.
+
+**Search fixes (pre-existing, exposed by redesign):** `.toolbar-search` grew (`flex:1`) but child `.form-field-has-icon.sm` capped at `min(160px,100%)` → ~120px dead gap; 32px+32px padding truncated placeholder; clear-× overlapped field icon. Fixed scoped to component (global `.sm` untouched — strain-hunter-settings uses same pattern ×2).
+
+**Statistics tab (new):** backend `GET /llm-provider/stats` — ping + real-call figures merged per configured model, `rankingBasis: 'real'|'ping'|null`, `fastestId`/`mostStableId`. Fixed live 500: tables use camelCase cols (`responseTimeMs`, `latencyMs`, `createdAt`) — snake_case query → unknown column. Fixed. Fixed ranking: zero-success AVG→NULL→0 won "fastest" — now only `avgMs>0` eligible. Frontend: 9 sortable columns (dot-path fields), badges with basis label (`real calls` vs `connectivity tests`).
+
+**Dropdown fix:** removed repo's `position: relative !important` on `.p-select-overlay` — defeated PrimeNG absolute positioning (~600px left offset).
+
+**Dropdown fix (2026-09-13, user screenshot):** state-filter panel rendered ~1100px left of trigger. Live-probed (headless Chrome, real login): overlay `left=213` vs trigger `left=1294`. Root cause: PrimeNG 22 positions body-appended overlays with logical `inset-inline-start` (@primeuix/utils `absolutePosition`, `V(t)` = computed direction); toolbar is a `dir="ltr"` island on an RTL page → overlay escapes to `<body>` (RTL) → inline-start resolves to `right` → mirrored. Fix: `appendTo="self"` on this one `p-select` (stays in LTR context, physical coords; no clipping ancestor). Probe after fix: `1294=1294` before AND after stats→providers nav. Guard spec asserts `appendTo=self` (mutation-proven: flip to body → exactly 1 fail; restored → 63/63). Targeted 63/63 + build 0.
+
+
+**Next exact step:** visual review (toolbar both views, stats badges, dropdown position) → commit + push accumulated session.
+
+---
+
 ## 2026-09-12 — ✅ DONE: Test All (per-provider background run) + provider row-level click
 
 **Test All (user request):** button next to Sync in each provider's panel — tests every active text model of that provider in one click.

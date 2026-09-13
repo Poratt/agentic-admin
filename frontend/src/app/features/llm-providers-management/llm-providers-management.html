@@ -1,4 +1,210 @@
 <div class="" dir="ltr">
+    <div class="catalog-toolbar stacked">
+        <!-- Floor 1: the view switch on one edge, the primary action on the other. -->
+        <div class="toolbar-row">
+            <div class="toggle-group elevated">
+                <button
+                    type="button"
+                    class="toggle-btn"
+                    [class.active]="activeTab() === 'providers'"
+                    (click)="activeTab.set('providers')"
+                >
+                    <i class="ph ph-rows"></i> Providers
+                </button>
+                <button
+                    type="button"
+                    class="toggle-btn"
+                    [class.active]="activeTab() === 'stats'"
+                    (click)="activeTab.set('stats')"
+                >
+                    <i class="ph ph-chart-bar"></i> Statistics
+                </button>
+            </div>
+
+            @if (activeTab() === 'providers' && pageState() === PageStates.Ready && isAdmin()) {
+                <button type="button" class="primary-btn filled sm" (click)="openAddProviderDialog()">
+                    <i class="ph ph-plus"></i>
+                    Add Provider
+                </button>
+            }
+        </div>
+
+        <!-- Floor 2: search and filters — providers view only, so the view switch never moves. -->
+        @if (activeTab() === 'providers' && pageState() === PageStates.Ready) {
+            <div class="toolbar-row">
+                <div class="toolbar-search">
+                    <div class="form-field-has-icon sm">
+                        <span class="field-icon ph ph-magnifying-glass"></span>
+                        <input
+                            pInputText
+                            type="text"
+                            [value]="globalFilter()"
+                            (input)="applyGlobalFilter($event)"
+                            placeholder="Search providers..."
+                            class="form-control"
+                        />
+                        <button
+                            type="button"
+                            class="icon-only transparent-btn sm search-clear-btn"
+                            [class.is-visible]="globalFilter()"
+                            aria-label="Clear search"
+                            (click)="clearGlobalFilter()"
+                        >
+                            <span class="ph ph-x"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <p-select
+                    [options]="activeFilterOptions"
+                    [ngModel]="showInactive()"
+                    (ngModelChange)="toggleShowInactive($event)"
+                    optionLabel="label"
+                    optionValue="value"
+                    appendTo="self"
+                    size="small"
+                    ariaLabel="Filter providers by state"
+                    class="custom-select transparent"
+                />
+            </div>
+        }
+    </div>
+
+    @if (activeTab() === 'stats') {
+        <div class="stats-panel">
+            @if (llmProviderStore.modelStatsLoading() && !llmProviderStore.modelStats()) {
+                <div class="page-state loading-state">
+                    <span class="custom-loader"></span>
+                </div>
+            } @else if (llmProviderStore.modelStatsError()) {
+                <div class="page-state error-state">
+                    <span class="icon ph ph-warning"></span>
+                    <h4 class="title">Could not load model statistics.</h4>
+                    <p class="subtitle">{{ llmProviderStore.modelStatsError() }}</p>
+                    <button class="primary-btn sm" type="button" (click)="llmProviderStore.loadModelStats()">
+                        Try again
+                    </button>
+                </div>
+            } @else if (statsRows().length === 0) {
+                <div class="page-state empty-state">
+                    <span class="icon ph ph-chart-bar"></span>
+                    <h4 class="title">No models to rank yet.</h4>
+                    <p class="subtitle">Statistics appear once providers and models are configured.</p>
+                </div>
+            } @else {
+                <div class="stats-legend">
+                    <span class="legend-item">
+                        <i class="ph ph-plugs-connected"></i>
+                        <strong>Ping</strong> — manual connectivity tests
+                    </span>
+                    <span class="legend-item">
+                        <i class="ph ph-lightning"></i>
+                        <strong>Real</strong> — calls the app actually made. A model needs
+                        {{ llmProviderStore.modelStats()!.minimumSample }} successful-ranked runs to
+                        win a badge.
+                    </span>
+                </div>
+
+                <p-table [value]="statsRows()" dataKey="id" [rowHover]="true" class="stats-table">
+                    <ng-template #header>
+                        <tr>
+                            <th pSortableColumn="modelKey">
+                                <div class="sortable-column-header">Model <p-sort-icon field="modelKey" /></div>
+                            </th>
+                            <th pSortableColumn="providerKey">
+                                <div class="sortable-column-header">Provider <p-sort-icon field="providerKey" /></div>
+                            </th>
+                            <!-- Nested paths work: the table resolves `ping.runs` and friends through
+                                 dot notation, and a model with no pings simply resolves to null. -->
+                            <th pSortableColumn="ping.runs">
+                                <div class="sortable-column-header">Ping · runs <p-sort-icon field="ping.runs" /></div>
+                            </th>
+                            <th pSortableColumn="ping.successRate">
+                                <div class="sortable-column-header">Ping · success <p-sort-icon field="ping.successRate" /></div>
+                            </th>
+                            <th pSortableColumn="ping.avgMs">
+                                <div class="sortable-column-header">Ping · avg <p-sort-icon field="ping.avgMs" /></div>
+                            </th>
+                            <th pSortableColumn="real.runs">
+                                <div class="sortable-column-header">Real · runs <p-sort-icon field="real.runs" /></div>
+                            </th>
+                            <th pSortableColumn="real.successRate">
+                                <div class="sortable-column-header">Real · success <p-sort-icon field="real.successRate" /></div>
+                            </th>
+                            <th pSortableColumn="real.avgMs">
+                                <div class="sortable-column-header">Real · avg <p-sort-icon field="real.avgMs" /></div>
+                            </th>
+                            <th pSortableColumn="lastCallAt">
+                                <div class="sortable-column-header">Last call <p-sort-icon field="lastCallAt" /></div>
+                            </th>
+                        </tr>
+                    </ng-template>
+                    <ng-template #body let-row>
+                        <tr [class.inactive-row]="!row.active">
+                            <td>
+                                <div class="row-title">
+                                    <div class="row-headline">
+                                        <span class="row-label">{{ statsLabel(row) }}</span>
+                                        @if (row.id === llmProviderStore.modelStats()!.fastestId) {
+                                            <span
+                                                class="leader-badge fastest"
+                                                appTooltip
+                                                [text]="'Fastest mean latency in ' + leaderBasisLabel(row.providerKey, row.modelKey)"
+                                            >
+                                                <i class="ph ph-lightning"></i> Fastest
+                                            </span>
+                                        }
+                                        @if (row.id === llmProviderStore.modelStats()!.mostStableId) {
+                                            <span
+                                                class="leader-badge stable"
+                                                appTooltip
+                                                [text]="'Highest success rate in ' + leaderBasisLabel(row.providerKey, row.modelKey)"
+                                            >
+                                                <i class="ph ph-shield-check"></i> Most stable
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (!row.label) {
+                                        <span class="row-subtitle">no longer configured</span>
+                                    }
+                                </div>
+                            </td>
+                            <td class="col-provider">{{ row.providerKey }}</td>
+                            @if (row.ping) {
+                                <td>{{ row.ping.runs }}</td>
+                                <td>
+                                    <span class="metric-primary" [class]="performanceClass(row.ping.successRate)">
+                                        {{ row.ping.successRate }}%
+                                    </span>
+                                </td>
+                                <td>{{ formatLatency(row.ping.avgMs) }}</td>
+                            } @else {
+                                <td class="metric-empty">—</td>
+                                <td class="metric-empty">—</td>
+                                <td class="metric-empty">—</td>
+                            }
+                            @if (row.real) {
+                                <td>{{ row.real.runs }}</td>
+                                <td>
+                                    <span class="metric-primary" [class]="performanceClass(row.real.successRate)">
+                                        {{ row.real.successRate }}%
+                                    </span>
+                                </td>
+                                <td>{{ formatLatency(row.real.avgMs) }}</td>
+                            } @else {
+                                <td class="metric-empty">—</td>
+                                <td class="metric-empty">—</td>
+                                <td class="metric-empty">—</td>
+                            }
+                            <td class="col-last-call">
+                                {{ row.lastCallAt ? (row.lastCallAt | date: 'short') : 'never' }}
+                            </td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            }
+        </div>
+    } @else {
     @switch (pageState()) {
         @case (PageStates.Loading) {
             <div class="page-state loading-state">
@@ -21,53 +227,11 @@
             </div>
         }
         @case (PageStates.Ready) {
-            <div class="catalog-toolbar">
-                <div class="toolbar-search">
-                    <div class="form-field-has-icon sm">
-                        <span class="field-icon ph ph-magnifying-glass"></span>
-                        <input
-                            pInputText
-                            type="text"
-                            [value]="globalFilter()"
-                            (input)="applyGlobalFilter($event)"
-                            placeholder="Search LLM providers..."
-                            class="form-control"
-                        />
-                        <button
-                            type="button"
-                            class="icon-only transparent-btn sm search-clear-btn"
-                            [class.is-visible]="globalFilter()"
-                            aria-label="Clear search"
-                            (click)="clearGlobalFilter()"
-                        >
-                            <span class="ph ph-x"></span>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="toolbar-actions">
-                    <div class="toolbar-stats">
-                        <div class="action-row summary-row">
-                            <span class="summary-item">
-                                <span class="ph ph-database"></span>
-                                <span class="summary-value">{{ llmProviders().length }}</span>
-                                <span class="summary-label">Providers</span>
-                            </span>
-                        </div>
-                    </div>
-                    <label class="control-label-inline" for="show-inactive">
-                        <p-toggleswitch [ngModel]="showInactive()" (ngModelChange)="toggleShowInactive($event)" inputId="show-inactive" />
-                        Show inactive
-                    </label>
-                    @if (isAdmin()) {
-                        <button type="button" class="primary-btn filled sm" (click)="openAddProviderDialog()">
-                            <i class="ph ph-plus"></i>
-                            Add Provider
-                        </button>
-                    }
-                </div>
-            </div>
-
+            <!-- Deliberately not "Showing N": this counts the providers in the current Active/All
+                 filter, not the rows left after the search box, so "Showing" would overstate it. -->
+            <p class="table-caption">
+                {{ llmProviders().length }} {{ llmProviders().length === 1 ? 'provider' : 'providers' }}
+            </p>
             <div class="glass-effect card table-container">
                 <p-table #table [value]="llmProviders()" dataKey="id" [globalFilterFields]="globalFilterFields" [rowHover]="true">
                     <ng-template #header>
@@ -265,18 +429,45 @@
                                                     </td>
                                                     <td class="clickable" (click)="toggleModel(model.id)">
                                                         <div class="row-title">
-                                                            <span class="row-label">{{ model.label }}</span>
-                                                            <div class="row-subtitle-inline">
+                                                            <div class="row-headline">
+                                                                <span class="row-label">{{ model.label }}</span>
+                                                                @if (isFastest(provider.key, model.key)) {
+                                                                    <span
+                                                                        class="leader-badge fastest"
+                                                                        appTooltip
+                                                                        [text]="'Fastest mean latency in ' + leaderBasisLabel(provider.key, model.key)"
+                                                                    >
+                                                                        <i class="ph ph-lightning"></i> Fastest
+                                                                    </span>
+                                                                }
+                                                                @if (isMostStable(provider.key, model.key)) {
+                                                                    <span
+                                                                        class="leader-badge stable"
+                                                                        appTooltip
+                                                                        [text]="'Highest success rate in ' + leaderBasisLabel(provider.key, model.key)"
+                                                                    >
+                                                                        <i class="ph ph-shield-check"></i> Most stable
+                                                                    </span>
+                                                                }
+                                                            </div>
+                                                            <div
+                                                                class="row-subtitle-inline"
+                                                                (click)="copyModelKey($event, model.key)"
+                                                            >
                                                                 <span class="row-subtitle row-subtitle--flex">{{ model.key }}</span>
                                                                 <button
                                                                     type="button"
                                                                     class="icon-only transparent-btn xs"
+                                                                    [class.copied]="copiedModelKey() === model.key"
                                                                     aria-label="Copy model key"
                                                                     appTooltip
                                                                     [text]="'Copy key'"
-                                                                    (click)="copyModelKey($event, model.key)"
                                                                 >
-                                                                    <i class="ph ph-copy"></i>
+                                                                    <i
+                                                                        [class]="
+                                                                            copiedModelKey() === model.key ? 'ph ph-check' : 'ph ph-copy'
+                                                                        "
+                                                                    ></i>
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -488,6 +679,7 @@
                 </p-table>
             </div>
         }
+    }
     }
 </div>
 

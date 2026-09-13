@@ -54,11 +54,11 @@ describe('SwaggerToolsParser — C5 H3 + H5 + H6: confirmAction + streamChat + c
   });
 
   it('confirmAction + streamChat + callback are the only tools filtered (total = spec tools minus 3)', () => {
-    // The real spec currently loads 75 tools; with the denylist it is 72.
+    // The post-denylist tool list currently holds 75 entries.
     // Band is a sanity guard for over/under-filtering, tolerant to tool churn.
     // If someone adds more tools to the denylist, this test will need updating.
     expect(toolNames.length).toBeGreaterThanOrEqual(70);
-    expect(toolNames.length).toBeLessThanOrEqual(74); // tolerance for spec changes
+    expect(toolNames.length).toBeLessThanOrEqual(75); // tolerance for spec changes
   });
 });
 

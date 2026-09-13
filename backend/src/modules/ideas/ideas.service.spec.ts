@@ -420,5 +420,20 @@ describe('IdeasService — persistence (Phase 1)', () => {
       // SearXNG for it entirely.
       expect(queries.filter((q) => /site:news\.ycombinator\.com/i.test(q) && !/-site:/i.test(q))).toHaveLength(1);
     });
+
+    it('never emits a site: operator with a path, which would silently drop every result', () => {
+      // parseSiteOperators captures everything up to the next whitespace as the host,
+      // so `site:reddit.com/r/SaaS` becomes the host `reddit.com/r/saas`, which
+      // urlMatchesSite can never match against a real URL (hostname + subdomain only).
+      // Every result is filtered out and the query returns nothing — the shape the
+      // subreddit-scoped query proposal would have introduced.
+      const queries = service['buildSignalQueries']('inventory management');
+
+      for (const query of queries) {
+        for (const match of query.matchAll(/(?:^|[\s(])-?site:([^\s()"]+)/gi)) {
+          expect(match[1]).not.toMatch(/[/:]/);
+        }
+      }
+    });
   });
 });

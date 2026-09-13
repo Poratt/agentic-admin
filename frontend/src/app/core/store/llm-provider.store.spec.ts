@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 import { LlmProviderStore } from './llm-provider.store';
 import { LlmProviderService } from '../../core/services/llm-provider.service';
 
@@ -16,6 +16,7 @@ describe('LlmProviderStore', () => {
         deleteAllTestResultsForModel: ReturnType<typeof vi.fn>;
         setUserDefaultModel: ReturnType<typeof vi.fn>;
         getUserDefaultModel: ReturnType<typeof vi.fn>;
+        getModelStats: ReturnType<typeof vi.fn>;
     };
 
     beforeEach(() => {
@@ -30,6 +31,7 @@ describe('LlmProviderStore', () => {
             deleteAllTestResultsForModel: vi.fn(),
             setUserDefaultModel: vi.fn(),
             getUserDefaultModel: vi.fn(),
+            getModelStats: vi.fn(),
         };
 
         TestBed.configureTestingModule({
@@ -142,6 +144,48 @@ describe('LlmProviderStore', () => {
 
             expect(llmProviderService.createModel).toHaveBeenCalled();
             expect(store.error()).toBeNull();
+        });
+    });
+
+    describe('loadModelStats', () => {
+        const stats = {
+            minimumSample: 3,
+            rows: [],
+            fastestId: null,
+            mostStableId: null,
+        };
+
+        it('stores the statistics and clears the loading flag', () => {
+            llmProviderService.getModelStats.mockReturnValue(of({ result: stats }));
+            const store = create();
+
+            store.loadModelStats();
+
+            expect(store.modelStats()).toEqual(stats);
+            expect(store.modelStatsLoading()).toBe(false);
+            expect(store.modelStatsError()).toBeNull();
+        });
+
+        it('surfaces the failure and stops loading', () => {
+            llmProviderService.getModelStats.mockReturnValue(throwError(() => ({ error: { message: 'Stats failed' } })));
+            const store = create();
+
+            store.loadModelStats();
+
+            expect(store.modelStatsError()).toBe('Stats failed');
+            expect(store.modelStatsLoading()).toBe(false);
+            expect(store.modelStats()).toBeNull();
+        });
+
+        it('ignores a second call while one is already in flight', () => {
+            // A Subject that never emits, so the first request is still open when the second arrives.
+            llmProviderService.getModelStats.mockReturnValue(new Subject());
+            const store = create();
+
+            store.loadModelStats();
+            store.loadModelStats();
+
+            expect(llmProviderService.getModelStats).toHaveBeenCalledTimes(1);
         });
     });
 });

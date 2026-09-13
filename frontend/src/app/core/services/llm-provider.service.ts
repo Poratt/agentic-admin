@@ -36,6 +36,41 @@ export interface ProviderCatalogEntry {
     status: 'new' | 'exists' | 'unavailable';
 }
 
+/** Latency and reliability figures for one model, from one source of measurements. */
+export interface ModelUsageStats {
+    runs: number;
+    successRate: number;
+    avgMs: number;
+    minMs: number;
+}
+
+/** One row of the statistics tab: a model's connectivity pings beside the work it actually did. */
+export interface ModelStatsRow {
+    id: string;
+    providerKey: string;
+    modelKey: string;
+    label: string | null;
+    active: boolean;
+    ping: ModelUsageStats | null;
+    real: ModelUsageStats | null;
+    lastCallAt: string | null;
+    /** Which source the leaderboard ranked this row on — real calls when there are enough of them,
+     *  otherwise connectivity pings. `null` when neither source has enough runs to rank it. */
+    rankingBasis: 'real' | 'ping' | null;
+}
+
+export interface ModelStats {
+    minimumSample: number;
+    rows: ModelStatsRow[];
+    fastestId: string | null;
+    mostStableId: string | null;
+}
+
+/** Composite id shared with the backend — `${providerKey}::${modelKey}`. */
+export function modelStatsId(providerKey: string, modelKey: string): string {
+    return `${providerKey}::${modelKey}`;
+}
+
 @Injectable({
     providedIn: 'root',
 })
@@ -49,6 +84,14 @@ export class LlmProviderService {
 
     findAll(): Observable<ServiceResultContainer<LlmProvider[]>> {
         return this.http.get<ServiceResultContainer<LlmProvider[]>>(`${this.base}`);
+    }
+
+    /**
+     * Per-model usage statistics. Aggregated in SQL on the backend, so the payload stays the same
+     * size no matter how many calls have been recorded.
+     */
+    getModelStats(): Observable<ServiceResultContainer<ModelStats>> {
+        return this.http.get<ServiceResultContainer<ModelStats>>(`${this.base}/stats`);
     }
 
     update(id: number, provider: Partial<LlmProvider>): Observable<ServiceResultContainer<LlmProvider>> {

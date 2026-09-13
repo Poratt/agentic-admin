@@ -7,6 +7,7 @@ import { Table, TableModule } from 'primeng/table';
 import { DialogModule } from 'primeng/dialog';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { CheckboxModule } from 'primeng/checkbox';
+import { SelectModule } from 'primeng/select';
 import { Confirmation, ConfirmationService, MessageService } from 'primeng/api';
 import { AuthStore } from '../../core/store/auth.store';
 import { UserRole } from '../../core/enums/user-role.enum';
@@ -20,6 +21,8 @@ import {
     LlmProviderService,
     LlmModel,
     ProviderCatalogEntry,
+    ModelStatsRow,
+    modelStatsId,
 } from '../../core/services/llm-provider.service';
 
 // Search normalization: dots/dashes/underscores are noise — "nemo 35" and
@@ -41,6 +44,9 @@ export interface LlmProviderView extends Omit<LlmProvider, 'models'> {
     modelsCount: number;
 }
 
+/** How long the copy icon keeps showing the confirmation check after a copy. */
+const COPY_FEEDBACK_MS = 5000;
+
 @Component({
     selector: 'app-llm-providers-management',
     standalone: true,
@@ -53,12 +59,14 @@ export interface LlmProviderView extends Omit<LlmProvider, 'models'> {
         DialogModule,
         ToggleSwitchModule,
         CheckboxModule,
+        SelectModule,
         TooltipDirective,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
     templateUrl: './llm-providers-management.html',
     styleUrl: './llm-providers-management.css',
 })
+
 export class LlmProvidersManagement implements OnInit {
     private table = viewChild<Table>('table');
     private fb = inject(FormBuilder);
@@ -74,13 +82,30 @@ export class LlmProvidersManagement implements OnInit {
     // Deactivated providers are hidden by default; admins can reveal them to re-activate.
     showInactive = signal(false);
 
+    // Drives the toolbar's filter dropdown. The values are the `showInactive` flag itself, so the
+    // select binds straight to the existing signal and `toggleShowInactive` needs no extra state.
+    protected readonly activeFilterOptions = [
+        { label: 'Active only', value: false },
+        { label: 'All providers', value: true },
+    ];
+
     ngOnInit(): void {
         this.llmProviderStore.loadUserDefaultModel();
+        // The statistics feed both the tab and the leaderboard badges on the model rows, so they are
+        // fetched up front. One aggregated query — the backend does not ship the call history.
+        this.llmProviderStore.loadModelStats();
     }
+
+    // Inner tab selection: the provider table or the model statistics.
+    activeTab = signal('providers');
 
     testingModelId = signal<number>(0);
     // Provider id with a background test-all run in flight (drives button state + polling).
     testingAllProviderId = signal<number>(0);
+    // Model key whose copy icon currently shows the confirmation check instead of the copy
+    // glyph. Cleared again after COPY_FEEDBACK_MS so the icon returns to its normal state.
+    copiedModelKey = signal<string | null>(null);
+    private copiedModelKeyTimer?: ReturnType<typeof setTimeout>;
 
     // Dialog visibility — bound via [(visible)] so must be signals
     providerDialogVisible = signal(false);
@@ -241,6 +266,52 @@ export class LlmProvidersManagement implements OnInit {
             }),
         }));
     });
+
+    /**
+     * Statistics rows, fastest mean real-call latency first. Models with no real calls sink to the
+     * bottom rather than sorting as "0 ms" — never used is not the same as instant.
+     */
+    statsRows = computed<ModelStatsRow[]>(() => {
+        const rows = this.llmProviderStore.modelStats()?.rows ?? [];
+
+        return [...rows].sort((a, b) => {
+            if (a.real && !b.real) return -1;
+            if (!a.real && b.real) return 1;
+            if (a.real && b.real && a.real.avgMs !== b.real.avgMs) return a.real.avgMs - b.real.avgMs;
+            return (b.ping?.runs ?? 0) - (a.ping?.runs ?? 0);
+        });
+    });
+
+    /** True when this model holds the fastest mean real-call latency across the whole system. */
+    isFastest(providerKey: string, modelKey: string): boolean {
+        return this.llmProviderStore.modelStats()?.fastestId === modelStatsId(providerKey, modelKey);
+    }
+
+    /** True when this model holds the best success rate across the whole system. */
+    isMostStable(providerKey: string, modelKey: string): boolean {
+        return this.llmProviderStore.modelStats()?.mostStableId === modelStatsId(providerKey, modelKey);
+    }
+
+    /**
+     * Names the measurement a leaderboard badge was earned on. The backend ranks on real calls when
+     * a model has enough of them and falls back to connectivity pings otherwise, so the badge has
+     * to say which — a ping is a one-line test and measures something different from real work.
+     */
+    leaderBasisLabel(providerKey: string, modelKey: string): string {
+        return this.statsById().get(modelStatsId(providerKey, modelKey))?.rankingBasis === 'real'
+            ? 'real calls'
+            : 'connectivity tests';
+    }
+
+    /** Statistics rows by composite id, so both badge sites can describe themselves in O(1). */
+    private statsById = computed(
+        () => new Map((this.llmProviderStore.modelStats()?.rows ?? []).map((row) => [row.id, row])),
+    );
+
+    /** Label for a statistics row — the configured name, falling back to the raw model key. */
+    statsLabel(row: ModelStatsRow): string {
+        return row.label ?? row.modelKey;
+    }
 
     // Label of the provider currently targeted by the model dialog — used in the dialog header
     modelDialogProviderLabel = computed(() => {
@@ -439,7 +510,8 @@ export class LlmProvidersManagement implements OnInit {
     }
 
     formatLatency(ms: number): string {
-        if (!ms) return '0ms';
+        // 0 is not a fast run — it means nothing succeeded, so there is no latency to report.
+        if (!ms) return '—';
         if (ms < 1000) return `${ms}ms`;
         return `${(ms / 1000).toFixed(1)}s`;
     }
@@ -810,7 +882,28 @@ export class LlmProvidersManagement implements OnInit {
                 summary: 'Copied',
                 detail: 'Model key copied to clipboard.',
             });
+            this.showCopyConfirmation(key);
         });
+    }
+
+    /**
+     * Swaps the copy glyph for a check mark on the copied model's key, then restores
+     * it after COPY_FEEDBACK_MS. Copying again restarts the window rather than
+     * stacking timers, so the icon never gets stuck. Mirrors the chat-message idiom.
+     */
+    private showCopyConfirmation(key: string): void {
+        this.clearCopiedModelKeyTimer();
+        this.copiedModelKey.set(key);
+        this.copiedModelKeyTimer = setTimeout(() => {
+            this.copiedModelKey.set(null);
+            this.copiedModelKeyTimer = undefined;
+        }, COPY_FEEDBACK_MS);
+    }
+
+    private clearCopiedModelKeyTimer(): void {
+        if (!this.copiedModelKeyTimer) return;
+        clearTimeout(this.copiedModelKeyTimer);
+        this.copiedModelKeyTimer = undefined;
     }
 }
 

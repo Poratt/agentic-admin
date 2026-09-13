@@ -85,8 +85,8 @@ export class IdeasService {
    * trusted-domain filter downstream does not drop everything as off-domain.
    */
   private readonly FALLBACK_DISCOVERY_QUERIES = [
-    'site:reddit.com SaaS pain points losing money',
-    'site:reddit.com solo founder underserved niche',
+    'site:reddit.com agency manual reporting hours wasted',
+    'site:reddit.com B2B spreadsheet process bottleneck',
     'site:news.ycombinator.com Ask HN willing to pay tool',
     'site:indiehackers.com validated micro saas pain point',
   ];
@@ -632,11 +632,11 @@ export class IdeasService {
     // target is news.ycombinator.com is routed to the keyless Algolia API and to
     // Google CSE (see WebSearchService.searchChannels), so it costs SearXNG nothing.
     return [
-      `site:reddit.com ${term} spreadsheet headache`,
+      `site:reddit.com ${term} manual process hours`,
       `site:reddit.com ${term} "wish there was a tool"`,
       `site:news.ycombinator.com ${term} Ask HN`,
       `site:indiehackers.com ${term} "too expensive" OR alternative`,
-      `${term} forum "wish there was" OR frustrated -site:reddit.com`,
+      `${term} forum "how do you handle" -site:reddit.com`,
     ];
   }
 

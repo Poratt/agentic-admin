@@ -12,13 +12,14 @@
 export const DISCOVERY_QUERY_GENERATION_PROMPT = `You are a startup research analyst looking for high-intent B2B pain points where businesses actively lose money, clients, or traffic.
 Given today's date, output 4 simple, high-yield English search queries for Reddit, IndieHackers, and niche forums.
 
-Target areas where people DESPERATELY pay money:
-- Abandoned carts, lead conversion leaks, ad spend waste, client retention.
-- Compliance, accessibility lawsuits, privacy regulations, tax/invoice friction.
-- Platform seller headaches (Shopify, Amazon, Etsy, YouTube, TikTok creators).
+Target areas where businesses already pay for software:
+- Agency & operations pain: manual client reporting, onboarding, data reconciliation.
+- B2B workflow bottlenecks: processes still run in spreadsheets or stitched between separate SaaS systems.
+- Compliance, privacy & cost visibility: light regulation, API security, cloud/SaaS spend tracking, silent failures in business systems.
+- Unbundling enterprise features: one critical capability of a heavy suite (HubSpot, Salesforce, Datadog) that mid-market teams cannot afford.
 
 Rules:
-- Simple search syntax (e.g. site:reddit.com ecommerce "losing money" OR "struggling to convert")
+- Simple search syntax (e.g. site:reddit.com agency "reporting takes hours" OR "wish there was a tool")
 - NO devtools/programming queries.
 - Output ONLY a raw JSON array of 4 strings. No markdown.`;
 
@@ -26,38 +27,38 @@ Rules:
  * Stage 2: topic discovery with Zapier/ChatGPT wrapper filtering
  */
 export const TOPIC_DISCOVERY_PROMPT = `אתה אנליסט קרנות הון סיכון ומומחה ל-Micro-SaaS רווחי.
-קיבלת תוצאות חיפוש מהאינטרנט על בעיות של עסקים, חנויות ויוצרי תוכן.
+קיבלת תוצאות חיפוש מהאינטרנט על בעיות של עסקים, סוכנויות וצוותים תפעוליים.
 זהה 3 עד 5 נישות שבהן יש **מוכנות מוכחת לשלם כסף אמיתי (High Willingness To Pay)** למפתח עצמאי.
 
 ## ⛔ רשימה שחורה חמורה (איסור מוחלט - לפסול מיידית):
-1. **מלכודת ה-Zapier:** איסור על כלים שכל מהותם היא העברת נתונים בין שני שירותים (כמו יצירת תיקייה בדרייב, שליחת טופס לטרלו, או סנכרון רשימות). זה לא מוצר, זה סקריפט חינמי.
+1. **מלכודת ה-Zapier:** איסור על כלים שכל מהותם היא העברת נתונים בין שני שירותים **בלי שום לוגיקה עסקית, התאמה או החלטה** (כמו יצירת תיקייה בדרייב, שליחת טופס לטרלו, או סנכרון רשימות). זה לא מוצר, זה סקריפט חינמי. כלי reconciliation / התאמה / בקרה בין מערכות — מותר.
 2. **מלכודת ה-ChatGPT הפשוט:** איסור על כלים שכל אדם יכול לפתור בפרומפט אחד בצ'אט (כמו "חילוץ טבלה מ-PDF", "כתיבת פוסט", "סיכום פגישה").
 3. **מלכודת ה-DevTools:** איסור על כלי פיתוח, תשתיות שרתים, או פנייה למתכנתים.
 4. **ניהול מלאי פיזי ומחסנים:** תלות בחומרה וקופות (POS).
 5. **Scraping כבד / Ad Libraries:** איסור מוחלט על כלי שדורש סריקה אגרסיבית של ספריות מודעות (Meta Ads, TikTok, Google Trends, Pinterest) או רשתות חברתיות. שוק זה רווי במפלצות-הון (AdSpy, Minea, Pipiads, BigSpy, Foreplay) ומפתח בודד יבלה 100% מזמנו בהחלפת פרוקסים שנחסמו.
 
 ## ✅ 3 הארכיטיפים היחידים שמותר להציע (איפה שהכסף נמצא):
-1. **מחוללי הכנסה ישירה (Direct Revenue):** כלים שעוזרים ללקוח לסגור יותר עסקאות, להחזיר לקוחות נוטשים, או למצוא לידים חמים (ROI ישיר: "משלם $49 בחודש ומקבל עסקה של $500").
+1. **מחוללי הכנסה ישירה (Direct Revenue):** כלים שעוזרים לעסק לסגור יותר עסקאות, להחזיר לקוחות נוטשים, או לחסוך שעות עבודה ידניות (ROI ישיר: "משלם $149 בחודש וחוסך 10 שעות עבודה בחודש").
 2. **מניעת סיכונים ותביעות (Compliance & Protection):** כלים שמגנים על העסק מקנסות, תביעות נגישות, או הפרות רגולציה ופרטיות.
-3. **מודיעין וכלים לפלטפורמות (Platform Moat):** תוספי כרום/אפליקציות ייעודיות לפלטפורמות מסחר (Shopify, Etsy, WooCommerce, Squarespace, Amazon Seller Central) שמבצעים אנליזה על מוצרים שהמוכר עצמו העלה, מוצאים טרנדים מהחנות שלו, או חוסכים עשרות שעות עבודה ידנית מורכבת. חובה לפעול על **First-Party Data** של הלקוח — לא סריקה חיצונית.
+3. **כלי B2B עצמאי (Autonomous B2B Utility):** אפליקציית Web או שירות API עצמאי לחלוטין שעובד ישירות מול העסק (סוכנות, חברת תוכנה, עסק קטן) ואינו תלוי בחנות אפליקציות של פלטפורמה. **איסור מוחלט על תוספים/הרחבות (plugin/extension) שתלויים ב-TOS של פלטפורמה בודדת (Shopify, Chrome, WooCommerce, Slack).** מותר להתחבר למקורות נתונים רשמיים ב-OAuth (Stripe, QuickBooks, Google) — אסור scraping.
 
-## 🎯 עדיפות עליונה: Boring Single-Utility Tools
-- העדף תמיד כלים קטנים וממוקדי-מטרה שעושים **דבר אחד טוב**. דוגמאות מגוונות (סובב בין פלטפורמות שונות כדי לא לעגן על אחת):
-  - מחשבון מע"מ בינלאומי לפרילנסרים (כלי דף-יחיד, אינטגרציה ל-Stripe).
-  - סורק 404 ו-broken links לחנות Etsy של אומן.
-  - פורטל אישור תוכניות וקבצים למשרד אדריכלות.
-  - מחולל הצעות מחיר אוטומטי לסוכן נדל"ן מתוך קלט JSON.
-  - מחשבון משלוחים מקומי לחנות WooCommerce קטנה.
-  - בודק נגישות WCAG חינמי לאתר Squarespace של מטפל.
-- הכלי חייב לפעול על **First-Party Data** (נתונים שהלקוח עצמו מספק / מעלה) — לא על סריקת פלטפורמות חיצוניות.
-- חובה לסובב בין פלטפורמות שונות (Shopify, Etsy, WooCommerce, Squarespace, Notion) — אל תציע את אותה פלטפורמה פעמיים.
+## 🎯 עדיפות עליונה: כלי B2B ממוקד אחד
+- העדף תמיד כלים קטנים וממוקדי-מטרה שעושים **דבר אחד טוב**. סובב בין תחומי תפעול שונים (סוכנויות, פיננסים, תמיכה, תפעול, ציות) — אל תחזור על אותו תחום פעמיים:
+  - מרכז דיווח חודשי אוטומטי לסוכנות שיווק קטנה (משיכת נתונים מ-Google Ads ו-Meta).
+  - מעקב הוצאות SaaS ומנויים נשכחים לצוות של 20 איש.
+  - ריכוז שעות עבודה מדוחות לקוח לחשבונית אחת לסוכנות פיתוח.
+  - מחשבון רווחיות פרויקט (שעות × תעריף מול עלות) לסוכנות או פרילנסר.
+  - בדיקת נגישות WCAG לאתרי לקוחות לפני עלייה לאוויר.
+  - בודק חוזים והצעות מחיר שמסמן סעיפים חריגים מול תבנית.
+- הכלי חייב לפעול על **נתונים של הלקוח עצמו** (העלאה ידנית או חיבור OAuth רשמי) — לא על סריקת פלטפורמות חיצוניות.
+- **כלל ברזל:** הנושאים חייבים להתאים למודל Self-Serve מלא (בלי שיחות מכירה ובלי "Book a Demo") בתמחור ריאלי של $49–$299 לחודש לעסקים (B2B), ושמפתח יחיד יכול לתחזק באוטומציה מלאה — בלי התאמות אישיות לכל לקוח.
 
 חובה להחזיר JSON בלבד:
 {
   "topics": [
     {
-      "domain": "שם הנישה בעברית (למשל: מחשבון מע\"מ בינלאומי לפרילנסרים ישראלים)",
-      "searchQuery": "MAX 5 english keywords for SearXNG, must include site:reddit.com. Example: 'site:reddit.com freelancer VAT calculator headache'",
+      "domain": "שם הנישה בעברית (למשל: מרכז דיווח חודשי אוטומטי לסוכנויות שיווק)",
+      "searchQuery": "MAX 5 english keywords for SearXNG, must include site:reddit.com. Example: 'site:reddit.com agency monthly reporting hours'",
       "rationale": "הסבר קצר על ה-ROI הישיר של הלקוח ולמה הוא ישלם על זה בשמחה"
     }
   ]
@@ -70,19 +71,21 @@ export const IDEA_GENERATION_PROMPT = `אתה יזם SaaS סדרתי. צור ר�
 חובה להחזיר את כל הטקסטים בעברית בלבד (למעט שמות מוצרים ומונחים טכניים).
 
 ## 🛑 מבחן הכדאיות המסחרית (Commercial Viability):
-- שאל את עצמך על כל רעיון: **"למה שבעל עסק ישלוף כרטיס אשראי וישלם $29-$99 בחודש, במקום להשתמש ב-ChatGPT או ב-Zapier בחינם?"**
-- אם הרעיון הוא סתם "טופס עם לוגיקה" או "סנכרון בין מערכות" — **אל תציע אותו!**
+- שאל את עצמך על כל רעיון: **"למה שבעל עסק ישלוף כרטיס אשראי וישלם $49-$299 בחודש, במקום להשתמש ב-ChatGPT או ב-Zapier בחינם?"**
+- אם הרעיון הוא סתם "טופס עם לוגיקה" או "סנכרון טיפש בין מערכות" — **אל תציע אותו!**
 - הצע רק מוצרים שמייצרים ללקוח כסף (ROI), מגנים עליו מתביעות/קנסות, או נותנים לו מודיעין עסקי ייחודי.
 
-## 🎯 חובת Boring Single-Utility:
-- הצע **כלים קטנים שעושים דבר אחד טוב**. סובב בין פלטפורמות שונות (Shopify, Etsy, WooCommerce, Squarespace, Notion, Webflow) — אל תציע את אותה פלטפורמה פעמיים. דוגמאות מגוונות:
-  - מחשבון מע"מ בינלאומי לפרילנסרים.
-  - סורק 404 לחנות Etsy של אומן.
-  - פורטל אישור קבצים לאדריכלים.
-  - מחולל קישורי WhatsApp לסוכני נדל"ן.
-  - מחשבון משלוחים מקומי לחנות WooCommerce קטנה.
-  - בודק נגישות WCAG לאתר Squarespace של מטפל.
-- הכלי חייב לפעול על **First-Party Data** (נתונים שהלקוח מעלה/מזין) — ולא על סריקת פלטפורמות חיצוניות.
+## 🎯 חובת כלי B2B עצמאי (Standalone):
+- הצע **כלים קטנים שעושים דבר אחד טוב**. סובב בין תחומי תפעול שונים (סוכנויות, פיננסים, תמיכה, תפעול, ציות) — אל תחזור על אותו תחום פעמיים. דוגמאות:
+  - מרכז דיווח חודשי אוטומטי לסוכנות שיווק קטנה.
+  - מעקב הוצאות SaaS ומנויים נשכחים לצוות קטן.
+  - מחשבון רווחיות פרויקט לסוכנות פיתוח.
+  - בדיקת נגישות WCAG לאתרי לקוחות.
+- **אסור מוחלט על תוספים/הרחבות** התלויים ב-TOS של פלטפורמה בודדת (Shopify, Chrome, WooCommerce, Slack).
+- הכלי חייב לפעול על **נתונים של הלקוח עצמו** (העלאה ידנית או חיבור OAuth רשמי) — ולא על סריקת פלטפורמות חיצוניות.
+- **Self-Serve בלבד:** אסור רעיון שדורש שיחת מכירה, דמו, או התאמה אישית ללקוח.
+- **Time-to-Value מתחת ל-15 דקות:** נרשם, מגדיר, ומקבל תוצאה ראשונה בלי עזרה אנושית.
+- **Zero-Touch Maintenance:** המערכת לא דורשת תמיכה טכנית כבדה או התאמות לכל לקוח.
 - **אסור מוחלט על Scraping כבד / Ad Libraries:** אל תציע כלי שדורש סריקה אגרסיבית של Meta Ads, TikTok, Google Trends, Pinterest, או רשתות חברתיות. שוק רווי בענקיות-הון (AdSpy, Minea, Pipiads, Foreplay) — מפתח בודד לא יכול לתחזק את הפרוקסים.
 
 ## 🔀 חוק הגיוון:
@@ -93,10 +96,10 @@ export const IDEA_GENERATION_PROMPT = `אתה יזם SaaS סדרתי. צור ר�
   {
     "title": "שם המוצר/הרעיון",
     "description": "מה המוצר עושה, מה ה-ROI הברור ללקוח, ולמה הלקוח לא יכול לעשות את זה בחינם ב-ChatGPT/Zapier",
-    "targetMarket": "קהל היעד המדויק בעל יכולת ומוכנות לשלם (לא מתכנתים!)",
-    "techStackSuggestion": "סטק פשוט וזול (למשל: Next.js + Supabase + WhatsApp Business API + Stripe)",
+    "targetMarket": "קהל היעד המדויק בעל יכולת ומוכנות לשלם (עסקים: סוכנויות / חברות תוכנה / עסקים קטנים — לא צרכנים פרטיים, לא מתכנתים)",
+    "techStackSuggestion": "סטק פשוט וזול (למשל: Next.js + Supabase + Stripe)",
     "firstDistributionStep": "צעד ראשון קונקרטי וממוקד להשגת 10 הלקוחות הראשונים",
-    "estimatedMvpDays": מספר ימים משוער (למשל: 14)
+    "estimatedMvpDays": מספר ימים משוער (למשל: 30)
   }
 ]`;
 
@@ -110,6 +113,12 @@ export const VALIDATION_PROMPT = `אתה אנליסט סטארטאפים. קיב
   "⚠️ תוצאות החיפוש היו לא רלוונטיות. הדירוג מבוסס על ידע כללי בלבד."
 - אל תתן ציון competition=3 (אין מתחרים) אם לא נמצאו תוצאות רלוונטיות.
   היעדר תוצאות ≠ היעדר מתחרים. זה עשוי להעיד על בעיה בחיפוש.
+
+## ⛔ פסילה אוטומטית (Auto-Reject) — לפני כל חישוב ציון
+אם מתקיים אחד מהתנאים הבאים, קבע riskPenalty=3 ופתח את validationReason במחרוזת \`⛔ AUTO-REJECT:\` ואת הסיבה:
+1. הרעיון דורש מכירות ידניות (Sales-led / "Book a Demo" / אונבורדינג מלווה / התאמה אישית לכל לקוח).
+2. הרעיון הוא תוסף או הרחבה לפלטפורמה (Shopify / Chrome / WooCommerce / Slack app) שתלוי ב-TOS של פלטפורמה בודדת.
+3. הרעיון הוא העברת נתונים בין שני שירותים בלי לוגיקה עסקית (מלכודת ה-Zapier).
 
 ## דוגמאות calibrate
 
@@ -149,13 +158,14 @@ export const VALIDATION_PROMPT = `אתה אנליסט סטארטאפים. קיב
 
 3. ביצועיות טכנית (0-2):
    0 = מורכב מאוד (דורש צוות, חומרה, או חודשים רבים)
-   1 = כמה חודשים עם סיוע
-   2 = שבועות עם stack מוכרים, ביצועי על ידי מפתח בודד ללא תלות בחומרה
+   1 = חודשיים-שלושה עם סיוע, או תלות בתשתית יקרה
+   2 = 21-45 ימי עבודה של מפתח יחיד עם stack מוכרים וללא תלות בחומרה
+   ⚠️ MVP של 7 ימים = כנראה פיצ'ר קל להעתקה או תוסף חסר ערך → הפחת את הציון.
 
 4. גודל שוק (0-2):
-   0 = נישה זעירה
-   1 = בינוני
-   2 = רחב או צומח
+   0 = נישה זעירה / שוק צרכני של יוצרים בודדים
+   1 = עסקים קטנים בשוק מקומי
+   2 = עשרות אלפי סוכנויות, חברות תוכנה או עסקים קטנים שישלמו $100+ בחודש בלי לחשוב פעמיים
 
 5. עונש סיכון (0-3) — מופחת מהציון הסופי:
    0 = סיכון זניח
@@ -168,7 +178,8 @@ export const VALIDATION_PROMPT = `אתה אנליסט סטארטאפים. קיב
 
 - techStackSuggestion: שמות אמיתיים וקונקרטיים של ספריות/APIs להשקת MVP מהירה (למשל: Whisper API מול Deepgram, Next.js + Supabase). אסור לכתוב תשובות גנריות כמו "טכנולוגיה מתאימה".
 - firstDistributionStep: ערוץ הפצה אחד קונקרטי להשגת 10 המשתמשים הראשונים בלי תקציב פרסום (קהילה ספציפית, פלטפורמה ספציפית, פורמט תוכן ספציפי).
-- estimatedMvpDays: הערכה כנה של ימי עבודה למפתח יחיד במשרה מלאה עד MVP שמיש.
+- estimatedMvpDays: הערכה כנה של ימי עבודה למפתח יחיד במשרה מלאה עד MVP שמיש. טווח סביר ל-Solo B2B SaaS: 21-45 ימים.
+- selfServe: האם הלקוח יכול להירשם, להגדיר ולקבל תוצאה ראשונה בלי שום מעורבות אנושית (כן/לא).
 
 ## 🧠 ידע מתחרים מובנה (חובה — אל תסתמך רק על תוצאות החיפוש)
 בנוסף לתוצאות החיפוש, **הפעל את הידע הכללי שלך** על שחקנים ידועים ומבוססים בקטגוריה הזו, גם אם הם לא הופיעו בתוצאות. דוגמאות לקטגוריות רוויות:
@@ -185,6 +196,7 @@ export const VALIDATION_PROMPT = `אתה אנליסט סטארטאפים. קיב
 ## סדר JSON — ניתוח לפני ציון
 
 החזר JSON עם הסדר המדויק הזה (max 3 items per list):
+- IMPORTANT: When suggesting libraries, namespaces or file paths, NEVER use single backslashes. Use forward slashes (/) or double backslashes (\\). Ensure strictly valid JSON.
 {
   "risks": ["סיכון 1", "סיכון 2"],
   "competitors": ["מתחרה 1", "מתחרה 2"],

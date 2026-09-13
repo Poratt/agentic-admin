@@ -34,6 +34,10 @@ describe('LlmProvidersManagement', () => {
         deleteAllTestResults: vi.fn(),
         setDefaultModel: vi.fn(),
         reload: vi.fn(),
+        loadModelStats: vi.fn(),
+        modelStats: vi.fn((): any => null),
+        modelStatsLoading: vi.fn(() => false),
+        modelStatsError: vi.fn(() => null),
     };
 
     const mockProviderService = {
@@ -113,9 +117,10 @@ describe('LlmProvidersManagement', () => {
     });
 
     describe('formatLatency', () => {
-        it('should return 0ms for falsy value', () => {
-            expect(component.formatLatency(0)).toBe('0ms');
-            expect(component.formatLatency(undefined as any)).toBe('0ms');
+        it('shows a dash for an unmeasured latency rather than claiming 0ms', () => {
+            // A model whose runs all failed has no latency at all — "0ms" would read as instant.
+            expect(component.formatLatency(0)).toBe('—');
+            expect(component.formatLatency(undefined as any)).toBe('—');
         });
 
         it('should format milliseconds when < 1000', () => {
@@ -589,6 +594,212 @@ describe('LlmProvidersManagement', () => {
 
             expect(component.isKeySelected('a')).toBe(false);
             expect(component.isKeySelected('c')).toBe(true);
+        });
+    });
+
+    describe('copyModelKey', () => {
+        const clipboardWrite = vi.fn(() => Promise.resolve());
+
+        beforeEach(() => {
+            vi.useFakeTimers();
+            Object.defineProperty(navigator, 'clipboard', {
+                value: { writeText: clipboardWrite },
+                configurable: true,
+            });
+        });
+
+        afterEach(() => {
+            vi.useRealTimers();
+            clipboardWrite.mockClear();
+            mockMessageService.add.mockClear();
+        });
+
+        it('copies the key and stops the click from reaching the expandable row', async () => {
+            const event = { stopPropagation: vi.fn() } as unknown as Event;
+
+            component.copyModelKey(event, 'openai/gpt-5');
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(event.stopPropagation).toHaveBeenCalled();
+            expect(clipboardWrite).toHaveBeenCalledWith('openai/gpt-5');
+            expect(component.copiedModelKey()).toBe('openai/gpt-5');
+        });
+
+        it('swaps the icon back after the 5s confirmation window', async () => {
+            component.copyModelKey({ stopPropagation: vi.fn() } as unknown as Event, 'openai/gpt-5');
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(component.copiedModelKey()).toBe('openai/gpt-5');
+
+            await vi.advanceTimersByTimeAsync(5000);
+
+            expect(component.copiedModelKey()).toBeNull();
+        });
+    });
+
+    describe('model statistics', () => {
+        // Deliberately out of order: fast-model has the lowest mean real latency, unused-model has
+        // no real calls at all, and slow-model wins on reliability despite being slowest.
+        const statsData = {
+            minimumSample: 3,
+            fastestId: 'openrouter::fast-model',
+            mostStableId: 'openrouter::slow-model',
+            rows: [
+                {
+                    id: 'openrouter::slow-model',
+                    providerKey: 'openrouter',
+                    modelKey: 'slow-model',
+                    label: 'Slow',
+                    active: true,
+                    ping: null,
+                    real: { runs: 10, successRate: 100, avgMs: 9000, minMs: 7000 },
+                    lastCallAt: '2026-09-13T11:00:00.000Z',
+                    rankingBasis: 'real',
+                },
+                {
+                    id: 'openrouter::fast-model',
+                    providerKey: 'openrouter',
+                    modelKey: 'fast-model',
+                    label: 'Fast',
+                    active: true,
+                    ping: { runs: 5, successRate: 100, avgMs: 300, minMs: 200 },
+                    real: { runs: 10, successRate: 100, avgMs: 1200, minMs: 900 },
+                    lastCallAt: '2026-09-13T10:00:00.000Z',
+                    rankingBasis: 'real',
+                },
+                {
+                    id: 'openrouter::unused-model',
+                    providerKey: 'openrouter',
+                    modelKey: 'unused-model',
+                    label: 'Unused',
+                    active: true,
+                    ping: null,
+                    real: null,
+                    lastCallAt: null,
+                    rankingBasis: null,
+                },
+            ],
+        };
+
+        it('loads the statistics on init, so the row badges have data', () => {
+            expect(mockProviderStore.loadModelStats).toHaveBeenCalled();
+        });
+
+        it('starts on the providers view', () => {
+            expect(component.activeTab()).toBe('providers');
+        });
+
+        it('ranks by mean real latency and sinks unmeasured models to the bottom', () => {
+            mockProviderStore.modelStats.mockReturnValue(statsData);
+
+            expect(component.statsRows().map((row) => row.id)).toEqual([
+                'openrouter::fast-model',
+                'openrouter::slow-model',
+                'openrouter::unused-model',
+            ]);
+        });
+
+        it('flags the fastest and most stable models from the backend leaderboard', () => {
+            mockProviderStore.modelStats.mockReturnValue(statsData);
+
+            expect(component.isFastest('openrouter', 'fast-model')).toBe(true);
+            expect(component.isFastest('openrouter', 'slow-model')).toBe(false);
+            expect(component.isMostStable('openrouter', 'slow-model')).toBe(true);
+            expect(component.isMostStable('openrouter', 'fast-model')).toBe(false);
+        });
+
+        it('renders the statistics panel once that view is selected', () => {
+            mockProviderStore.modelStats.mockReturnValue(statsData);
+
+            component.activeTab.set('stats');
+            fixture.detectChanges();
+
+            const text = fixture.nativeElement.textContent as string;
+            expect(text).toContain('Fast');
+            expect(text).toContain('Fastest');
+            expect(text).toContain('Most stable');
+            // The ping column is labelled separately from the real-call column — the whole point.
+            expect(text).toContain('Ping');
+            expect(text).toContain('Real');
+        });
+
+        it('makes every statistics column sortable', () => {
+            mockProviderStore.modelStats.mockReturnValue(statsData);
+
+            component.activeTab.set('stats');
+            fixture.detectChanges();
+
+            // PrimeNG only adds this class to a header when the sort directive is attached, so a
+            // column that loses its pSortableColumn fails here rather than silently not sorting.
+            const headers = Array.from(fixture.nativeElement.querySelectorAll('.stats-table th')) as HTMLElement[];
+
+            expect(headers.length).toBe(9);
+            expect(headers.filter((th) => th.classList.contains('p-datatable-sortable-column')).length).toBe(9);
+        });
+
+        it('switches views from the toolbar buttons, and hides the list-only controls on statistics', () => {
+            // The list-only toolbar row is gated on pageState Ready, so the default Empty mock
+            // never renders it — recreate the fixture with a Ready store to exercise the real row.
+            mockProviderStore.pageState.mockReturnValue(PageStates.Ready);
+            fixture.destroy();
+            fixture = TestBed.createComponent(LlmProvidersManagement);
+            component = fixture.componentInstance;
+            fixture.detectChanges();
+
+            // Selects the real buttons inside the elevated segmented control, so a renamed wrapper
+            // or a dropped variant fails here rather than silently passing.
+            const toggleButtons = Array.from(
+                fixture.nativeElement.querySelectorAll('.toolbar-row .toggle-group.elevated .toggle-btn'),
+            ) as HTMLButtonElement[];
+            expect(toggleButtons.length).toBe(2);
+
+            // Providers view: search, the state filter and the table caption all share the page.
+            expect(fixture.nativeElement.querySelector('.toolbar-search')).not.toBeNull();
+            expect(fixture.nativeElement.querySelector('p-select')).not.toBeNull();
+            // The toolbar lives in a dir="ltr" island on an RTL page while PrimeNG positions
+            // body-appended overlays with logical inset-inline-* — appending to body mirrors
+            // the panel to the wrong side, so the filter must stay appended in place.
+            expect(fixture.nativeElement.querySelector('p-select').getAttribute('appendTo')).toBe('self');
+            expect(fixture.nativeElement.querySelector('.table-caption')).not.toBeNull();
+
+            toggleButtons[1].click();
+            fixture.detectChanges();
+
+            expect(component.activeTab()).toBe('stats');
+            expect(fixture.nativeElement.querySelector('.toolbar-search')).toBeNull();
+            expect(fixture.nativeElement.querySelector('p-select')).toBeNull();
+            expect(fixture.nativeElement.querySelector('.table-caption')).toBeNull();
+            expect(fixture.nativeElement.querySelector('.stats-panel')).not.toBeNull();
+
+            toggleButtons[0].click();
+            fixture.detectChanges();
+
+            expect(component.activeTab()).toBe('providers');
+            expect(fixture.nativeElement.querySelector('.toolbar-search')).not.toBeNull();
+            expect(fixture.nativeElement.querySelector('p-select')).not.toBeNull();
+            expect(fixture.nativeElement.querySelector('.stats-panel')).toBeNull();
+        });
+
+        it('captions the table with the provider count', () => {
+            mockProviderStore.pageState.mockReturnValue(PageStates.Ready);
+            fixture.destroy();
+            fixture = TestBed.createComponent(LlmProvidersManagement);
+            component = fixture.componentInstance;
+            fixture.detectChanges();
+
+            const count = component.llmProviders().length;
+            const caption = fixture.nativeElement.querySelector('.table-caption') as HTMLElement;
+
+            expect((caption?.textContent ?? '').trim()).toBe(`${count} ${count === 1 ? 'provider' : 'providers'}`);
+        });
+
+        it('falls back to the raw key when a model is no longer configured', () => {
+            mockProviderStore.modelStats.mockReturnValue({
+                ...statsData,
+                rows: [{ ...statsData.rows[2], label: null }],
+            });
+
+            expect(component.statsLabel(component.statsRows()[0])).toBe('unused-model');
         });
     });
 });

@@ -20,6 +20,7 @@ import { AdminGuard } from '../../core/guards/admin.guard';
 import { ServiceResultContainer } from '../../core/models/service-result-container.model';
 import { LlmProviderEntity } from './entities/llm-provider.entity';
 import { LlmModelEntity } from './entities/llm-model.entity';
+import { ModelStats } from './types/model-stats.types';
 import { RequiresConfirmation } from '../../core/decorators/requires-confirmation.decorator';
 import { CustomApiOperationOptions } from '../../core/types/custom-api-operation-options.type';
 
@@ -230,5 +231,19 @@ export class LlmProviderController {
     @Query('offset') offset?: number,
   ): Promise<ServiceResultContainer<{ results: import('./entities/llm-model-test-results.entity').LlmModelTestResultEntity[]; total: number }>> {
     return this.service.findTestResults(limit ?? 50, offset ?? 0);
+  }
+
+  @Get('stats')
+  @ApiOperation({
+    summary: 'Get model statistics',
+    summaryHe: 'מציגים דירוג מודלים: המהיר ביותר, היציב ביותר, וזמני תגובה בפועל',
+    toolIcon: 'ph-chart-bar',
+    description:
+      'Per-model usage statistics. Connectivity pings and real calls are reported separately, aggregated in SQL so the response size does not grow with call volume.',
+  } as CustomApiOperationOptions)
+  @ApiOkResponse({ description: 'Model statistics retrieved' })
+  @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
+  async findModelStats(): Promise<ServiceResultContainer<ModelStats>> {
+    return this.service.getModelStats();
   }
 }

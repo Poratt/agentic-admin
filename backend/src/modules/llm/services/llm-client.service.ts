@@ -17,6 +17,15 @@ const execFileAsync = promisify(execFile);
 const MAX_RETRIES = 4;
 const BASE_DELAY_MS = 1500;
 
+/** Longest error message stored per call — provider errors can carry a whole response body. */
+const MAX_STORED_ERROR_LENGTH = 500;
+
+/** Maps a thrown error to a call status, using the same detection as the health-check service. */
+function callStatusFromError(error: unknown): 'error' | 'timeout' {
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  return message.includes('timeout') || message.includes('aborted') ? 'timeout' : 'error';
+}
+
 @Injectable()
 export class LlmClientService {
   private readonly logger = new Logger(LlmClientService.name);
@@ -27,7 +36,8 @@ export class LlmClientService {
   ) {}
 
   async generateResponse(llmRequest: LlmRequest): Promise<LlmResponse> {
-    const { prompt, systemContext, messageHistory, providerOverride, modelOverride, tools, image, maxTokens, userId } = llmRequest;
+    const { prompt, systemContext, messageHistory, providerOverride, modelOverride, tools, image, maxTokens, userId, caller } =
+      llmRequest;
 
     // Resolve effective provider/model: explicit override → user default → legacy env
     const legacyProvider = this.providerConfig.getActiveProvider();
@@ -105,9 +115,12 @@ export class LlmClientService {
       }, 'generateResponse');
     } catch (error) {
       this.autoMarkIfModelMissing(dbProvider.id, activeModel, error);
+      this.recordCallStat(dbProvider.key, activeModel, Date.now() - start, callStatusFromError(error), caller, error);
       throw error;
     }
     this.logger.log(`LLM response took ${((Date.now() - start) / 1000).toFixed(1)}s`);
+
+    this.recordCallStat(dbProvider.key, activeModel, Date.now() - start, 'success', caller, null);
 
     const { content, toolCalls, finishReason } = completion;
 
@@ -189,6 +202,40 @@ export class LlmClientService {
       const label = expected === 'text' ? 'text chat' : expected === 'image' ? 'image generation' : 'video generation';
       throw new BadRequestException(`Model ${model} (${dbModel.capability}) does not support ${label}`);
     }
+  }
+
+  /**
+   * Records a real call in `llm_call_stats` so the statistics view can rank models by actual work
+   * instead of by a one-line connectivity ping.
+   *
+   * Fire-and-forget on purpose: a statistics row must never slow an LLM call down or fail it, so
+   * the insert is not awaited and a write error is only logged. Health-check pings are skipped —
+   * they are already stored in `llm_model_test_results`, and recording them here too would double
+   * their weight in the ranking.
+   *
+   * `latencyMs` spans the whole call including the internal retries, which is the number a user
+   * actually waits for.
+   */
+  private recordCallStat(
+    providerKey: string,
+    modelKey: string,
+    latencyMs: number,
+    status: 'success' | 'error' | 'timeout',
+    caller: string | undefined,
+    error: unknown,
+  ): void {
+    const resolvedCaller = caller ?? 'app';
+    if (resolvedCaller === 'health') {
+      return;
+    }
+
+    const errorMessage = error instanceof Error ? error.message.slice(0, MAX_STORED_ERROR_LENGTH) : null;
+
+    void this.dbProviderService
+      .saveCallStat({ providerKey, modelKey, latencyMs, status, caller: resolvedCaller, errorMessage })
+      .catch((writeError: unknown) => {
+        this.logger.debug(`Failed to record LLM call stat: ${writeError instanceof Error ? writeError.message : 'unknown'}`);
+      });
   }
 
   private buildUserMessage(prompt: string, image?: string): OpenAI.Chat.Completions.ChatCompletionContentPart[] | string {

@@ -62,6 +62,7 @@ describe('LlmHealthService', () => {
         systemContext: 'You are helpful',
         providerOverride: 'openrouter',
         modelOverride: 'gpt-4o',
+        caller: 'health',
       });
       expect(result.success).toBe(true);
       expect(result.result.available).toBe(true);

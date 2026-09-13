@@ -10,7 +10,58 @@ import { UpdateLlmProviderDto } from './dto/update-llm-provider.dto';
 import { LlmModelEntity } from './entities/llm-model.entity';
 import { LlmProviderEntity } from './entities/llm-provider.entity';
 import { LlmModelTestResultEntity } from './entities/llm-model-test-results.entity';
+import { LlmCallStatEntity } from './entities/llm-call-stat.entity';
 import { UserLlmDefaultEntity } from './entities/user-llm-default.entity';
+import { ModelStats, ModelStatsRow, ModelUsageStats } from './types/model-stats.types';
+
+/** Runs a model needs before it can be ranked — one run is noise, not a measurement. */
+const MIN_RANKING_SAMPLE = 3;
+
+/** `caller` value used by the connectivity tests; excluded so those calls are not counted twice. */
+const HEALTH_CALLER = 'health';
+
+/** Composite row id — lets the leaderboard point at a row instead of duplicating it. */
+function modelStatsId(providerKey: string, modelKey: string): string {
+  return `${providerKey}::${modelKey}`;
+}
+
+/**
+ * Which measurement a row should be ranked on, or `null` when neither source has enough runs.
+ *
+ * Real calls win once a model has enough of them, because they measure the work the app actually
+ * does. Until then the connectivity pings stand in — they are a one-line test, but without this
+ * fallback the leaderboard stays empty on a fresh install, which is exactly when it is most useful
+ * for picking a model. The chosen source is reported on the row so the badge can say which it was.
+ */
+function rankBasisFor(row: ModelStatsRow): 'real' | 'ping' | null {
+  if (row.real && row.real.runs >= MIN_RANKING_SAMPLE) return 'real';
+  if (row.ping && row.ping.runs >= MIN_RANKING_SAMPLE) return 'ping';
+  return null;
+}
+
+/** Aggregate columns as they arrive from the driver. */
+type RawAggregate = {
+  runs: string | number;
+  successes: string | number | null;
+  avgMs: string | number | null;
+  minMs: string | number | null;
+};
+
+/**
+ * MySQL returns `COUNT`/`SUM`/`AVG` as strings, so every figure is coerced here. A missing average
+ * means no run succeeded, which is a real state and must not read as "0 ms".
+ */
+function toUsageStats(raw: RawAggregate): ModelUsageStats {
+  const runs = Number(raw.runs) || 0;
+  const successes = Number(raw.successes) || 0;
+
+  return {
+    runs,
+    successRate: runs > 0 ? Math.round((successes / runs) * 100) : 0,
+    avgMs: Math.round(Number(raw.avgMs) || 0),
+    minMs: Math.round(Number(raw.minMs) || 0),
+  };
+}
 
 @Injectable()
 export class LlmProviderService {
@@ -21,6 +72,8 @@ export class LlmProviderService {
     private readonly modelRepo: Repository<LlmModelEntity>,
     @InjectRepository(LlmModelTestResultEntity)
     private readonly testResultRepo: Repository<LlmModelTestResultEntity>,
+    @InjectRepository(LlmCallStatEntity)
+    private readonly callStatRepo: Repository<LlmCallStatEntity>,
     @InjectRepository(UserLlmDefaultEntity)
     private readonly userDefaultRepo: Repository<UserLlmDefaultEntity>,
   ) {}
@@ -164,6 +217,135 @@ export class LlmProviderService {
     });
 
     return { success: true, message: 'Providers retrieved', result: providers };
+  }
+
+  /**
+   * Per-model usage statistics for the statistics view: connectivity pings beside real work.
+   *
+   * Both sides are aggregated **in SQL**. The neighbouring `findProviders` loads every test result
+   * of every model, which is tolerable for a handful of manual pings but would not survive
+   * `llm_call_stats` — a table that grows by one row per LLM call.
+   *
+   * Only successful runs contribute to the latency figures, because a failed call's duration
+   * measures the failure (frequently a timeout) rather than the model. Failures are still counted
+   * where they belong: in the success rate over all runs.
+   */
+  async getModelStats(): Promise<ServiceResultContainer<ModelStats>> {
+    const [providersResult, pingRows, realRows] = await Promise.all([
+      this.findProviders(),
+      this.testResultRepo
+        .createQueryBuilder('result')
+        .select('result.model_id', 'modelId')
+        .addSelect('COUNT(*)', 'runs')
+        .addSelect(`SUM(CASE WHEN result.status = 'success' THEN 1 ELSE 0 END)`, 'successes')
+        .addSelect(`AVG(CASE WHEN result.status = 'success' THEN result.responseTimeMs END)`, 'avgMs')
+        .addSelect(`MIN(CASE WHEN result.status = 'success' THEN result.responseTimeMs END)`, 'minMs')
+        .groupBy('result.model_id')
+        .getRawMany<RawAggregate & { modelId: number }>(),
+      this.callStatRepo
+        .createQueryBuilder('stat')
+        .select('stat.provider_key', 'providerKey')
+        .addSelect('stat.model_key', 'modelKey')
+        .addSelect('COUNT(*)', 'runs')
+        .addSelect(`SUM(CASE WHEN stat.status = 'success' THEN 1 ELSE 0 END)`, 'successes')
+        .addSelect(`AVG(CASE WHEN stat.status = 'success' THEN stat.latencyMs END)`, 'avgMs')
+        .addSelect(`MIN(CASE WHEN stat.status = 'success' THEN stat.latencyMs END)`, 'minMs')
+        .addSelect('MAX(stat.createdAt)', 'lastCallAt')
+        .where('stat.caller <> :healthCaller', { healthCaller: HEALTH_CALLER })
+        .groupBy('stat.provider_key')
+        .addGroupBy('stat.model_key')
+        .getRawMany<RawAggregate & { providerKey: string; modelKey: string; lastCallAt: Date | string }>(),
+    ]);
+
+    // Rows are keyed by the configured models first, in the provider order the UI already shows.
+    const rowsById = new Map<string, ModelStatsRow>();
+    const rowIdByModelId = new Map<number, string>();
+
+    for (const provider of providersResult.result ?? []) {
+      for (const model of provider.models ?? []) {
+        const id = modelStatsId(provider.key, model.key);
+        rowsById.set(id, {
+          id,
+          providerKey: provider.key,
+          modelKey: model.key,
+          label: model.label ?? null,
+          active: Boolean(provider.active && model.active),
+          ping: null,
+          real: null,
+          lastCallAt: null,
+          rankingBasis: null,
+        });
+        rowIdByModelId.set(model.id, id);
+      }
+    }
+
+    for (const ping of pingRows) {
+      const row = rowsById.get(rowIdByModelId.get(Number(ping.modelId)) ?? '');
+      if (row) {
+        row.ping = toUsageStats(ping);
+      }
+    }
+
+    for (const real of realRows) {
+      const id = modelStatsId(real.providerKey, real.modelKey);
+      // A call can outlive the model row it belonged to — a deleted or renamed model keeps its
+      // history rather than taking it to the grave, so an unknown key still gets a row.
+      let row = rowsById.get(id);
+      if (!row) {
+        row = {
+          id,
+          providerKey: real.providerKey,
+          modelKey: real.modelKey,
+          label: null,
+          active: false,
+          ping: null,
+          real: null,
+          lastCallAt: null,
+          rankingBasis: null,
+        };
+        rowsById.set(id, row);
+      }
+      row.real = toUsageStats(real);
+      row.lastCallAt = real.lastCallAt ? new Date(real.lastCallAt) : null;
+    }
+
+    const rows = [...rowsById.values()];
+    for (const row of rows) {
+      row.rankingBasis = rankBasisFor(row);
+    }
+    const ranked = rows.filter((row) => row.rankingBasis !== null);
+    const basisOf = (row: ModelStatsRow): ModelUsageStats => (row.rankingBasis === 'real' ? row.real! : row.ping!);
+
+    // A model whose runs all failed has no latency at all: `AVG` over zero successful rows comes
+    // back NULL, which coerces to 0 and would then win "fastest" outright. Only a genuinely
+    // measured latency is eligible — reliability is a separate question, answered below.
+    const measured = ranked.filter((row) => basisOf(row).avgMs > 0);
+
+    const fastest = measured.reduce<ModelStatsRow | null>(
+      (best, row) => (best === null || basisOf(row).avgMs < basisOf(best).avgMs ? row : best),
+      null,
+    );
+    // Tie-break on the number of runs: with equal reliability, the better-measured model wins.
+    const mostStable = ranked.reduce<ModelStatsRow | null>(
+      (best, row) =>
+        best === null ||
+        basisOf(row).successRate > basisOf(best).successRate ||
+        (basisOf(row).successRate === basisOf(best).successRate && basisOf(row).runs > basisOf(best).runs)
+          ? row
+          : best,
+      null,
+    );
+
+    return {
+      success: true,
+      message: 'Model statistics retrieved',
+      result: {
+        minimumSample: MIN_RANKING_SAMPLE,
+        rows,
+        fastestId: fastest?.id ?? null,
+        mostStableId: mostStable?.id ?? null,
+      },
+    };
   }
 
   async findProviderByKey(key: string): Promise<LlmProviderEntity | null> {
@@ -393,6 +575,21 @@ export class LlmProviderService {
       errorMessage,
     });
     return this.testResultRepo.save(testResult);
+  }
+
+  /**
+   * Appends one real-call record. Called fire-and-forget from `LlmClientService`, so it stays
+   * cheap: a single insert and no lookups.
+   */
+  async saveCallStat(stat: {
+    providerKey: string;
+    modelKey: string;
+    latencyMs: number;
+    status: 'success' | 'error' | 'timeout';
+    caller: string;
+    errorMessage: string | null;
+  }): Promise<LlmCallStatEntity> {
+    return this.callStatRepo.save(this.callStatRepo.create(stat));
   }
 
   async deleteTestResult(testResultId: number): Promise<ServiceResultContainer<void>> {

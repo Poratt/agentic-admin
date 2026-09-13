@@ -95,6 +95,12 @@ export interface LlmRequest {
   image?: string;
   /** Override the default max_tokens limit (default: 1024) */
   maxTokens?: number;
+  /**
+   * Which surface is making the call, recorded in `llm_call_stats` so the statistics view can
+   * separate real work from connectivity pings. Defaults to `'app'`; the health-check service
+   * passes `'health'`, which is excluded from the real-usage statistics.
+   */
+  caller?: string;
 }
 
 export type LlmRuntimeSelection = {

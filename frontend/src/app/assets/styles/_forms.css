@@ -280,13 +280,17 @@ select {
   &.sm {
     width: min(calc(var(--search-width) / 2), 100%);
 
+    /* Leading edge. The clear button is anchored to the trailing corner (inset-inline-end), so
+       an icon on the right sat directly underneath it as soon as the field had a value. */
     .field-icon {
-      right: var(--space-4);
+      right: auto;
+      left: var(--space-4);
       font-size: var(--font-size-xs);
     }
 
+    /* Symmetric inset: 32px on each side — the icon claims the left, the clear button the right. */
     input {
-      padding: var(--space-2) var(--space-16) var(--space-2) var(--space-4);
+      padding: var(--space-2) var(--space-16);
       font-size: var(--font-size-xs);
     }
   }

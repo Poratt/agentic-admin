@@ -23,38 +23,34 @@
  * @returns Parsed JSON value, or `null` if no candidate parsed.
  */
 export function parseLlmJson<T>(content: string | null, context: string): T | null {
-    if (!content) {
-        return null;
-    }
-
-    const fenced = stripCodeFences(content);
-    if (!fenced) {
-        return null;
-    }
-
-    const extracted = extractOutermostJson(fenced);
-
-    const candidates = uniqueCandidates([
-        fenced,
-        extracted,
-        repairJsonText(fenced),
-        extracted ? repairJsonText(extracted) : null,
-    ]);
-
-    const errors: string[] = [];
-    for (const candidate of candidates) {
-        try {
-            return JSON.parse(candidate) as T;
-        } catch (error) {
-            errors.push(error instanceof Error ? error.message : 'unknown');
-        }
-    }
-
-    // errors[0] belongs to the first candidate, so its offsets match `fenced`.
-    const primaryError = errors[0] ?? 'unknown';
-    // eslint-disable-next-line no-console
-    console.warn(`[${context}] Failed to parse LLM JSON: ${primaryError}${describeFailureWindow(fenced, primaryError)}`);
+  if (!content) {
     return null;
+  }
+
+  const fenced = stripCodeFences(content);
+  if (!fenced) {
+    return null;
+  }
+
+  const extracted = extractOutermostJson(fenced);
+
+  const errors: string[] = [];
+
+  const candidates = uniqueCandidates([fenced, extracted, repairJsonText(fenced), extracted ? repairJsonText(extracted) : null]);
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate) as T;
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : 'unknown');
+    }
+  }
+
+  // errors[0] belongs to the first candidate, so its offsets match `fenced`.
+  const primaryError = errors[0] ?? 'unknown';
+  // eslint-disable-next-line no-console
+  console.warn(`[${context}] Failed to parse LLM JSON: ${primaryError}${describeFailureWindow(fenced, primaryError)}`);
+  return null;
 }
 
 /**
@@ -62,16 +58,16 @@ export function parseLlmJson<T>(content: string | null, context: string): T | nu
  * models emit even when explicitly told to return JSON only.
  */
 function stripCodeFences(content: string): string {
-    let cleaned = content.trim();
+  let cleaned = content.trim();
 
-    if (cleaned.startsWith('```')) {
-        cleaned = cleaned
-            .replace(/^```(?:json)?\s*/i, '')
-            .replace(/\s*```$/i, '')
-            .trim();
-    }
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+  }
 
-    return cleaned;
+  return cleaned;
 }
 
 /**
@@ -83,46 +79,46 @@ function stripCodeFences(content: string): string {
  * balance (truncated response), leaving recovery to the repair pass.
  */
 function extractOutermostJson(text: string): string | null {
-    const start = text.search(/[[{]/);
-    if (start === -1) {
-        return null;
-    }
-
-    const opener = text[start];
-    const closer = opener === '{' ? '}' : ']';
-    let depth = 0;
-    let inString = false;
-
-    for (let i = start; i < text.length; i++) {
-        const ch = text[i];
-
-        if (inString) {
-            if (ch === '\\') {
-                i++;
-                continue;
-            }
-            if (ch === '"') {
-                inString = false;
-            }
-            continue;
-        }
-
-        if (ch === '"') {
-            inString = true;
-            continue;
-        }
-
-        if (ch === opener) {
-            depth++;
-        } else if (ch === closer) {
-            depth--;
-            if (depth === 0) {
-                return text.slice(start, i + 1);
-            }
-        }
-    }
-
+  const start = text.search(/[[{]/);
+  if (start === -1) {
     return null;
+  }
+
+  const opener = text[start];
+  const closer = opener === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (inString) {
+      if (ch === '\\') {
+        i++;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === opener) {
+      depth++;
+    } else if (ch === closer) {
+      depth--;
+      if (depth === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -131,110 +127,163 @@ function extractOutermostJson(text: string): string | null {
  *
  * - escapes raw control characters (newlines, tabs) that appear inside strings
  * - escapes double quotes that are content rather than a delimiter — the
- *   `מע"מ` case — by treating a quote as a closing delimiter only when the next
- *   significant character could legally follow one (`,` `}` `]` `:`) or the text
- *   ends there
+ *   `מע"מ` case — by treating a quote as a closing delimiter only when what
+ *   follows it could legally follow one (see `quoteClosesString`)
  * - drops trailing commas before `}` / `]`
  *
  * Valid JSON passes through unchanged.
  */
 function repairJsonText(text: string): string {
-    let out = '';
-    let inString = false;
+  let out = '';
+  let inString = false;
 
-    for (let i = 0; i < text.length; i++) {
-        const ch = text[i];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
 
-        if (!inString) {
-            if (ch === '"') {
-                inString = true;
-                out += ch;
-                continue;
-            }
+    if (!inString) {
+      if (ch === '"') {
+        inString = true;
+        out += ch;
+        continue;
+      }
 
-            if (ch === ',') {
-                const next = nextSignificantChar(text, i + 1);
-                if (next === '}' || next === ']') {
-                    continue;
-                }
-            }
-
-            out += ch;
-            continue;
+      if (ch === ',') {
+        const next = nextSignificantChar(text, i + 1);
+        if (next === '}' || next === ']') {
+          continue;
         }
+      }
 
-        if (ch === '\\') {
-            const escaped = text[i + 1];
-            if (escaped === undefined) {
-                // Lone trailing backslash: escape it so it cannot swallow a quote.
-                out += '\\\\';
-                continue;
-            }
-            out += ch + escaped;
-            i++;
-            continue;
-        }
-
-        if (ch === '"') {
-            const next = nextSignificantChar(text, i + 1);
-            if (next === null || next === ',' || next === '}' || next === ']' || next === ':') {
-                inString = false;
-                out += ch;
-            } else {
-                out += '\\"';
-            }
-            continue;
-        }
-
-        out += ch < ' ' ? escapeControlChar(ch) : ch;
+      out += ch;
+      continue;
     }
 
-    return out;
+    if (ch === '\\') {
+      const escaped = text[i + 1];
+      if (escaped === undefined) {
+        // Lone trailing backslash: escape it so it cannot swallow a quote.
+        out += '\\\\';
+        continue;
+      }
+      if ('"\\/bfnrtu'.includes(escaped)) {
+        // Legal JSON escape — pass through as-is.
+        out += ch + escaped;
+      } else {
+        // Invalid escape target (e.g. PHP namespaces: League\Csv) —
+        // double the backslash so the character survives as literal text.
+        out += '\\\\' + escaped;
+      }
+      i++;
+      continue;
+    }
+
+    if (ch === '"') {
+      if (quoteClosesString(text, i)) {
+        inString = false;
+        out += ch;
+      } else {
+        out += '\\"';
+      }
+      continue;
+    }
+
+    out += ch < ' ' ? escapeControlChar(ch) : ch;
+  }
+
+  return out;
+}
+
+/**
+ * Characters that may legitimately follow a comma inside JSON: the start of the next key or value,
+ * plus `}`/`]` for a trailing comma.
+ */
+const JSON_AFTER_COMMA = '"{}[]-0123456789tfn';
+
+/**
+ * Decides whether the quote at `index` closes the string it sits in, or is content inside it.
+ *
+ * Content is the easy half: `מע"מ` puts a quote before a letter, and a letter can never follow a
+ * closing delimiter, so the quote is obviously content.
+ *
+ * The hard half is a quote that is followed by a comma — legal after a real delimiter, but also
+ * the exact shape of the live failure that lost a whole topic:
+ *
+ *     "description": "המערכת מייצרת "Audit חודשי", ומספקת דוח"
+ *
+ * Here the inner quote in `"Audit חודשי",` closed the value, leaving `ומספקת דוח"` to be read as
+ * garbage. The comma alone cannot settle it, but what comes *after* the comma can: a closing
+ * delimiter must be followed by the next key or value, and prose is neither. So the quote closes
+ * the string only when a JSON token could start after the comma.
+ */
+function quoteClosesString(text: string, index: number): boolean {
+  const nextIndex = nextSignificantIndex(text, index + 1);
+  if (nextIndex === -1) {
+    // End of text: a closing delimiter is the only reading that leaves anything to parse.
+    return true;
+  }
+
+  const next = text[nextIndex];
+  if (next === '}' || next === ']' || next === ':') {
+    return true;
+  }
+
+  if (next !== ',') {
+    return false;
+  }
+
+  const afterComma = nextSignificantIndex(text, nextIndex + 1);
+  return afterComma !== -1 && JSON_AFTER_COMMA.includes(text[afterComma]);
 }
 
 /** First non-whitespace character at or after `from`, or `null` at end of text. */
 function nextSignificantChar(text: string, from: number): string | null {
-    for (let i = from; i < text.length; i++) {
-        if (!/\s/.test(text[i])) {
-            return text[i];
-        }
-    }
+  const index = nextSignificantIndex(text, from);
+  return index === -1 ? null : text[index];
+}
 
-    return null;
+/** Index of the first non-whitespace character at or after `from`, or `-1` at end of text. */
+function nextSignificantIndex(text: string, from: number): number {
+  for (let i = from; i < text.length; i++) {
+    if (!/\s/.test(text[i])) {
+      return i;
+    }
+  }
+
+  return -1;
 }
 
 /** JSON escape sequence for a raw control character. */
 function escapeControlChar(ch: string): string {
-    switch (ch) {
-        case '\n':
-            return '\\n';
-        case '\r':
-            return '\\r';
-        case '\t':
-            return '\\t';
-        case '\b':
-            return '\\b';
-        case '\f':
-            return '\\f';
-        default:
-            return `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`;
-    }
+  switch (ch) {
+    case '\n':
+      return '\\n';
+    case '\r':
+      return '\\r';
+    case '\t':
+      return '\\t';
+    case '\b':
+      return '\\b';
+    case '\f':
+      return '\\f';
+    default:
+      return `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`;
+  }
 }
 
 /** Drops empty candidates and duplicates while preserving order. */
 function uniqueCandidates(values: (string | null | undefined)[]): string[] {
-    const seen = new Set<string>();
-    const result: string[] = [];
+  const seen = new Set<string>();
+  const result: string[] = [];
 
-    for (const value of values) {
-        if (!value || seen.has(value)) {
-            continue;
-        }
-        seen.add(value);
-        result.push(value);
+  for (const value of values) {
+    if (!value || seen.has(value)) {
+      continue;
     }
+    seen.add(value);
+    result.push(value);
+  }
 
-    return result;
+  return result;
 }
 
 /**
@@ -242,18 +291,18 @@ function uniqueCandidates(values: (string | null | undefined)[]): string[] {
  * failure can be diagnosed from the log without replaying the LLM call.
  */
 function describeFailureWindow(text: string, message: string): string {
-    const match = /position (\d+)/.exec(message);
-    if (!match) {
-        return '';
-    }
+  const match = /position (\d+)/.exec(message);
+  if (!match) {
+    return '';
+  }
 
-    const position = Number(match[1]);
-    if (!Number.isFinite(position) || position > text.length) {
-        return '';
-    }
+  const position = Number(match[1]);
+  if (!Number.isFinite(position) || position > text.length) {
+    return '';
+  }
 
-    const start = Math.max(0, position - 80);
-    const end = Math.min(text.length, position + 80);
+  const start = Math.max(0, position - 80);
+  const end = Math.min(text.length, position + 80);
 
-    return ` | near: …${text.slice(start, end).replace(/\n/g, '\\n')}…`;
+  return ` | near: …${text.slice(start, end).replace(/\n/g, '\\n')}…`;
 }

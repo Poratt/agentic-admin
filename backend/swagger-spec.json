@@ -1780,6 +1780,32 @@
         "toolIcon": "ph-activity"
       }
     },
+    "/llm-provider/stats": {
+      "get": {
+        "description": "Per-model usage statistics. Connectivity pings and real calls are reported separately, aggregated in SQL so the response size does not grow with call volume.",
+        "operationId": "LlmProviderController_findModelStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Model statistics retrieved"
+          },
+          "401": {
+            "description": "JWT token missing or invalid"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get model statistics",
+        "summaryHe": "מציגים דירוג מודלים: המהיר ביותר, היציב ביותר, וזמני תגובה בפועל",
+        "tags": [
+          "LLM Provider"
+        ],
+        "toolIcon": "ph-chart-bar"
+      }
+    },
     "/calendar/auth": {
       "get": {
         "description": "Returns a URL that the authenticated user must visit to grant the application access to their Google Calendar. After granting consent, Google redirects to /calendar/callback with an authorization code and state.\n\nAgent instructions: call this tool EXACTLY ONCE. Present the returned `url` to the user as a clickable link and then STOP — do not call this tool again, do not visit or modify the URL yourself. The user must click the link and complete the Google consent screen; the flow finishes when Google redirects back to /calendar/callback.",

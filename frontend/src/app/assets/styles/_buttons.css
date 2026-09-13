@@ -389,6 +389,25 @@ button.star-btn {
   }
 }
 
+/* 4d-i. Toggle Group — elevated / segmented-control variant.
+   A muted track with the active segment lifted on a surface-coloured pill and a soft shadow,
+   instead of the default primary tint. Reads as one control with a moving selection rather
+   than two adjacent buttons. Both colours come from tokens, so it holds up in either theme. */
+.toggle-group.elevated {
+  background: var(--color-surface-elevated);
+  border-color: transparent;
+
+  .toggle-btn {
+    color: var(--color-text-secondary);
+
+    &.active {
+      background: var(--color-surface);
+      color: var(--color-text-primary);
+      box-shadow: var(--shadow-soft);
+    }
+  }
+}
+
 /* 4e. Icon circle toggle — add/remove compare (pill, primary tint). */
 .icon-circle-toggle {
   flex: 0 0 var(--space-14);

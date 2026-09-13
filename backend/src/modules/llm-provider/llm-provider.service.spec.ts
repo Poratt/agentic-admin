@@ -3,7 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { LlmProviderService } from './llm-provider.service';
 
 function makeService(mockDelete: jest.Mock): LlmProviderService {
-  const svc = new LlmProviderService({} as any, {} as any, { delete: mockDelete } as any, {} as any);
+  const svc = new LlmProviderService({} as any, {} as any, { delete: mockDelete } as any, {} as any, {} as any);
   return svc;
 }
 
@@ -74,7 +74,7 @@ describe('LlmProviderService.deleteOldTestResults', () => {
 
 describe('LlmProviderService.deleteProvider', () => {
   function makeDeleteService(providerRepo: { findOneBy: jest.Mock; delete: jest.Mock }): LlmProviderService {
-    return new LlmProviderService(providerRepo as any, {} as any, {} as any, {} as any);
+    return new LlmProviderService(providerRepo as any, {} as any, {} as any, {} as any, {} as any);
   }
 
   it('deletes the provider row and returns success', async () => {
@@ -106,7 +106,7 @@ describe('LlmProviderService.deleteProvider', () => {
 
 describe('LlmProviderService.getProviderCatalog', () => {
   function makeCatalogService(providerRepo: { createQueryBuilder: jest.Mock }, modelRepo: { find: jest.Mock }): LlmProviderService {
-    return new LlmProviderService(providerRepo as any, modelRepo as any, {} as any, {} as any);
+    return new LlmProviderService(providerRepo as any, modelRepo as any, {} as any, {} as any, {} as any);
   }
 
   function providerRepoFor(provider: any): { createQueryBuilder: jest.Mock } {
@@ -200,7 +200,7 @@ describe('LlmProviderService.getProviderCatalog', () => {
 
 describe('LlmProviderService.markModelUnavailable', () => {
   function makeMarkService(modelRepo: { findOne: jest.Mock; save: jest.Mock }): LlmProviderService {
-    return new LlmProviderService({} as any, modelRepo as any, {} as any, {} as any);
+    return new LlmProviderService({} as any, modelRepo as any, {} as any, {} as any, {} as any);
   }
 
   it('deactivates an active model', async () => {
@@ -230,7 +230,7 @@ describe('LlmProviderService.syncProviderModels', () => {
     providerRepo: { findOneBy: jest.Mock },
     modelRepo: { find: jest.Mock; create: jest.Mock; save: jest.Mock },
   ): LlmProviderService {
-    return new LlmProviderService(providerRepo as any, modelRepo as any, {} as any, {} as any);
+    return new LlmProviderService(providerRepo as any, modelRepo as any, {} as any, {} as any, {} as any);
   }
 
   it('adds only missing keys (deduped, active=false, capability=text) and counts skips', async () => {
@@ -254,5 +254,104 @@ describe('LlmProviderService.syncProviderModels', () => {
       expect.objectContaining({ key: 'b', active: false, capability: 'text', providerId: 12 }),
     ]);
     expect(res.result).toEqual({ added: 2, skipped: 1 });
+  });
+});
+
+describe('LlmProviderService.getModelStats', () => {
+  /** Fluent stand-in for a TypeORM query builder: every chain method returns itself. */
+  function makeQueryBuilder(rows: unknown[]) {
+    const builder: Record<string, jest.Mock> = {};
+    for (const method of ['select', 'addSelect', 'where', 'groupBy', 'addGroupBy']) {
+      builder[method] = jest.fn(() => builder);
+    }
+    builder.getRawMany = jest.fn().mockResolvedValue(rows);
+    return builder;
+  }
+
+  const providers = [
+    {
+      key: 'openrouter',
+      active: true,
+      models: [
+        { id: 1, key: 'fast-model', label: 'Fast', active: true },
+        { id: 2, key: 'slow-model', label: 'Slow', active: true },
+        { id: 3, key: 'steady-model', label: 'Steady', active: true },
+        { id: 4, key: 'unused-model', label: 'Unused', active: true },
+      ],
+    },
+  ];
+
+  const pingRows = [
+    { modelId: 1, runs: '5', successes: '5', avgMs: '300', minMs: '200' },
+    { modelId: 2, runs: '5', successes: '2', avgMs: '4000', minMs: '3000' },
+  ];
+
+  const realRows = [
+    { providerKey: 'openrouter', modelKey: 'fast-model', runs: '10', successes: '10', avgMs: '1200.5', minMs: '900', lastCallAt: '2026-09-13T10:00:00.000Z' },
+    { providerKey: 'openrouter', modelKey: 'slow-model', runs: '10', successes: '8', avgMs: '9000', minMs: '7000', lastCallAt: '2026-09-13T11:00:00.000Z' },
+    { providerKey: 'openrouter', modelKey: 'steady-model', runs: '20', successes: '20', avgMs: '5000', minMs: '4000', lastCallAt: '2026-09-13T12:00:00.000Z' },
+  ];
+
+  function makeStatsService(ping: unknown[] = pingRows, real: unknown[] = realRows, providerRows: unknown[] = providers): LlmProviderService {
+    const providerRepo = { find: jest.fn().mockResolvedValue(providerRows) };
+    return new LlmProviderService(
+      providerRepo as any,
+      {} as any,
+      { createQueryBuilder: jest.fn(() => makeQueryBuilder(ping)) } as any,
+      { createQueryBuilder: jest.fn(() => makeQueryBuilder(real)) } as any,
+      {} as any,
+    );
+  }
+
+  it('merges ping and real figures onto the configured models and normalises driver strings', async () => {
+    const res = await makeStatsService().getModelStats();
+    const rows = res.result!.rows;
+    const fast = rows.find((r) => r.id === 'openrouter::fast-model')!;
+    const unused = rows.find((r) => r.id === 'openrouter::unused-model')!;
+
+    // MySQL hands back aggregates as strings; they must arrive as numbers, rounded.
+    expect(fast.ping).toEqual({ runs: 5, successRate: 100, avgMs: 300, minMs: 200 });
+    expect(fast.real).toEqual({ runs: 10, successRate: 100, avgMs: 1201, minMs: 900 });
+    expect(fast.lastCallAt).toEqual(new Date('2026-09-13T10:00:00.000Z'));
+
+    // A model with no measurements reports null, not zero — "never used" is not "instant".
+    expect(unused.ping).toBeNull();
+    expect(unused.real).toBeNull();
+    expect(unused.label).toBe('Unused');
+  });
+
+  it('ranks the fastest by mean latency and breaks a reliability tie on run count', async () => {
+    const res = await makeStatsService().getModelStats();
+
+    // fast-model has the lowest mean (1201ms); steady-model is equally reliable but measured more.
+    expect(res.result!.fastestId).toBe('openrouter::fast-model');
+    expect(res.result!.mostStableId).toBe('openrouter::steady-model');
+  });
+
+  it('never ranks a model that has fewer runs than the minimum sample', async () => {
+    const thinRows = [
+      ...realRows,
+      { providerKey: 'openrouter', modelKey: 'unused-model', runs: '2', successes: '2', avgMs: '50', minMs: '40', lastCallAt: '2026-09-13T13:00:00.000Z' },
+    ];
+    const res = await makeStatsService(pingRows, thinRows).getModelStats();
+
+    // 50ms would win outright, but two runs are noise — the guard is the whole point of the field.
+    expect(res.result!.minimumSample).toBe(3);
+    expect(res.result!.fastestId).toBe('openrouter::fast-model');
+    expect(res.result!.rows.find((r) => r.id === 'openrouter::unused-model')!.real!.runs).toBe(2);
+  });
+
+  it('keeps a row for a model that no longer exists in the configuration', async () => {
+    const orphanRows = [
+      ...realRows,
+      { providerKey: 'gone-provider', modelKey: 'gone-model', runs: '4', successes: '4', avgMs: '800', minMs: '700', lastCallAt: '2026-09-13T09:00:00.000Z' },
+    ];
+    const res = await makeStatsService(pingRows, orphanRows).getModelStats();
+    const orphan = res.result!.rows.find((r) => r.id === 'gone-provider::gone-model')!;
+
+    expect(orphan).toBeDefined();
+    expect(orphan.label).toBeNull();
+    expect(orphan.active).toBe(false);
+    expect(orphan.real!.runs).toBe(4);
   });
 });

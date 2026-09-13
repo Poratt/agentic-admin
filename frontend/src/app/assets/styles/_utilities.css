@@ -418,6 +418,38 @@
   padding-bottom: 12px;
   margin-bottom: var(--space-8);
 
+  /* Two-floor variant: a top row for view switching plus the primary action, then a row for
+     search and filters. Keeps the primary action on the opposite edge from the switch, and
+     stops the filters from competing with the actions for the same line. */
+  &.stacked {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-6);
+    padding-bottom: 0;
+    margin-bottom: var(--space-8);
+
+    .toolbar-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      flex-wrap: wrap;
+    }
+
+    /* Scoped to this variant on purpose — the base .toolbar-search sizing is shared with the
+       strain-hunter settings page, which was not part of this change. */
+    .toolbar-search {
+      max-width: 420px;
+
+      /* The global .form-field-has-icon sizes itself to min(--search-width, 100%), and the .sm
+         variant halves that. Inside a growing .toolbar-search that left the field narrow with
+         dead space beside it and a truncated placeholder — here it fills the slot it was given. */
+      .form-field-has-icon {
+        width: 100%;
+      }
+    }
+  }
+
   .toolbar-search {
     flex: 1 1 240px;
     min-width: 200px;
@@ -436,6 +468,15 @@
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
   }
+}
+
+/* --- Table Caption --- */
+/* Small muted line above a table card: result counts, "showing N of M" and similar. Sits on the
+   same left edge as the card so the toolbar and the table read as one column. */
+.table-caption {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 
 /* --- Generic Summary Row (stat strip in page header) --- */

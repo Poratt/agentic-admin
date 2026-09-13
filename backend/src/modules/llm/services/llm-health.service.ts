@@ -108,6 +108,9 @@ export class LlmHealthService {
         systemContext: systemContext || 'You are a helpful assistant.',
         providerOverride: provider,
         modelOverride: model,
+        // Marks this as a connectivity ping so it is not counted again in the real-usage
+        // statistics — it is already persisted to llm_model_test_results below.
+        caller: 'health',
       });
 
       available = Boolean(response.content || response.toolCalls?.length);
