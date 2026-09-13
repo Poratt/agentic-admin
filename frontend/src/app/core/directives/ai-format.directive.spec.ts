@@ -17,11 +17,11 @@ describe('AiFormat', () => {
     const hebrewTableHtml = directive.parse('| שם | תפקיד |\n| --- | --- |\n| דנה | מנהל |\n| יוסי | משתמש |');
     const englishRoleHtml = directive.parse('Role: Admin\nUser (ID: 7)');
 
-    expect(hebrewTableHtml).toContain('badge-admin');
-    expect(hebrewTableHtml).toContain('badge-info');
+    expect(hebrewTableHtml).toContain('role-admin');
+    expect(hebrewTableHtml).toContain('badge-user');
     expect(hebrewTableHtml).toContain('מנהל');
     expect(hebrewTableHtml).toContain('משתמש');
-    expect(englishRoleHtml).toContain('badge-admin');
-    expect(englishRoleHtml).toContain('badge-info');
+    expect(englishRoleHtml).toContain('role-admin');
+    expect(englishRoleHtml).toContain('badge-user');
   });
 });

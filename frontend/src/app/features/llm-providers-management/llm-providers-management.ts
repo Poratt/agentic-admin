@@ -308,6 +308,12 @@ export class LlmProvidersManagement implements OnInit {
         () => new Map((this.llmProviderStore.modelStats()?.rows ?? []).map((row) => [row.id, row])),
     );
 
+    /** Leaderboard winners for the providers-view caption tags — null until statistics load. */
+    fastestStatsRow = computed(() => this.statsById().get(this.llmProviderStore.modelStats()?.fastestId ?? '') ?? null);
+    mostStableStatsRow = computed(
+        () => this.statsById().get(this.llmProviderStore.modelStats()?.mostStableId ?? '') ?? null,
+    );
+
     /** Label for a statistics row — the configured name, falling back to the raw model key. */
     statsLabel(row: ModelStatsRow): string {
         return row.label ?? row.modelKey;

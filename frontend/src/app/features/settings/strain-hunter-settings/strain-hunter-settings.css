@@ -121,11 +121,6 @@
         line-height: var(--line-height-tight);
         white-space: normal;
         word-break: break-word;
-
-        .badge {
-            padding: var(--space-1) var(--space-4);
-            font-size: var(--font-size-xxs);
-        }
     }
 
     /* ── Enrichment panel (LLM Box) ──────────────────────────────────────── */

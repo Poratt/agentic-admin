@@ -109,7 +109,13 @@
                     </ng-template>
                     <ng-template #emptymessage>
                         <tr>
-                            <td [attr.colspan]="authStore.user()?.role === 1 ? columns.length + 1 : columns.length">לא נמצאו תוצאות.</td>
+                            <td [attr.colspan]="authStore.user()?.role === 1 ? columns.length + 1 : columns.length">
+                                <div class="page-state table-empty-state">
+                                    <span class="icon ph ph-magnifying-glass-minus"></span>
+                                    <h4 class="title">לא נמצאו משתמשים התואמים לחיפוש.</h4>
+                                    <p class="subtitle">נסה לשנות את מונחי החיפוש או לנקות את הסינון.</p>
+                                </div>
+                            </td>
                         </tr>
                     </ng-template>
                 </p-table>

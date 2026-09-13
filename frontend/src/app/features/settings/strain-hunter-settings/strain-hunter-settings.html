@@ -114,7 +114,7 @@
                                 <td class="row-label clickable" (click)="toggleGenetics(g.id)">{{ g.name }}</td>
                                 <td>
                                     @if (g.type) {
-                                        <span class="badge badge-strain-type">{{ g.type }}</span>
+                                        <span class="badge badge-primary">{{ g.type }}</span>
                                     } @else {
                                         <span class="text-muted">—</span>
                                     }
@@ -186,7 +186,7 @@
                                                             <span class="detail-label">סוג</span>
                                                             <span class="detail-value">
                                                                 @if (g.type) {
-                                                                    <span class="badge badge-strain-type">{{ g.type }}</span>
+                                                                    <span class="badge badge-primary">{{ g.type }}</span>
                                                                 } @else {
                                                                     <span class="text-muted">—</span>
                                                                 }
@@ -254,7 +254,7 @@
                                                                         <span class="detail-label">סוג</span>
                                                                         <span class="detail-value">
                                                                             @if (enriched.type) {
-                                                                                <span class="badge badge-strain-type">{{
+                                                                                <span class="badge badge-primary">{{
                                                                                     enriched.type
                                                                                 }}</span>
                                                                             } @else {

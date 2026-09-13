@@ -93,19 +93,19 @@ export class AiFormat implements OnChanges {
     processed = processed
       .replace(
         new RegExp(`(${HEBREW_ROLE_LABEL}|Role):\\s*(${HEBREW_ADMIN_LABEL}|Admin)`, 'g'),
-        `$1: <span class="badge badge-admin"><span class="ph sm">shield</span>${HEBREW_ADMIN_LABEL}</span>`
+        `$1: <span class="badge role-admin"><span class="ph sm">shield</span>${HEBREW_ADMIN_LABEL}</span>`
       )
       .replace(
         new RegExp(`(${HEBREW_ROLE_LABEL}|Role):\\s*(${HEBREW_USER_LABEL}|User)`, 'g'),
-        `$1: <span class="badge badge-info"><span class="ph sm">person</span>${HEBREW_USER_LABEL}</span>`
+        `$1: <span class="badge badge-user"><span class="ph sm">person</span>${HEBREW_USER_LABEL}</span>`
       )
       .replace(
         new RegExp(`\\b(Admin|${HEBREW_ADMIN_LABEL})\\s*\\(ID:\\s*(\\d+)\\)`, 'gi'),
-        `<span class="badge badge-admin"><span class="ph sm">shield</span>${HEBREW_ADMIN_LABEL}</span> (ID: $2)`
+        `<span class="badge role-admin"><span class="ph sm">shield</span>${HEBREW_ADMIN_LABEL}</span> (ID: $2)`
       )
       .replace(
         new RegExp(`\\b(User|${HEBREW_USER_LABEL})\\s*\\(ID:\\s*(\\d+)\\)`, 'gi'),
-        `<span class="badge badge-info"><span class="ph sm">person</span>${HEBREW_USER_LABEL}</span> (ID: $2)`
+        `<span class="badge badge-user"><span class="ph sm">person</span>${HEBREW_USER_LABEL}</span> (ID: $2)`
       );
 
     return processed.replace(new RegExp(`${TABLE_PLACEHOLDER}(\\d+)_`, 'g'), (_, i) => {
@@ -184,10 +184,10 @@ export class AiFormat implements OnChanges {
   private roleBadge(text: string): string {
     const t = text.trim();
     if (t === HEBREW_ADMIN_LABEL || t.toLowerCase() === 'admin') {
-      return `<span class="badge badge-admin"><span class="ph sm">shield</span>${HEBREW_ADMIN_LABEL}</span>`;
+      return `<span class="badge role-admin"><span class="ph sm">shield</span>${HEBREW_ADMIN_LABEL}</span>`;
     }
     if (t === HEBREW_USER_LABEL || t.toLowerCase() === 'user') {
-      return `<span class="badge badge-info"><span class="ph sm">person</span>${HEBREW_USER_LABEL}</span>`;
+      return `<span class="badge badge-user"><span class="ph sm">person</span>${HEBREW_USER_LABEL}</span>`;
     }
     return `<span>${t}</span>`;
   }

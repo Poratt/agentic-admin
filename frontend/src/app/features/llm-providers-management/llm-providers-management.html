@@ -86,7 +86,7 @@
                     </button>
                 </div>
             } @else if (statsRows().length === 0) {
-                <div class="page-state empty-state">
+                <div class="page-state empty-state roomy">
                     <span class="icon ph ph-chart-bar"></span>
                     <h4 class="title">No models to rank yet.</h4>
                     <p class="subtitle">Statistics appear once providers and models are configured.</p>
@@ -147,7 +147,7 @@
                                         <span class="row-label">{{ statsLabel(row) }}</span>
                                         @if (row.id === llmProviderStore.modelStats()!.fastestId) {
                                             <span
-                                                class="leader-badge fastest"
+                                                class="badge badge-warning"
                                                 appTooltip
                                                 [text]="'Fastest mean latency in ' + leaderBasisLabel(row.providerKey, row.modelKey)"
                                             >
@@ -156,7 +156,7 @@
                                         }
                                         @if (row.id === llmProviderStore.modelStats()!.mostStableId) {
                                             <span
-                                                class="leader-badge stable"
+                                                class="badge badge-success"
                                                 appTooltip
                                                 [text]="'Highest success rate in ' + leaderBasisLabel(row.providerKey, row.modelKey)"
                                             >
@@ -220,7 +220,7 @@
             </div>
         }
         @case (PageStates.Empty) {
-            <div class="page-state empty-state">
+            <div class="page-state empty-state roomy">
                 <span class="icon ph ph-exclude"></span>
                 <h4 class="title">No LLM providers found.</h4>
                 <p class="subtitle">No providers are currently defined in the system.</p>
@@ -229,9 +229,39 @@
         @case (PageStates.Ready) {
             <!-- Deliberately not "Showing N": this counts the providers in the current Active/All
                  filter, not the rows left after the search box, so "Showing" would overstate it. -->
-            <p class="table-caption">
-                {{ llmProviders().length }} {{ llmProviders().length === 1 ? 'provider' : 'providers' }}
-            </p>
+            <div class="caption-row">
+                <p class="table-caption">
+                    {{ llmProviders().length }} {{ llmProviders().length === 1 ? 'provider' : 'providers' }}
+                </p>
+                <div class="caption-tags">
+                @if (fastestStatsRow(); as fastest) {
+                    <span
+                        class="badge badge-warning badge-detailed"
+                        appTooltip
+                        [text]="'Fastest mean latency in ' + leaderBasisLabel(fastest.providerKey, fastest.modelKey)"
+                    >
+                        <i class="ph ph-lightning"></i>
+                        <span class="badge-lines">
+                            <span class="badge-subtitle">{{ fastest.providerKey }}</span>
+                            <span class="badge-title">{{ statsLabel(fastest) }}</span>
+                        </span>
+                    </span>
+                }
+                @if (mostStableStatsRow(); as stable) {
+                    <span
+                        class="badge badge-success badge-detailed"
+                        appTooltip
+                        [text]="'Highest success rate in ' + leaderBasisLabel(stable.providerKey, stable.modelKey)"
+                    >
+                        <i class="ph ph-shield-check"></i>
+                        <span class="badge-lines">
+                            <span class="badge-subtitle">{{ stable.providerKey }}</span>
+                            <span class="badge-title">{{ statsLabel(stable) }}</span>
+                        </span>
+                    </span>
+                }
+                </div>
+            </div>
             <div class="glass-effect card table-container">
                 <p-table #table [value]="llmProviders()" dataKey="id" [globalFilterFields]="globalFilterFields" [rowHover]="true">
                     <ng-template #header>
@@ -307,7 +337,7 @@
                             <tr class="expand-panel-row">
                                 <td colspan="5" class="expand-panel-cell">
                                     @if (provider.modelsCount === 0) {
-                                        <div class="empty-state">
+                                        <div class="empty-state roomy">
                                             <span class="ph ph-cube-simple"></span>
                                             <p>No models configured for this provider.</p>
                                             @if (isAdmin()) {
@@ -381,7 +411,7 @@
                                                             </button>
                                                         }
                                                     </th>
-                                                    <th class="col-actions-xs">
+                                                    <th class="col-actions">
                                                         @if (isAdmin()) {
                                                             <div class="row-actions">
                                                                 <button
@@ -433,7 +463,7 @@
                                                                 <span class="row-label">{{ model.label }}</span>
                                                                 @if (isFastest(provider.key, model.key)) {
                                                                     <span
-                                                                        class="leader-badge fastest"
+                                                                        class="badge badge-warning"
                                                                         appTooltip
                                                                         [text]="'Fastest mean latency in ' + leaderBasisLabel(provider.key, model.key)"
                                                                     >
@@ -442,7 +472,7 @@
                                                                 }
                                                                 @if (isMostStable(provider.key, model.key)) {
                                                                     <span
-                                                                        class="leader-badge stable"
+                                                                        class="badge badge-success"
                                                                         appTooltip
                                                                         [text]="'Highest success rate in ' + leaderBasisLabel(provider.key, model.key)"
                                                                     >
@@ -511,7 +541,7 @@
                                                             </button>
                                                         }
                                                     </td>
-                                                    <td class="col-actions-xs">
+                                                    <td class="col-actions">
                                                         @if (isAdmin()) {
                                                             <div class="row-actions">
                                                                 <p-toggleswitch
@@ -575,7 +605,7 @@
                                                                         <th>Legal/Latency</th>
                                                                         <th>Status</th>
                                                                         <th>Log output</th>
-                                                                        <th class="col-actions-xs">
+                                                                        <th class="col-actions">
                                                                             @if (isAdmin()) {
                                                                                 <button
                                                                                     type="button"
@@ -621,7 +651,7 @@
                                                                             >
                                                                                 {{ result.errorMessage || 'OK' }}
                                                                             </td>
-                                                                            <td class="col-actions-xs">
+                                                                            <td class="col-actions">
                                                                                 @if (isAdmin()) {
                                                                                     <button
                                                                                         type="button"
@@ -653,7 +683,7 @@
                                             <ng-template #emptymessage>
                                                 <tr>
                                                     <td colspan="6" class="empty-cell">
-                                                        <div class="empty-state">
+                                                        <div class="empty-state roomy">
                                                             <span class="ph ph-cube-simple"></span>
                                                             <p>No models yet.</p>
                                                             @if (isAdmin()) {
@@ -669,12 +699,23 @@
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            </ng-template>
-                                        </p-table>
+                    </ng-template>
+                </p-table>
                                     }
                                 </td>
                             </tr>
                         }
+                    </ng-template>
+                    <ng-template #emptymessage>
+                        <tr>
+                            <td colspan="5">
+                                <div class="page-state table-empty-state">
+                                    <span class="icon ph ph-magnifying-glass-minus"></span>
+                                    <h4 class="title">No providers found.</h4>
+                                    <p class="subtitle">Try a different search term or clear the state filter.</p>
+                                </div>
+                            </td>
+                        </tr>
                     </ng-template>
                 </p-table>
             </div>

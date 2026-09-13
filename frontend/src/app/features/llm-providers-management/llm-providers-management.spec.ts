@@ -741,6 +741,9 @@ describe('LlmProvidersManagement', () => {
             // The list-only toolbar row is gated on pageState Ready, so the default Empty mock
             // never renders it — recreate the fixture with a Ready store to exercise the real row.
             mockProviderStore.pageState.mockReturnValue(PageStates.Ready);
+            mockProviderStore.providers.mockReturnValue([
+                { id: 1, key: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', active: true, models: [] },
+            ]);
             fixture.destroy();
             fixture = TestBed.createComponent(LlmProvidersManagement);
             component = fixture.componentInstance;
@@ -761,6 +764,37 @@ describe('LlmProvidersManagement', () => {
             // the panel to the wrong side, so the filter must stay appended in place.
             expect(fixture.nativeElement.querySelector('p-select').getAttribute('appendTo')).toBe('self');
             expect(fixture.nativeElement.querySelector('.table-caption')).not.toBeNull();
+
+            // Empty filtered table renders the in-table empty state (same pattern as strain-hunter).
+            // Live-verified with a real search (screenshot); TestBed doesn't run PrimeNG's
+            // internal filter pass, so this asserts the wiring the component owns: the search
+            // input drives applyGlobalFilter, which arms the table's global filter.
+            const searchInput = fixture.nativeElement.querySelector('.toolbar-search input') as HTMLInputElement;
+            searchInput.value = 'zzz-no-such-provider';
+            searchInput.dispatchEvent(new Event('input'));
+            fixture.detectChanges();
+
+            expect(component.globalFilter()).toBe('zzz-no-such-provider');
+            expect(fixture.nativeElement.querySelector('.table-empty-state')).toBeNull();
+
+            component.clearGlobalFilter();
+            expect(component.globalFilter()).toBe('');
+
+            // Caption tags: the leaderboard winners render beside the count once stats load.
+            mockProviderStore.modelStats.mockReturnValue(statsData);
+            fixture.detectChanges();
+
+            const captionRow = fixture.nativeElement.querySelector('.caption-row') as HTMLElement;
+            expect(captionRow).not.toBeNull();
+            expect(captionRow.querySelector('.table-caption')).not.toBeNull();
+            expect(captionRow.querySelector('.caption-tags')).not.toBeNull();
+            expect(captionRow.querySelector('.badge-warning')?.textContent).toContain('Fast');
+            expect(captionRow.querySelector('.badge-success')?.textContent).toContain('Slow');
+            // Two-line tags: provider above, model below.
+            expect(captionRow.querySelector('.badge-warning .badge-subtitle')?.textContent).toContain(
+                'openrouter',
+            );
+            expect(captionRow.querySelector('.badge-warning .badge-title')?.textContent).toContain('Fast');
 
             toggleButtons[1].click();
             fixture.detectChanges();

@@ -237,7 +237,13 @@
     border-color: var(--color-secondary-border);
   }
 
-  &.badge-strain-type {
+  &.badge-user {
+    background: var(--color-secondary-glow-bg);
+    color: var(--color-secondary);
+    border-color: var(--color-secondary-glow);
+  }
+
+  &.badge-primary {
     background: color-mix(in srgb, var(--color-primary) 15%, transparent);
     color: var(--color-primary);
   }
@@ -254,6 +260,26 @@
     font-size: var(--font-size-xxs);
     line-height: 1;
     width: fit-content;
+  }
+
+  &.badge-compact .ph {
+    font-size: var(--font-size-sm);
+  }
+
+  /* Two-line leaderboard tag (title + subtitle) — stacked text, no wrap. */
+  &.badge-detailed {
+    white-space: nowrap;
+
+    .badge-lines {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      line-height: 1.25;
+    }
+
+    .badge-subtitle {
+      opacity: 0.85;
+    }
   }
 
   &.role-admin {
@@ -474,9 +500,49 @@
 /* Small muted line above a table card: result counts, "showing N of M" and similar. Sits on the
    same left edge as the card so the toolbar and the table read as one column. */
 .table-caption {
-  margin: 0 0 var(--space-4);
+  margin: 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+}
+
+/* --- Empty State (single source of truth) ---
+   Canonical compact empty block for in-card / in-table placeholders (icon + line or two).
+   The `:not(.page-state)` guard keeps `page-state empty-state` compositions on the page-state
+   metrics (gap/padding) — those pages predate this class and never had local overrides.
+   `.roomy` is the larger variant (provider tables): more air, centered, dimmed bigger icon. */
+.empty-state:not(.page-state) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-10) 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+
+  > .ph {
+    font-size: var(--font-size-xl);
+  }
+}
+
+.empty-state {
+  /* A bare <p> would otherwise take the global `p` type (md/secondary) instead of
+     inheriting the container's muted/sm like the <span> texts do. */
+  p {
+    font-size: inherit;
+    color: inherit;
+  }
+
+  &.roomy {
+    gap: var(--space-6);
+    padding: var(--space-16) var(--space-8);
+    text-align: center;
+
+    > .ph {
+      font-size: 2rem;
+      color: var(--color-text-muted);
+      opacity: 0.5;
+    }
+  }
 }
 
 /* --- Generic Summary Row (stat strip in page header) --- */

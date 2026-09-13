@@ -427,10 +427,6 @@
   }
 }
 
-.badge-compact .ph {
-  font-size: var(--font-size-sm);
-}
-
 @media (max-width: var(--sm)) {
   .page-content .page-header {
     .header-row {

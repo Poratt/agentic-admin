@@ -38,7 +38,8 @@ select {
   }
 
   &.form-control {
-    padding: var(--space-4) var(--field-icon-padding) var(--space-4) var(--space-8);
+    padding: var(--space-4) var(--space-8);
+    padding-inline-start: var(--field-icon-padding);
   }
 
   &[type='range'] {
@@ -244,7 +245,7 @@ select {
 
   .field-icon {
     position: absolute;
-    right: var(--space-6);
+    inset-inline-start: var(--space-6);
     color: var(--color-text-secondary);
     pointer-events: none;
     z-index: 1;
@@ -271,20 +272,26 @@ select {
     &:hover {
       color: var(--color-text-primary);
     }
+
+    /* The base button press-scale would replace the centering translate above
+       (a single `transform` property) and kick the button down while held. */
+    &:active {
+      transform: translateY(-50%) scale(0.96);
+    }
   }
 
   &:has(.search-clear-btn) input.form-control {
-    padding-left: var(--space-16);
+    padding-inline-end: var(--space-16);
   }
 
   &.sm {
     width: min(calc(var(--search-width) / 2), 100%);
 
     /* Leading edge. The clear button is anchored to the trailing corner (inset-inline-end), so
-       an icon on the right sat directly underneath it as soon as the field had a value. */
+       the icon sits at the leading corner (inset-inline-start) — logical on both sides, no
+       overlap in either direction. */
     .field-icon {
-      right: auto;
-      left: var(--space-4);
+      inset-inline-start: var(--space-4);
       font-size: var(--font-size-xs);
     }
 
