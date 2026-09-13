@@ -53,7 +53,7 @@ export class GeneticsService {
         }
     }
 
-    async enrichBatch(names: string[]): Promise<void> {
+    async enrichBatch(names: string[], userId?: number): Promise<void> {
         const filtered = this.filterNames(names);
         if (!filtered.length) {
             return;
@@ -84,11 +84,11 @@ export class GeneticsService {
 
             this.logger.log(`Searching web for genetics chunk ${chunkNumber}/${totalChunks} (${chunk.length} items)...`);
 
-            const englishNames = await this.resolveEnglishNames(chunk);
-            const searchResults = await this.searchChunk(chunk, englishNames);
+            const englishNames = await this.resolveEnglishNames(chunk, userId);
+            const searchResults = await this.searchChunk(chunk, englishNames, userId);
 
             this.logger.log(`Fetching Demarily data for genetics chunk ${chunkNumber}/${totalChunks}...`);
-            const demarilyResults = await this.fetchDemarilyChunk(chunk, englishNames);
+            const demarilyResults = await this.fetchDemarilyChunk(chunk, englishNames, userId);
 
             // Merge Demarily data into search results for LLM prompt
             const enrichedSearchResults = new Map(searchResults);
@@ -105,8 +105,7 @@ export class GeneticsService {
                 const response = await this.llmClientService.generateResponse({
                     prompt: userPrompt,
                     systemContext: GENETICS_ENRICH_SYSTEM_PROMPT,
-                    providerOverride: 'openrouter',
-                    modelOverride: 'google/gemma-4-31b-it:free',
+                    userId,
                     maxTokens: 4096,
                 });
 
@@ -146,7 +145,7 @@ export class GeneticsService {
         }
     }
 
-    async enrichMissing(): Promise<{ total: number; enriched: number; errors: number }> {
+    async enrichMissing(userId?: number): Promise<{ total: number; enriched: number; errors: number }> {
         const rows = await this.geneticsRepository.find({
             where: [
                 { thcRange: IsNull() },
@@ -172,16 +171,16 @@ export class GeneticsService {
             const chunkNumber = Math.floor(i / CHUNK_SIZE) + 1;
             const totalChunks = Math.ceil(rows.length / CHUNK_SIZE);
 
-            const englishNames = await this.resolveEnglishNames(names);
+            const englishNames = await this.resolveEnglishNames(names, userId);
 
             this.logger.log(`[enrichMissing] Fetching Cannlytics data for chunk ${chunkNumber}/${totalChunks}...`);
-            const cannlyticsResults = await this.fetchCannlyticsChunk(names, englishNames);
+            const cannlyticsResults = await this.fetchCannlyticsChunk(names, englishNames, userId);
 
             this.logger.log(`[enrichMissing] Fetching Demarily data for chunk ${chunkNumber}/${totalChunks}...`);
-            const demarilyResults = await this.fetchDemarilyChunk(names, englishNames);
+            const demarilyResults = await this.fetchDemarilyChunk(names, englishNames, userId);
 
             this.logger.log(`[enrichMissing] Searching web for chunk ${chunkNumber}/${totalChunks} (${chunk.length} items)...`);
-            const searchResults = await this.searchChunk(names, englishNames);
+            const searchResults = await this.searchChunk(names, englishNames, userId);
 
             // Combine Cannlytics, Demarily, and web search results
             const combinedResults = new Map<string, string>();
@@ -205,8 +204,7 @@ export class GeneticsService {
                 const response = await this.llmClientService.generateResponse({
                     prompt: userPrompt,
                     systemContext: GENETICS_ENRICH_SYSTEM_PROMPT,
-                    providerOverride: 'openrouter',
-                    modelOverride: 'google/gemma-4-31b-it:free',
+                    userId,
                     maxTokens: 4096,
                 });
 
@@ -290,10 +288,10 @@ export class GeneticsService {
      * (searchChunk/fetchCannlyticsChunk/fetchDemarilyChunk) do not call the LLM
      * three times on the same name.
      */
-    private async resolveEnglishNames(names: string[]): Promise<Map<string, string>> {
+    private async resolveEnglishNames(names: string[], userId?: number): Promise<Map<string, string>> {
         const map = new Map<string, string>();
         for (const name of names) {
-            map.set(name, await this.translateToEnglish(name));
+            map.set(name, await this.translateToEnglish(name, userId));
         }
         return map;
     }
@@ -319,11 +317,11 @@ export class GeneticsService {
         return [...results].sort((a, b) => relevance(b) - relevance(a)).slice(0, 8);
     }
 
-    private async searchChunk(names: string[], englishNames?: Map<string, string>): Promise<Map<string, string>> {
+    private async searchChunk(names: string[], englishNames?: Map<string, string>, userId?: number): Promise<Map<string, string>> {
         const results = new Map<string, string>();
         for (const name of names) {
             try {
-                const englishName = englishNames?.get(name) ?? await this.translateToEnglish(name);
+                const englishName = englishNames?.get(name) ?? await this.translateToEnglish(name, userId);
                 const searchQuery = englishName !== name
                     ? `${englishName} (${name}) cannabis strain genetics parents origin`
                     : `${name} cannabis strain genetics parents origin`;
@@ -348,11 +346,11 @@ export class GeneticsService {
         return results;
     }
 
-    private async fetchCannlyticsChunk(names: string[], englishNames?: Map<string, string>): Promise<Map<string, string>> {
+    private async fetchCannlyticsChunk(names: string[], englishNames?: Map<string, string>, userId?: number): Promise<Map<string, string>> {
         const results = new Map<string, string>();
         for (const name of names) {
             try {
-                const englishName = englishNames?.get(name) ?? await this.translateToEnglish(name);
+                const englishName = englishNames?.get(name) ?? await this.translateToEnglish(name, userId);
                 const data = await this.cannlyticsService.getStrain(englishName);
                 if (data) {
                     const formatted = this.cannlyticsService.formatForEnrichment(data);
@@ -366,12 +364,12 @@ export class GeneticsService {
         return results;
     }
 
-    private async fetchDemarilyChunk(names: string[], englishNames?: Map<string, string>): Promise<Map<string, string>> {
+    private async fetchDemarilyChunk(names: string[], englishNames?: Map<string, string>, userId?: number): Promise<Map<string, string>> {
         const results = new Map<string, string>();
         for (const name of names) {
             try {
                 // Translate Hebrew name to English for API search
-                const englishName = englishNames?.get(name) ?? await this.translateToEnglish(name);
+                const englishName = englishNames?.get(name) ?? await this.translateToEnglish(name, userId);
                 const response = await firstValueFrom(
                     this.httpService.get(`https://budprofiles.com/api/v1/strains`, {
                         params: { q: englishName, limit: 1 },
@@ -491,28 +489,33 @@ export class GeneticsService {
         return this.geneticsRepository.save(genetics);
     }
 
-    private async translateToEnglish(name: string): Promise<string> {
+    private async translateToEnglish(name: string, userId?: number): Promise<string> {
         if (!HEBREW_REGEX.test(name)) {
             return name;
         }
-        // Hardcoded map first (free), and if absent — LLM translation as with terpenes
+        // DB-persisted translation (learned from a previous LLM call) — zero cost
+        const saved = await this.geneticsRepository.findOne({
+            where: { name },
+            select: ['englishName'],
+        });
+        if (saved?.englishName) return saved.englishName;
+        // Hardcoded map (free), then LLM if absent
         const mapped = this.cannlyticsService.getEnglishName(name);
         if (mapped) return mapped;
         try {
             const response = await this.llmClientService.generateResponse({
                 prompt: `Return ONLY the English name for this Hebrew cannabis strain name: "${name}". No explanation, just the English name.`,
                 systemContext: 'You translate Hebrew cannabis strain names to English. Return only the English name.',
-                providerOverride: 'openrouter',
-                modelOverride: 'google/gemma-4-31b-it:free',
+                userId,
                 maxTokens: 50,
             });
             const translated = response.content?.trim();
             if (translated && !HEBREW_REGEX.test(translated)) {
-                // Map miss = a new strain that entered inventory without an entry in the hardcoded map.
-                // Recorded in the tracker so the nightly Telegram summary reports it — a harvest queue
-                // for updating the map instead of a forgotten debug log.
+                // Persist for next time — the row exists (strain was already saved before enrichment)
+                await this.geneticsRepository.update({ name }, { englishName: translated });
+                // Record in tracker for the nightly Telegram report
                 translationTracker.recordGeneticsMiss(name, translated);
-                this.logger.debug(`[translate] map miss "${name}" → LLM: "${translated}"`);
+                this.logger.debug(`[translate] map miss "${name}" → LLM: "${translated}" (saved to DB)`);
                 return translated;
             }
         } catch (error: unknown) {
@@ -522,10 +525,10 @@ export class GeneticsService {
         return name;
     }
 
-    async enrichSingle(name: string): Promise<Genetics | null> {
+    async enrichSingle(name: string, userId?: number): Promise<Genetics | null> {
 
         // we mush translate the name to english before searching for it. 
-        const enName = await this.translateToEnglish(name);
+        const enName = await this.translateToEnglish(name, userId);
         this.logger.debug(`enName: ${enName}, name: ${name}`);
         // Try Cannlytics API first for lab data
         const cannlyticsData = await this.cannlyticsService.getStrain(enName || name);
@@ -537,7 +540,7 @@ export class GeneticsService {
         }
 
         // Try BudProfiles API for strain database data (passes English name internally)
-        const demarilyResults = await this.fetchDemarilyChunk([enName || name]);
+        const demarilyResults = await this.fetchDemarilyChunk([enName || name], undefined, userId);
         const demarilyContext = demarilyResults.get(enName || name) || '';
         if (demarilyContext) {
             this.logger.debug(`[enrichSingle] BudProfiles data for "${enName || name}":\n${demarilyContext}`);
@@ -583,8 +586,7 @@ Return JSON only:
         const response = await this.llmClientService.generateResponse({
             prompt,
             systemContext: GENETICS_ENRICH_SYSTEM_PROMPT,
-            providerOverride: 'openrouter',
-            modelOverride: 'google/gemma-4-31b-it:free',
+            userId,
             maxTokens: 4096,
         });
 

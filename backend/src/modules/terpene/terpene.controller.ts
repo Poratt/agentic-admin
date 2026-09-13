@@ -1,4 +1,4 @@
-﻿import { Controller, Get, Delete, Param, Post, Patch, Body, UseGuards } from '@nestjs/common';
+﻿import { Controller, Get, Delete, Param, Post, Patch, Body, UseGuards, Req } from '@nestjs/common';
 import {
     ApiBadRequestResponse,
     ApiBearerAuth,
@@ -16,6 +16,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { AdminGuard } from '../../core/guards/admin.guard';
+import { RequestWithUser } from '../../core/interfaces/request-with-user.interface';
 import { CustomApiOperationOptions } from '../../core/types/custom-api-operation-options.type';
 import { TerpeneService } from './terpene.service';
 import { TerpeneListResultResponseDto } from './dto/terpene-list-result-response.dto';
@@ -275,8 +276,8 @@ export class TerpeneController {
     @ApiForbiddenResponse({ description: 'Not applicable for this endpoint.' })
     @ApiNotFoundResponse({ description: 'No terpene matches the given name.' })
     @ApiInternalServerErrorResponse({ description: 'LLM or web search failure.' })
-    async enrichSingle(@Param('name') name: string) {
-        const result = await this.terpeneService.enrichSingle(name);
+    async enrichSingle(@Param('name') name: string, @Req() req: RequestWithUser) {
+        const result = await this.terpeneService.enrichSingle(name, req.user?.sub);
         return {
             success: true,
             message: 'Enrichment completed successfully',
@@ -294,8 +295,8 @@ export class TerpeneController {
     @ApiOkResponse({ description: 'Bulk enrichment completed.' })
     @ApiUnauthorizedResponse({ description: 'Missing or expired JWT token.' })
     @ApiInternalServerErrorResponse({ description: 'LLM or web search failure.' })
-    async enrichMissing() {
-        const result = await this.terpeneService.enrichMissing();
+    async enrichMissing(@Req() req: RequestWithUser) {
+        const result = await this.terpeneService.enrichMissing(req.user?.sub);
         return {
             success: true,
             message: `Enrichment completed: ${result.enriched} enriched, ${result.errors} errors out of ${result.total} total.`,

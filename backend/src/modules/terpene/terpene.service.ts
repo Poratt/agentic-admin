@@ -78,7 +78,7 @@ export class TerpeneService {
         return this.terpeneRepository.save(terpene);
     }
 
-    async enrichBatch(names: string[]): Promise<void> {
+    async enrichBatch(names: string[], userId?: number): Promise<void> {
         const filtered = this.filterNames(names);
         if (!filtered.length) {
             return;
@@ -109,8 +109,8 @@ export class TerpeneService {
 
             this.logger.log(`Searching web for terpenes chunk ${chunkNumber}/${totalChunks} (${chunk.length} items)...`);
 
-            const englishNames = await this.resolveEnglishNames(chunk);
-            const searchResults = await this.searchChunk(chunk, englishNames);
+            const englishNames = await this.resolveEnglishNames(chunk, userId);
+            const searchResults = await this.searchChunk(chunk, englishNames, userId);
 
             this.logger.log(`Sending terpenes chunk ${chunkNumber}/${totalChunks} to LLM...`);
 
@@ -118,8 +118,7 @@ export class TerpeneService {
                 const response = await this.llmClientService.generateResponse({
                     prompt: buildTerpeneEnrichUserPrompt(chunk, searchResults),
                     systemContext: TERPENE_ENRICH_SYSTEM_PROMPT,
-                    providerOverride: 'openrouter',
-                    modelOverride: 'google/gemma-4-31b-it:free',
+                    userId,
                     maxTokens: 4096,
                 });
 
@@ -159,7 +158,7 @@ export class TerpeneService {
         }
     }
 
-    async enrichMissing(): Promise<{ total: number; enriched: number; errors: number }> {
+    async enrichMissing(userId?: number): Promise<{ total: number; enriched: number; errors: number }> {
         const rows = await this.terpeneRepository.find({
             where: [
                 { description: IsNull() },
@@ -188,20 +187,19 @@ export class TerpeneService {
             // Translate all names to English upfront
             const englishNames = new Map<string, string>();
             for (const name of names) {
-                const en = await this.translateToEnglish(name);
+                const en = await this.translateToEnglish(name, userId);
                 englishNames.set(name, en);
             }
 
             this.logger.log(`[enrichMissing] Searching web for chunk ${chunkNumber}/${totalChunks} (${chunk.length} items)...`);
-            const searchResults = await this.searchChunk(names, englishNames);
+            const searchResults = await this.searchChunk(names, englishNames, userId);
 
             this.logger.log(`[enrichMissing] Sending chunk ${chunkNumber}/${totalChunks} to LLM...`);
             try {
                 const response = await this.llmClientService.generateResponse({
                     prompt: buildTerpeneEnrichUserPrompt(names, searchResults),
                     systemContext: TERPENE_ENRICH_SYSTEM_PROMPT,
-                    providerOverride: 'openrouter',
-                    modelOverride: 'google/gemma-4-31b-it:free',
+                    userId,
                     maxTokens: 4096,
                 });
 
@@ -276,7 +274,7 @@ export class TerpeneService {
         return result;
     }
 
-    private async translateToEnglish(name: string): Promise<string> {
+    private async translateToEnglish(name: string, userId?: number): Promise<string> {
         if (!HEBREW_REGEX.test(name)) {
             return name;
         }
@@ -284,8 +282,7 @@ export class TerpeneService {
             const response = await this.llmClientService.generateResponse({
                 prompt: `Return ONLY the English name for this Hebrew terpene name: "${name}". No explanation, just the English name.`,
                 systemContext: 'You translate Hebrew terpene names to English. Return only the English name.',
-                providerOverride: 'openrouter',
-                modelOverride: 'google/gemma-4-31b-it:free',
+                userId,
                 maxTokens: 50,
             });
             const translated = response.content?.trim();
@@ -308,10 +305,10 @@ export class TerpeneService {
      * Translates a list of names to English once per chunk — so searchChunk does not
      * call the LLM again on names already translated in enrichMissing/enrichBatch.
      */
-    private async resolveEnglishNames(names: string[]): Promise<Map<string, string>> {
+    private async resolveEnglishNames(names: string[], userId?: number): Promise<Map<string, string>> {
         const map = new Map<string, string>();
         for (const name of names) {
-            map.set(name, await this.translateToEnglish(name));
+            map.set(name, await this.translateToEnglish(name, userId));
         }
         return map;
     }
@@ -336,11 +333,11 @@ export class TerpeneService {
         return [...results].sort((a, b) => relevance(b) - relevance(a)).slice(0, 8);
     }
 
-    private async searchChunk(names: string[], englishNames?: Map<string, string>): Promise<Map<string, string>> {
+    private async searchChunk(names: string[], englishNames?: Map<string, string>, userId?: number): Promise<Map<string, string>> {
         const results = new Map<string, string>();
         for (const name of names) {
             try {
-                const englishName = englishNames?.get(name) ?? await this.translateToEnglish(name);
+                const englishName = englishNames?.get(name) ?? await this.translateToEnglish(name, userId);
                 const searchQuery = englishName !== name
                     ? `${englishName} (${name}) cannabis terpene scent effects`
                     : `${name} cannabis terpene scent effects`;
@@ -417,7 +414,7 @@ export class TerpeneService {
         return trimmed.length > 0 ? trimmed : null;
     }
 
-    async enrichSingle(name: string): Promise<{
+    async enrichSingle(name: string, userId?: number): Promise<{
         name: string;
         description: string | null;
         scent: string | null;
@@ -426,7 +423,7 @@ export class TerpeneService {
         colorDark: string;
         colorLight: string;
     } | null> {
-        const englishName = await this.translateToEnglish(name);
+        const englishName = await this.translateToEnglish(name, userId);
         const searchQuery = englishName !== name
             ? `${englishName} (${name}) cannabis terpene scent effects description`
             : `${name} cannabis terpene scent effects description`;
@@ -456,8 +453,7 @@ Return JSON only:
         const response = await this.llmClientService.generateResponse({
             prompt,
             systemContext: TERPENE_ENRICH_SYSTEM_PROMPT,
-            providerOverride: 'openrouter',
-            modelOverride: 'google/gemma-4-31b-it:free',
+            userId,
             maxTokens: 4096,
         });
 
