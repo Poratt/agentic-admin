@@ -6,6 +6,7 @@ import { TerpeneService } from './terpene.service';
 import { Terpene } from './entities/terpene.entity';
 import { LlmClientService } from '../llm/services/llm-client.service';
 import { WebSearchService } from '../web-search/web-search.service';
+import { ConfigService } from '@nestjs/config';
 import { translationTracker } from '../../core/services/translation-tracker';
 
 function makeTerpene(overrides: Partial<Terpene> = {}): Terpene {
@@ -56,6 +57,7 @@ describe('TerpeneService', () => {
         { provide: getRepositoryToken(Terpene), useValue: repo },
         { provide: LlmClientService, useValue: llmClientService },
         { provide: WebSearchService, useValue: webSearchService },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
       ],
     }).compile();
 

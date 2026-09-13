@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LlmProvider, LlmProviderConfig, LlmRuntimeSelection } from '../types/llm.types';
 
-const LLM_PROVIDERS: LlmProvider[] = ['openrouter', 'nvidia', 'ollama', 'ollama-cloud', 'agnes-ai'];
+const LLM_PROVIDERS: LlmProvider[] = ['openrouter', 'nvidia', 'ollama', 'ollama-cloud', 'agnes-ai', 'huggingface', 'omniroute'];
 
 /**
  * Centralizes LLM provider environment configuration and runtime model selection.
@@ -94,6 +94,24 @@ export class LlmProviderConfigService {
         apiKey: this.configService.get<string>('OLLAMA_CLOUD_API_KEY') ?? '',
         baseUrl: this.configService.get<string>('OLLAMA_CLOUD_BASE_URL') ?? '',
         model: this.configService.get<string>('OLLAMA_CLOUD_MODEL') ?? '',
+      };
+    }
+
+    if (provider === 'huggingface') {
+      return {
+        id: provider,
+        apiKey: this.configService.get<string>('HUGGINGFACE_API_KEY') ?? '',
+        baseUrl: this.configService.get<string>('HUGGINGFACE_BASE_URL') ?? 'https://router.huggingface.co/v1',
+        model: this.configService.get<string>('HUGGINGFACE_MODEL') ?? '',
+      };
+    }
+
+    if (provider === 'omniroute') {
+      return {
+        id: provider,
+        apiKey: this.configService.get<string>('OMNIROUTE_API_KEY') ?? '',
+        baseUrl: this.configService.get<string>('OMNIROUTE_BASE_URL') ?? '',
+        model: this.configService.get<string>('OMNIROUTE_MODEL') ?? '',
       };
     }
 

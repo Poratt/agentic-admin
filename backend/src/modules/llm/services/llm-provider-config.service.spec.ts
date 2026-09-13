@@ -118,6 +118,38 @@ describe('LlmProviderConfigService', () => {
       expect(config.apiKey).toBe('cloud-key');
     });
 
+    it('returns huggingface config from env (no ollama fallthrough)', () => {
+      const service = makeService({
+        AI_PROVIDER: 'huggingface',
+        HUGGINGFACE_API_KEY: 'hf-key',
+        HUGGINGFACE_BASE_URL: 'https://router.huggingface.co/v1',
+        HUGGINGFACE_MODEL: 'deepseek-ai/DeepSeek-V4-Flash',
+      });
+      const config = service.getProviderConfig('huggingface');
+      expect(config).toEqual({
+        id: 'huggingface',
+        apiKey: 'hf-key',
+        baseUrl: 'https://router.huggingface.co/v1',
+        model: 'deepseek-ai/DeepSeek-V4-Flash',
+      });
+    });
+
+    it('returns omniroute config from env (no ollama fallthrough)', () => {
+      const service = makeService({
+        AI_PROVIDER: 'omniroute',
+        OMNIROUTE_API_KEY: 'omni-key',
+        OMNIROUTE_BASE_URL: 'http://localhost:20128/v1',
+        OMNIROUTE_MODEL: 'auto/best-free',
+      });
+      const config = service.getProviderConfig('omniroute');
+      expect(config).toEqual({
+        id: 'omniroute',
+        apiKey: 'omni-key',
+        baseUrl: 'http://localhost:20128/v1',
+        model: 'auto/best-free',
+      });
+    });
+
     it('returns unknown provider config (falls through to ollama defaults)', () => {
       const service = makeService({ AI_PROVIDER: 'unknown-provider' });
       const config = service.getProviderConfig('unknown-provider' as any);
@@ -227,7 +259,7 @@ describe('LlmProviderConfigService', () => {
     it('returns list of all providers', () => {
       const service = makeService();
       const providers = service.getProviders();
-      expect(providers).toEqual(['openrouter', 'nvidia', 'ollama', 'ollama-cloud', 'agnes-ai']);
+      expect(providers).toEqual(['openrouter', 'nvidia', 'ollama', 'ollama-cloud', 'agnes-ai', 'huggingface', 'omniroute']);
     });
   });
 

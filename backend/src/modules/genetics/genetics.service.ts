@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 import { HttpService } from '@nestjs/axios';
@@ -7,6 +8,7 @@ import { Genetics } from './entities/genetics.entity';
 import { GeneticsCreateDto } from './dto/genetics-create.dto';
 import { GeneticsUpdateDto } from './dto/genetics-update.dto';
 import { LlmClientService } from '../llm/services/llm-client.service';
+import type { LlmProvider } from '../llm/types/llm.types';
 import { parseLlmJson } from '../llm/utils/llm-json-parser';
 import {
     GENETICS_ENRICH_SYSTEM_PROMPT,
@@ -36,6 +38,7 @@ export class GeneticsService {
         private readonly webSearchService: WebSearchService,
         private readonly cannlyticsService: CannlyticsService,
         private readonly httpService: HttpService,
+        private readonly configService: ConfigService,
     ) { }
 
     async findAll(): Promise<Genetics[]> {
@@ -51,6 +54,19 @@ export class GeneticsService {
         if (result.affected === 0) {
             throw new NotFoundException(`Genetics "${name}" not found`);
         }
+    }
+
+    /**
+     * Model selection for enrichment calls. A human trigger passes userId and resolves to
+     * that user's default model; background batches have no user, so they use the dedicated
+     * ENRICHMENT_PROVIDER / ENRICHMENT_MODEL env pair (never the shared AI_PROVIDER legacy).
+     */
+    private enrichModel(userId?: number): { userId?: number; providerOverride?: LlmProvider; modelOverride?: string } {
+        if (userId) return { userId };
+        return {
+            providerOverride: (this.configService.get<string>('ENRICHMENT_PROVIDER') ?? 'openrouter') as LlmProvider,
+            modelOverride: this.configService.get<string>('ENRICHMENT_MODEL') ?? 'google/gemma-4-26b-a4b-it:free',
+        };
     }
 
     async enrichBatch(names: string[], userId?: number): Promise<void> {
@@ -105,7 +121,7 @@ export class GeneticsService {
                 const response = await this.llmClientService.generateResponse({
                     prompt: userPrompt,
                     systemContext: GENETICS_ENRICH_SYSTEM_PROMPT,
-                    userId,
+                    ...this.enrichModel(userId),
                     maxTokens: 4096,
                 });
 
@@ -204,7 +220,7 @@ export class GeneticsService {
                 const response = await this.llmClientService.generateResponse({
                     prompt: userPrompt,
                     systemContext: GENETICS_ENRICH_SYSTEM_PROMPT,
-                    userId,
+                    ...this.enrichModel(userId),
                     maxTokens: 4096,
                 });
 
@@ -506,7 +522,7 @@ export class GeneticsService {
             const response = await this.llmClientService.generateResponse({
                 prompt: `Return ONLY the English name for this Hebrew cannabis strain name: "${name}". No explanation, just the English name.`,
                 systemContext: 'You translate Hebrew cannabis strain names to English. Return only the English name.',
-                userId,
+                ...this.enrichModel(userId),
                 maxTokens: 50,
             });
             const translated = response.content?.trim();
@@ -586,7 +602,7 @@ Return JSON only:
         const response = await this.llmClientService.generateResponse({
             prompt,
             systemContext: GENETICS_ENRICH_SYSTEM_PROMPT,
-            userId,
+            ...this.enrichModel(userId),
             maxTokens: 4096,
         });
 

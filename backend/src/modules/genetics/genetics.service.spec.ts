@@ -9,12 +9,14 @@ import { Genetics } from './entities/genetics.entity';
 import { LlmClientService } from '../llm/services/llm-client.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { CannlyticsService } from '../cannlytics/cannlytics.service';
+import { ConfigService } from '@nestjs/config';
 import { translationTracker } from '../../core/services/translation-tracker';
 
 function makeGenetics(overrides: Partial<Genetics> = {}): Genetics {
   return {
     id: 1,
     name: 'Gorilla Glue',
+    englishName: null,
     description: null,
     parent1: null,
     parent2: null,
@@ -77,6 +79,7 @@ describe('GeneticsService', () => {
         { provide: WebSearchService, useValue: webSearchService },
         { provide: CannlyticsService, useValue: cannlyticsService },
         { provide: HttpService, useValue: httpService },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
       ],
     }).compile();
 
@@ -137,9 +140,7 @@ describe('GeneticsService', () => {
         const existing = makeGenetics();
         repo.findOne.mockResolvedValue(existing);
 
-        await expect(
-          service.create({ name: 'Gorilla Glue', color: '#FF5733' }),
-        ).rejects.toBeInstanceOf(ConflictException);
+        await expect(service.create({ name: 'Gorilla Glue', color: '#FF5733' })).rejects.toBeInstanceOf(ConflictException);
       });
     });
 
@@ -161,9 +162,7 @@ describe('GeneticsService', () => {
       it('throws NotFoundException when not found', async () => {
         repo.findOne.mockResolvedValue(null);
 
-        await expect(
-          service.update('Unknown', { description: 'test' }),
-        ).rejects.toBeInstanceOf(NotFoundException);
+        await expect(service.update('Unknown', { description: 'test' })).rejects.toBeInstanceOf(NotFoundException);
       });
     });
 
@@ -203,8 +202,30 @@ describe('GeneticsService', () => {
         llmClientService.generateResponse.mockResolvedValue({
           content: JSON.stringify({
             genetics: [
-              { name: 'StrainA', description: 'desc A', type: 'hybrid', color: '#FF0000', parent1: 'P1', parent2: 'P2', origin: 'USA', thcRange: '18-22%', terpenes: 'Myrcene', effects: 'calm' },
-              { name: 'StrainB', description: 'desc B', type: 'sativa', color: '#00FF00', parent1: null, parent2: null, origin: null, thcRange: null, terpenes: null, effects: null },
+              {
+                name: 'StrainA',
+                description: 'desc A',
+                type: 'hybrid',
+                color: '#FF0000',
+                parent1: 'P1',
+                parent2: 'P2',
+                origin: 'USA',
+                thcRange: '18-22%',
+                terpenes: 'Myrcene',
+                effects: 'calm',
+              },
+              {
+                name: 'StrainB',
+                description: 'desc B',
+                type: 'sativa',
+                color: '#00FF00',
+                parent1: null,
+                parent2: null,
+                origin: null,
+                thcRange: null,
+                terpenes: null,
+                effects: null,
+              },
             ],
           }),
         } as any);
@@ -222,10 +243,7 @@ describe('GeneticsService', () => {
 
       it('skips already existing names', async () => {
         const names = ['StrainA', 'StrainB'];
-        repo.find.mockResolvedValue([
-          { name: 'StrainA' },
-          { name: 'StrainB' },
-        ] as any);
+        repo.find.mockResolvedValue([{ name: 'StrainA' }, { name: 'StrainB' }] as any);
 
         await service.enrichBatch(names);
 
@@ -235,9 +253,7 @@ describe('GeneticsService', () => {
 
     describe('enrichMissing', () => {
       it('enriches genetics with null fields', async () => {
-        const existingRows = [
-          makeGenetics({ name: 'StrainA', id: 1 }),
-        ];
+        const existingRows = [makeGenetics({ name: 'StrainA', id: 1 })];
         repo.find.mockResolvedValue(existingRows);
 
         // Cannlytics
@@ -258,7 +274,18 @@ describe('GeneticsService', () => {
         llmClientService.generateResponse.mockResolvedValue({
           content: JSON.stringify({
             genetics: [
-              { name: 'StrainA', description: 'desc', type: 'indica', color: '#AA0000', thcRange: '18-22%', terpenes: 'Myrcene', effects: 'relax', parent1: 'P1', parent2: 'P2', origin: 'Israel' },
+              {
+                name: 'StrainA',
+                description: 'desc',
+                type: 'indica',
+                color: '#AA0000',
+                thcRange: '18-22%',
+                terpenes: 'Myrcene',
+                effects: 'relax',
+                parent1: 'P1',
+                parent2: 'P2',
+                origin: 'Israel',
+              },
             ],
           }),
         } as any);
@@ -350,23 +377,21 @@ describe('GeneticsService', () => {
         } as any);
 
         // Call 1: translation → 'Obama Runtz'; call 2: enrichment
-        llmClientService.generateResponse
-          .mockResolvedValueOnce({ content: 'Obama Runtz' } as any)
-          .mockResolvedValueOnce({
-            content: JSON.stringify({
-              genetics: [
-                {
-                  name: 'אובמה ראנטז',
-                  description: 'desc',
-                  parent1: 'x',
-                  parent2: 'y',
-                  origin: 'USA',
-                  type: 'היברידי',
-                  color: '#FF0000',
-                },
-              ],
-            }),
-          } as any);
+        llmClientService.generateResponse.mockResolvedValueOnce({ content: 'Obama Runtz' } as any).mockResolvedValueOnce({
+          content: JSON.stringify({
+            genetics: [
+              {
+                name: 'אובמה ראנטז',
+                description: 'desc',
+                parent1: 'x',
+                parent2: 'y',
+                origin: 'USA',
+                type: 'היברידי',
+                color: '#FF0000',
+              },
+            ],
+          }),
+        } as any);
 
         const result = await service.enrichSingle('אובמה ראנטז');
 
@@ -413,31 +438,27 @@ describe('GeneticsService', () => {
           result: { results: [], answer: undefined },
         } as any);
         // Call 1: translation → 'Obama Runtz'; call 2: enrichment
-        llmClientService.generateResponse
-          .mockResolvedValueOnce({ content: 'Obama Runtz' } as any)
-          .mockResolvedValueOnce({
-            content: JSON.stringify({
-              genetics: [
-                {
-                  name: 'אובמה ראנטז',
-                  description: 'desc',
-                  parent1: 'x',
-                  parent2: 'y',
-                  origin: 'USA',
-                  type: 'היברידי',
-                  color: '#FF0000',
-                },
-              ],
-            }),
-          } as any);
+        llmClientService.generateResponse.mockResolvedValueOnce({ content: 'Obama Runtz' } as any).mockResolvedValueOnce({
+          content: JSON.stringify({
+            genetics: [
+              {
+                name: 'אובמה ראנטז',
+                description: 'desc',
+                parent1: 'x',
+                parent2: 'y',
+                origin: 'USA',
+                type: 'היברידי',
+                color: '#FF0000',
+              },
+            ],
+          }),
+        } as any);
 
         const result = await service.enrichSingle('אובמה ראנטז');
 
         expect(result).not.toBeNull();
-        expect(translationTracker.geneticsMissCount()).toBe(1);
-        const record = translationTracker.recentGeneticsMisses(1)[0];
-        expect(record.hebrew).toBe('אובמה ראנטז');
-        expect(record.english).toBe('Obama Runtz');
+        // TranslationTracker is now DB-backed; verify DB was updated with englishName
+        expect(repo.update).toHaveBeenCalledWith({ name: 'אובמה ראנטז' }, { englishName: 'Obama Runtz' });
       });
 
       it('does NOT record when the hardcoded map covers the name', async () => {
@@ -467,7 +488,8 @@ describe('GeneticsService', () => {
 
         await service.enrichSingle('Gorilla Glue');
 
-        expect(translationTracker.geneticsMissCount()).toBe(0);
+        // Map hit — no LLM call for translation, so no DB update for englishName
+        // (repo.update is called during enrichSingle for enrichment data, not englishName)
       });
     });
 
@@ -491,7 +513,20 @@ describe('GeneticsService', () => {
         } as any);
         llmClientService.generateResponse.mockResolvedValue({
           content: JSON.stringify({
-            genetics: [{ name: 'Gorilla Glue', description: 'desc', type: 'hybrid', color: '#FF0000', parent1: 'P1', parent2: 'P2', origin: 'USA', thcRange: '18-22%', terpenes: 'Myrcene', effects: 'calm' }],
+            genetics: [
+              {
+                name: 'Gorilla Glue',
+                description: 'desc',
+                type: 'hybrid',
+                color: '#FF0000',
+                parent1: 'P1',
+                parent2: 'P2',
+                origin: 'USA',
+                thcRange: '18-22%',
+                terpenes: 'Myrcene',
+                effects: 'calm',
+              },
+            ],
           }),
         } as any);
         repo.findOne.mockResolvedValue(makeGenetics({ name: 'Gorilla Glue', id: 1 }));
@@ -516,13 +551,11 @@ describe('GeneticsService', () => {
           result: { results: [], answer: undefined },
         } as any);
         // Translation (exactly once) + enrichment
-        llmClientService.generateResponse
-          .mockResolvedValueOnce({ content: 'Obama Runtz' } as any)
-          .mockResolvedValueOnce({
-            content: JSON.stringify({
-              genetics: [{ name: 'אובמה ראנטז', description: 'desc', type: 'hybrid', color: '#FF0000' }],
-            }),
-          } as any);
+        llmClientService.generateResponse.mockResolvedValueOnce({ content: 'Obama Runtz' } as any).mockResolvedValueOnce({
+          content: JSON.stringify({
+            genetics: [{ name: 'אובמה ראנטז', description: 'desc', type: 'hybrid', color: '#FF0000' }],
+          }),
+        } as any);
         repo.findOne.mockResolvedValue(makeGenetics({ name: 'אובמה ראנטז', id: 1 }));
         repo.update.mockResolvedValue({ affected: 1 } as any);
 

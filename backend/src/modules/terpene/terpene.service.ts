@@ -1,10 +1,12 @@
 import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 import { Terpene } from './entities/terpene.entity';
 import { TerpeneCreateDto } from './dto/terpene-create.dto';
 import { TerpeneUpdateDto } from './dto/terpene-update.dto';
 import { LlmClientService } from '../llm/services/llm-client.service';
+import type { LlmProvider } from '../llm/types/llm.types';
 import { parseLlmJson } from '../llm/utils/llm-json-parser';
 import {
     TERPENE_ENRICH_SYSTEM_PROMPT,
@@ -30,6 +32,7 @@ export class TerpeneService {
         private readonly terpeneRepository: Repository<Terpene>,
         private readonly llmClientService: LlmClientService,
         private readonly webSearchService: WebSearchService,
+        private readonly configService: ConfigService,
     ) { }
 
     async findAll(): Promise<Terpene[]> {
@@ -78,6 +81,19 @@ export class TerpeneService {
         return this.terpeneRepository.save(terpene);
     }
 
+    /**
+     * Model selection for enrichment calls. A human trigger passes userId and resolves to
+     * that user's default model; background batches have no user, so they use the dedicated
+     * ENRICHMENT_PROVIDER / ENRICHMENT_MODEL env pair (never the shared AI_PROVIDER legacy).
+     */
+    private enrichModel(userId?: number): { userId?: number; providerOverride?: LlmProvider; modelOverride?: string } {
+        if (userId) return { userId };
+        return {
+            providerOverride: (this.configService.get<string>('ENRICHMENT_PROVIDER') ?? 'openrouter') as LlmProvider,
+            modelOverride: this.configService.get<string>('ENRICHMENT_MODEL') ?? 'google/gemma-4-26b-a4b-it:free',
+        };
+    }
+
     async enrichBatch(names: string[], userId?: number): Promise<void> {
         const filtered = this.filterNames(names);
         if (!filtered.length) {
@@ -118,7 +134,7 @@ export class TerpeneService {
                 const response = await this.llmClientService.generateResponse({
                     prompt: buildTerpeneEnrichUserPrompt(chunk, searchResults),
                     systemContext: TERPENE_ENRICH_SYSTEM_PROMPT,
-                    userId,
+                    ...this.enrichModel(userId),
                     maxTokens: 4096,
                 });
 
@@ -199,7 +215,7 @@ export class TerpeneService {
                 const response = await this.llmClientService.generateResponse({
                     prompt: buildTerpeneEnrichUserPrompt(names, searchResults),
                     systemContext: TERPENE_ENRICH_SYSTEM_PROMPT,
-                    userId,
+                    ...this.enrichModel(userId),
                     maxTokens: 4096,
                 });
 
@@ -282,7 +298,7 @@ export class TerpeneService {
             const response = await this.llmClientService.generateResponse({
                 prompt: `Return ONLY the English name for this Hebrew terpene name: "${name}". No explanation, just the English name.`,
                 systemContext: 'You translate Hebrew terpene names to English. Return only the English name.',
-                userId,
+                ...this.enrichModel(userId),
                 maxTokens: 50,
             });
             const translated = response.content?.trim();
@@ -453,7 +469,7 @@ Return JSON only:
         const response = await this.llmClientService.generateResponse({
             prompt,
             systemContext: TERPENE_ENRICH_SYSTEM_PROMPT,
-            userId,
+            ...this.enrichModel(userId),
             maxTokens: 4096,
         });
 
