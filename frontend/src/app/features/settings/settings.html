@@ -3,12 +3,12 @@
         <h2>הגדרות</h2>
     </header>
 
-    <p-tabs value="0" lazy>
+    <p-tabs [value]="activeTab()" (valueChange)="setActiveTab($event)" lazy>
         <p-tablist>
-            <p-tab value="0">ספקי LLM</p-tab>
-            <p-tab value="1">Strain Hunter</p-tab>
-            <p-tab value="2">מסד נתונים</p-tab>
-            <p-tab value="3">מערכת עיצוב</p-tab>
+            <p-tab value="0"><i class="ph ph-plugs-connected"></i> מודלי AI</p-tab>
+            <p-tab value="1"><i class="ph ph-compass"></i> ציידי הזנים</p-tab>
+            <p-tab value="2"><i class="ph ph-database"></i> מסד נתונים</p-tab>
+            <p-tab value="3"><i class="ph ph-palette"></i> מערכת עיצוב</p-tab>
         </p-tablist>
         <p-tabpanels>
             <p-tabpanel value="0">

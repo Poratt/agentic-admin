@@ -8,6 +8,8 @@ import { LlmProviderService } from '../../core/services/llm-provider.service';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { UserRole } from '../../core/enums/user-role.enum';
 import { PageStates } from '../../core/enums/page-states.enum';
+import { ActivatedRoute, Router } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
 
 // PrimeNG tablist observes element sizes; the unit-test DOM has no ResizeObserver.
 if (typeof (globalThis as any).ResizeObserver === 'undefined') {
@@ -65,7 +67,14 @@ describe('LlmProvidersManagement', () => {
         add: vi.fn(),
     };
 
+    const mockRouter = {
+        navigate: vi.fn(),
+    };
+
+    const queryParamMap$ = new BehaviorSubject<Map<string, string>>(new Map());
+
     beforeEach(async () => {
+        queryParamMap$.next(new Map());
         await TestBed.configureTestingModule({
             imports: [LlmProvidersManagement, ReactiveFormsModule],
             providers: [
@@ -75,6 +84,13 @@ describe('LlmProvidersManagement', () => {
                 { provide: LlmProviderService, useValue: mockProviderService },
                 { provide: ConfirmationService, useValue: mockConfirmService },
                 { provide: MessageService, useValue: mockMessageService },
+                { provide: Router, useValue: mockRouter },
+                {
+                    provide: ActivatedRoute,
+                    useValue: {
+                        queryParamMap: queryParamMap$.pipe(),
+                    },
+                },
             ],
         }).compileComponents();
 
@@ -843,6 +859,35 @@ describe('LlmProvidersManagement', () => {
             });
 
             expect(component.statsLabel(component.statsRows()[0])).toBe('unused-model');
+        });
+
+        it('writes ?view= to the URL when the view changes', () => {
+            component.setActiveTab('stats');
+
+            expect(component.activeTab()).toBe('stats');
+            expect(mockRouter.navigate).toHaveBeenCalledWith(
+                [],
+                expect.objectContaining({ queryParams: { view: 'stats' } }),
+            );
+        });
+
+        it('ignores invalid tab values without touching the URL', () => {
+            mockRouter.navigate.mockClear();
+
+            component.setActiveTab('nope');
+
+            expect(component.activeTab()).toBe('providers');
+            expect(mockRouter.navigate).not.toHaveBeenCalled();
+        });
+
+        it('restores the view from ?view= on init', () => {
+            queryParamMap$.next(new Map([['view', 'stats']]));
+            fixture.destroy();
+            fixture = TestBed.createComponent(LlmProvidersManagement);
+            component = fixture.componentInstance;
+            fixture.detectChanges();
+
+            expect(component.activeTab()).toBe('stats');
         });
     });
 });

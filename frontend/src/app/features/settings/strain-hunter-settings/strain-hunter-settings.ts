@@ -1,6 +1,9 @@
-import { Component, ChangeDetectionStrategy, Injector, inject, OnInit, OnDestroy, signal, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, Injector, inject, OnInit, OnDestroy, signal, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
 import { TableModule } from 'primeng/table';
 import { Tabs, TabList, Tab, TabPanels, TabPanel } from 'primeng/tabs';
 import { ToastModule } from 'primeng/toast';
@@ -33,6 +36,8 @@ export class StrainHunterSettings implements OnInit, OnDestroy {
     private readonly confirmService = inject(ConfirmationService);
     private readonly messageService = inject(MessageService);
     private readonly authStore = inject(AuthStore);
+    private readonly router = inject(Router);
+    private readonly route = inject(ActivatedRoute);
     protected isAdmin = computed(() => this.authStore.userRole() === UserRole.Admin);
     private readonly mql = window.matchMedia('(max-width: 1599px)');
     private readonly mqlHandler = () => this.isCompact.set(this.mql.matches);
@@ -47,6 +52,36 @@ export class StrainHunterSettings implements OnInit, OnDestroy {
 
     geneticsFilter = signal('');
     terpeneFilter = signal('');
+
+    /** URL slugs for the genetics/terpenes tabs, in tab order. */
+    private static readonly SECTION_SLUGS = ['genetics', 'terpenes'] as const;
+
+    /** Active section — the single funnel for clicks; the URL is written alongside. */
+    activeSection = signal('0');
+
+    private querySection = toSignal(this.route.queryParamMap.pipe(map((params) => params.get('section'))));
+
+    private syncSectionFromRoute = effect(() => {
+        const index = StrainHunterSettings.SECTION_SLUGS.indexOf(
+            this.querySection() as (typeof StrainHunterSettings.SECTION_SLUGS)[number],
+        );
+        const value = index === -1 ? '0' : String(index);
+        if (value !== this.activeSection()) this.activeSection.set(value);
+    });
+
+    setActiveSection(value: string | number | undefined) {
+        const normalized = typeof value === 'number' ? String(value) : value;
+        if (typeof normalized !== 'string') return;
+        const index = Number(normalized);
+        if (!Number.isInteger(index) || index < 0 || index >= StrainHunterSettings.SECTION_SLUGS.length) return;
+        this.activeSection.set(normalized);
+        void this.router.navigate([], {
+            relativeTo: this.route,
+            queryParams: { section: StrainHunterSettings.SECTION_SLUGS[index] },
+            queryParamsHandling: 'merge',
+            replaceUrl: true,
+        });
+    }
     expandedGenetics = signal<Set<number>>(new Set());
     expandedTerpenes = signal<Set<number>>(new Set());
     enrichedGenetics = signal<Map<number, IGenetics>>(new Map());

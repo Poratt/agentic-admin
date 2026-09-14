@@ -1,7 +1,7 @@
-<p-tabs value="0" lazy>
+<p-tabs [value]="activeSection()" (valueChange)="setActiveSection($event)" lazy>
     <p-tablist>
-        <p-tab value="0">גנטיקה</p-tab>
-        <p-tab value="1">טרפנים</p-tab>
+        <p-tab value="0"><i class="ph ph-dna"></i> גנטיקה</p-tab>
+        <p-tab value="1"><i class="ph ph-leaf"></i> טרפנים</p-tab>
     </p-tablist>
     <p-tabpanels>
         <!-- ── Genetics Tab ─────────────────────────────────────────────────── -->

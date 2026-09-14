@@ -1,6 +1,9 @@
-import { Component, inject, computed, viewChild, ChangeDetectionStrategy, signal, OnInit } from '@angular/core';
+import { Component, inject, computed, viewChild, ChangeDetectionStrategy, signal, OnInit, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
 
 import { InputTextModule } from 'primeng/inputtext';
 import { Table, TableModule } from 'primeng/table';
@@ -70,7 +73,6 @@ const COPY_FEEDBACK_MS = 5000;
     templateUrl: './llm-providers-management.html',
     styleUrl: './llm-providers-management.css',
 })
-
 export class LlmProvidersManagement implements OnInit {
     private table = viewChild<Table>('table');
     private fb = inject(FormBuilder);
@@ -103,9 +105,32 @@ export class LlmProvidersManagement implements OnInit {
     // Inner tab selection: the provider table or the model statistics.
     activeTab = signal('providers');
 
+    private router = inject(Router);
+    private route = inject(ActivatedRoute);
+
+    /** Reactive read of `?view=` — follows refresh, deep links and browser back/forward. */
+    private queryView = toSignal(this.route.queryParamMap.pipe(map((params) => params.get('view'))));
+
+    /** Route → signal, guarded by inequality so it can never loop back into the router. */
+    private syncTabFromRoute = effect(() => {
+        const view = this.queryView();
+        if ((view === 'providers' || view === 'stats') && view !== this.activeTab()) {
+            this.activeTab.set(view);
+        }
+    });
+
     /** PrimeNG tabs emit string|number|undefined — only real view keys switch the view. */
     setActiveTab(value: string | number | undefined) {
-        if (typeof value === 'string') this.activeTab.set(value);
+        if (typeof value !== 'string') return;
+        if (value !== 'providers' && value !== 'stats') return;
+        // Imperative, single-funnel write: the click updates the signal AND the URL together.
+        this.activeTab.set(value);
+        void this.router.navigate([], {
+            relativeTo: this.route,
+            queryParams: { view: value },
+            queryParamsHandling: 'merge',
+            replaceUrl: true,
+        });
     }
 
     testingModelId = signal<number>(0);
@@ -241,10 +266,8 @@ export class LlmProvidersManagement implements OnInit {
         // Inactive providers sink to the bottom of the default listing.
         const providers = [...visible.filter((p) => p.active), ...visible.filter((p) => !p.active)];
 
-        return providers.map((provider) => ({
-            ...provider,
-            modelsCount: (provider.models || []).length,
-            models: (provider.models || []).map((model) => {
+        return providers.map((provider) => {
+            const models = (provider.models || []).map((model) => {
                 const results = model.testResults || [];
                 const totalTests = results.length;
 
@@ -272,8 +295,18 @@ export class LlmProvidersManagement implements OnInit {
                     successPercentage,
                     performanceScore,
                 };
-            }),
-        }));
+            });
+
+            // Default sub-table order mirrors the provider listing: best performance first,
+            // inactive models sink to the bottom.
+            const byScore = [...models].sort((a, b) => b.performanceScore - a.performanceScore);
+
+            return {
+                ...provider,
+                modelsCount: models.length,
+                models: [...byScore.filter((m) => m.active), ...byScore.filter((m) => !m.active)],
+            };
+        });
     });
 
     /**

@@ -7,6 +7,8 @@ import { GeneticsService } from '../../../core/services/genetics.service';
 import { TerpeneService } from '../../../core/services/terpene.service';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { AuthStore } from '../../../core/store/auth.store';
+import { ActivatedRoute, Router } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
 import { IGenetics } from '../../../core/models/genetics.interface';
 import { ITerpene } from '../../../core/models/terpene.interface';
 
@@ -39,6 +41,12 @@ describe('StrainHunterSettings', () => {
   };
   let geneticsLoadingSignal: ReturnType<typeof signal<boolean>>;
   let terpeneLoadingSignal: ReturnType<typeof signal<boolean>>;
+
+  const mockRouter = {
+    navigate: vi.fn(),
+  };
+
+  const queryParamMap$ = new BehaviorSubject<Map<string, string>>(new Map());
 
   beforeEach(async () => {
     (globalThis as any).ResizeObserver = class {
@@ -103,9 +111,12 @@ describe('StrainHunterSettings', () => {
         { provide: ConfirmationService, useValue: confirmServiceMock },
         MessageService,
         { provide: AuthStore, useValue: authStoreMock },
+        { provide: Router, useValue: mockRouter },
+        { provide: ActivatedRoute, useValue: { queryParamMap: queryParamMap$.pipe() } },
       ],
     }).compileComponents();
 
+    queryParamMap$.next(new Map());
     fixture = TestBed.createComponent(StrainHunterSettings);
     component = fixture.componentInstance;
     fixture.detectChanges();
@@ -169,5 +180,25 @@ describe('StrainHunterSettings', () => {
     expect(component.terpeneLoading()).toBe(true);
     terpeneLoadingSignal.set(false);
     expect(component.terpeneLoading()).toBe(false);
+  });
+
+  it('writes ?section= slug to the URL when the section changes', () => {
+    component.setActiveSection('1');
+
+    expect(component.activeSection()).toBe('1');
+    expect(mockRouter.navigate).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({ queryParams: { section: 'terpenes' } }),
+    );
+  });
+
+  it('restores the section from ?section= on init', () => {
+    queryParamMap$.next(new Map([['section', 'terpenes']]));
+    fixture.destroy();
+    fixture = TestBed.createComponent(StrainHunterSettings);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    expect(component.activeSection()).toBe('1');
   });
 });

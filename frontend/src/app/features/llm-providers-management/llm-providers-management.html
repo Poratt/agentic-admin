@@ -349,15 +349,7 @@
                                                 }
                                             </div>
                                         } @else {
-                                            <p-table
-                                                [value]="provider.models"
-                                                dataKey="id"
-                                                [rowHover]="true"
-                                                class="subtable-wrapper"
-                                                sortField="performanceScore"
-                                                [sortOrder]="-1"
-                                                sortMode="single"
-                                            >
+                                            <p-table [value]="provider.models" dataKey="id" [rowHover]="true" class="subtable-wrapper">
                                                 <ng-template #header>
                                                     <tr>
                                                         <th class="col-expand xs"></th>
