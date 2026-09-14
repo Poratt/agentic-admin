@@ -357,7 +357,7 @@ export class TerpeneService {
                 const searchQuery = englishName !== name
                     ? `${englishName} (${name}) cannabis terpene scent effects`
                     : `${name} cannabis terpene scent effects`;
-                const searchResult = await this.webSearchService.search(searchQuery, true);
+                const searchResult = await this.webSearchService.searchCannabis(searchQuery);
                 if (searchResult.success && searchResult.result) {
                     const parts: string[] = [];
                     if (searchResult.result.answer) {
@@ -443,7 +443,7 @@ export class TerpeneService {
         const searchQuery = englishName !== name
             ? `${englishName} (${name}) cannabis terpene scent effects description`
             : `${name} cannabis terpene scent effects description`;
-        const searchResult = await this.webSearchService.search(searchQuery, true);
+        const searchResult = await this.webSearchService.searchCannabis(searchQuery);
 
         let searchContext = '';
         if (searchResult.success && searchResult.result) {

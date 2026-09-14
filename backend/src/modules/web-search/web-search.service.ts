@@ -17,6 +17,20 @@ const SEARCH_CACHE_TTL_MS = 30 * 60 * 1000;
 /** Hard cap on cache entries so a long-lived process cannot grow unbounded. */
 const SEARCH_CACHE_MAX_ENTRIES = 500;
 
+/**
+ * Cannabis reference domains for enrichment search. SearXNG keyword matching on strain
+ * names returns multilingual noise (numbers, movies, porn), so enrichment queries go to
+ * Tavily restricted to these hosts; SearXNG stays only as the empty-fallback floor.
+ */
+const CANNABIS_DOMAINS = [
+  'leafly.com',
+  'allbud.com',
+  'weedmaps.com',
+  'seedfinder.eu',
+  'cannaconnection.com',
+  'hightimes.com',
+];
+
 type SearXNGResult = {
   title: string;
   url: string;
@@ -325,6 +339,8 @@ export class WebSearchService {
       const data = response.data;
 
       // Enforce site:/-site: on the merged results — see parseSiteOperators.
+      // requiredHosts is OR semantics (a result lives on exactly one host); every()
+      // would demand the impossible for multi-site queries and zero all results.
       const results = (data.results ?? [])
         .map((r) => ({
           title: r.title,
@@ -332,7 +348,9 @@ export class WebSearchService {
           content: r.content,
         }))
         .filter(
-          (r) => requiredHosts.every((host) => this.urlMatchesSite(r.url, host)) && !excludedHosts.some((host) => this.urlMatchesSite(r.url, host)),
+          (r) =>
+            (requiredHosts.length === 0 || requiredHosts.some((host) => this.urlMatchesSite(r.url, host))) &&
+            !excludedHosts.some((host) => this.urlMatchesSite(r.url, host)),
         );
 
       const answer = data.answers && data.answers.length ? data.answers[0] : undefined;
@@ -553,7 +571,7 @@ export class WebSearchService {
         .filter(
           (r) =>
             r.url.length > 0 &&
-            requiredHosts.every((host) => this.urlMatchesSite(r.url, host)) &&
+            (requiredHosts.length === 0 || requiredHosts.some((host) => this.urlMatchesSite(r.url, host))) &&
             !excludedHosts.some((host) => this.urlMatchesSite(r.url, host)),
         );
 
@@ -638,5 +656,22 @@ export class WebSearchService {
 
     this.logger.debug(`Tavily did not serve "${query}" — falling back to SearXNG`);
     return this.search(query, preserveHebrew);
+  }
+
+  /**
+   * Enrichment search: Tavily restricted to cannabis reference domains, SearXNG as fallback.
+   *
+   * Strain/terpene names are hostile to keyword search ("33 Splitter" matches the number
+   * 33 and a film); the domain allowlist travels as `site:` operators, which searchTavily
+   * forwards as structured `include_domains` and the SearXNG path enforces on results.
+   * Hebrew is preserved — the strain name is the central search term. An empty Tavily
+   * result falls through (never accepted as final), same contract as the reddit path.
+   *
+   * @param query Enrichment query (strain/terpene name + context words).
+   * @returns Tavily's container when it produced results, otherwise SearXNG's.
+   */
+  async searchCannabis(query: string): Promise<ServiceResultContainer<WebSearchResultDto | null>> {
+    const scoped = `${query} ${CANNABIS_DOMAINS.map((d) => `site:${d}`).join(' ')}`;
+    return this.searchTavilyOrSearxng(scoped, true);
   }
 }

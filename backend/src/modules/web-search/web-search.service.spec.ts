@@ -651,6 +651,47 @@ describe('WebSearchService', () => {
       expect(result.success).toBe(false);
       expect(result.result).toBeNull();
     });
+
+    describe('searchCannabis', () => {
+      it('scopes Tavily to cannabis domains and returns its results', async () => {
+        const tavily = await buildWithTavily('tvly-test');
+        httpService.post.mockReturnValueOnce(
+          of(tavilyResponse([{ title: 'Leafly hit', url: 'https://www.leafly.com/strains/x' }])),
+        );
+
+        const result = await tavily.searchCannabis('33 Splitter cannabis strain');
+
+        expect(result.success).toBe(true);
+        expect(result.result?.results).toHaveLength(1);
+        const call = httpService.post.mock.calls[0];
+        expect(call[1].include_domains).toEqual(
+          expect.arrayContaining(['leafly.com', 'allbud.com', 'weedmaps.com', 'seedfinder.eu']),
+        );
+        expect(httpService.get).not.toHaveBeenCalled();
+      });
+
+      it('falls back to SearXNG when Tavily comes back empty', async () => {
+        const tavily = await buildWithTavily('tvly-test');
+        httpService.post.mockReturnValueOnce(of(tavilyResponse([])));
+        httpService.get.mockReturnValueOnce(of(mockSearchResponse));
+
+        const result = await tavily.searchCannabis('33 Splitter cannabis strain');
+
+        expect(httpService.post).toHaveBeenCalled();
+        expect(httpService.get).toHaveBeenCalled();
+        expect(result.success).toBe(true);
+      });
+
+      it('goes straight to SearXNG while Tavily is unconfigured', async () => {
+        httpService.get.mockReturnValueOnce(of(mockSearchResponse));
+
+        const result = await service.searchCannabis('33 Splitter cannabis strain');
+
+        expect(httpService.post).not.toHaveBeenCalled();
+        expect(httpService.get).toHaveBeenCalled();
+        expect(result.success).toBe(true);
+      });
+    });
   });
 
   // SearXNG is the scarce channel — it is the only one that fans a single query

@@ -49,6 +49,7 @@ describe('TerpeneService', () => {
 
     webSearchService = {
       search: jest.fn(),
+      searchCannabis: jest.fn(),
     } as any;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -182,7 +183,7 @@ describe('TerpeneService', () => {
             ],
           }),
         } as any);
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: { results: [], answer: undefined },
         } as any);
@@ -225,7 +226,7 @@ describe('TerpeneService', () => {
             ],
           }),
         } as any);
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: { results: [], answer: undefined },
         } as any);
@@ -254,7 +255,7 @@ describe('TerpeneService', () => {
         const existing = makeTerpene({ name: 'Myrcene' });
         repo.findOne.mockResolvedValue(existing);
         repo.save.mockResolvedValue(existing);
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: {
             results: [{ title: 'Myrcene info', url: 'http://x', content: 'Myrcene is common' }],
@@ -279,13 +280,13 @@ describe('TerpeneService', () => {
 
         expect(result).not.toBeNull();
         expect(llmClientService.generateResponse).toHaveBeenCalled();
-        expect(webSearchService.search).toHaveBeenCalled();
+        expect(webSearchService.searchCannabis).toHaveBeenCalled();
         expect(repo.save).not.toHaveBeenCalled();
       });
 
       it('returns null for unknown name', async () => {
         // enrichSingle calls webSearch + LLM before the final findOne check
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: { results: [], answer: undefined },
         } as any);
@@ -308,7 +309,7 @@ describe('TerpeneService', () => {
         const existing = makeTerpene({ name: 'אובמה ראנטז' });
         repo.findOne.mockResolvedValue(existing);
         repo.save.mockResolvedValue(existing);
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: { results: [], answer: undefined },
         } as any);
@@ -343,7 +344,7 @@ describe('TerpeneService', () => {
       it('ranks web results by relevance and reuses the pre-translated names', async () => {
         const existingRows = [makeTerpene({ name: 'אובמה ראנטז', id: 1 })];
         repo.find.mockResolvedValue(existingRows);
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: {
             results: [
@@ -373,7 +374,7 @@ describe('TerpeneService', () => {
         const prompt = llmClientService.generateResponse.mock.calls[1][0].prompt;
         expect(prompt.indexOf('Obama Runtz terpene profile')).toBeGreaterThan(-1);
         expect(prompt.indexOf('Obama Runtz terpene profile')).toBeLessThan(prompt.indexOf('Gmail login page'));
-        expect(webSearchService.search).toHaveBeenCalledWith(expect.stringContaining('Obama Runtz'), true);
+        expect(webSearchService.searchCannabis).toHaveBeenCalledWith(expect.stringContaining('Obama Runtz'));
       });
     });
   });

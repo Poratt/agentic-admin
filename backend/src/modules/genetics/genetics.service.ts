@@ -341,7 +341,7 @@ export class GeneticsService {
                 const searchQuery = englishName !== name
                     ? `${englishName} (${name}) cannabis strain genetics parents origin`
                     : `${name} cannabis strain genetics parents origin`;
-                const searchResult = await this.webSearchService.search(searchQuery, true);
+                const searchResult = await this.webSearchService.searchCannabis(searchQuery);
                 if (searchResult.success && searchResult.result) {
                     const parts: string[] = [];
                     if (searchResult.result.answer) {
@@ -570,7 +570,7 @@ export class GeneticsService {
         const searchQuery = enName
             ? `${enName} (${name}) cannabis strain genetics description parents origin`
             : `${name} cannabis strain genetics description parents origin`;
-        const searchResult = await this.webSearchService.search(searchQuery, true);
+        const searchResult = await this.webSearchService.searchCannabis(searchQuery);
 
         let searchContext = '';
         if (searchResult.success && searchResult.result) {

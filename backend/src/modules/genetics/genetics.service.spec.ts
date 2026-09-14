@@ -59,6 +59,7 @@ describe('GeneticsService', () => {
 
     webSearchService = {
       search: jest.fn(),
+      searchCannabis: jest.fn(),
     } as any;
 
     cannlyticsService = {
@@ -191,7 +192,7 @@ describe('GeneticsService', () => {
         // Existing check
         repo.find.mockResolvedValue([]);
         // searchChunk: webSearchService.search
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: { results: [], answer: undefined },
         } as any);
@@ -265,7 +266,7 @@ describe('GeneticsService', () => {
         httpService.get.mockReturnValue(of({ data: { data: [] } }) as any);
 
         // Web search
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: { results: [], answer: undefined },
         } as any);
@@ -325,7 +326,7 @@ describe('GeneticsService', () => {
         httpService.get.mockReturnValue(of({ data: { data: [] } }) as any);
 
         // Web search
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: {
             results: [{ title: 'GG info', url: 'http://x', content: 'Gorilla Glue is strong' }],
@@ -357,7 +358,7 @@ describe('GeneticsService', () => {
 
         expect(result).not.toBeNull();
         expect(llmClientService.generateResponse).toHaveBeenCalled();
-        expect(webSearchService.search).toHaveBeenCalled();
+        expect(webSearchService.searchCannabis).toHaveBeenCalled();
         expect(cannlyticsService.getStrain).toHaveBeenCalled();
         expect(repo.save).not.toHaveBeenCalled();
       });
@@ -371,7 +372,7 @@ describe('GeneticsService', () => {
         cannlyticsService.getEnglishName.mockReturnValue(null);
         cannlyticsService.getStrain.mockResolvedValue(null);
         httpService.get.mockReturnValue(of({ data: { data: [] } }) as any);
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: { results: [], answer: undefined },
         } as any);
@@ -406,7 +407,7 @@ describe('GeneticsService', () => {
         cannlyticsService.getEnglishName.mockReturnValue(null);
         cannlyticsService.getStrain.mockResolvedValue(null);
         httpService.get.mockReturnValue(of({ data: { data: [] } }) as any);
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: { results: [], answer: undefined },
         } as any);
@@ -433,7 +434,7 @@ describe('GeneticsService', () => {
         cannlyticsService.getEnglishName.mockReturnValue(null); // map miss → LLM translation
         cannlyticsService.getStrain.mockResolvedValue(null);
         httpService.get.mockReturnValue(of({ data: { data: [] } }) as any);
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: { results: [], answer: undefined },
         } as any);
@@ -469,7 +470,7 @@ describe('GeneticsService', () => {
         cannlyticsService.getEnglishName.mockReturnValue('Gorilla Glue'); // map hit — free, no LLM
         cannlyticsService.getStrain.mockResolvedValue(null);
         httpService.get.mockReturnValue(of({ data: { data: [] } }) as any);
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: { results: [], answer: undefined },
         } as any);
@@ -501,7 +502,7 @@ describe('GeneticsService', () => {
         cannlyticsService.getEnglishName.mockReturnValue('Gorilla Glue');
         cannlyticsService.getStrain.mockResolvedValue(null);
         httpService.get.mockReturnValue(of({ data: { data: [] } }) as any);
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: {
             results: [
@@ -538,7 +539,7 @@ describe('GeneticsService', () => {
         const prompt = llmClientService.generateResponse.mock.calls[0][0].prompt;
         expect(prompt.indexOf('Gorilla Glue strain guide')).toBeGreaterThan(-1);
         expect(prompt.indexOf('Gorilla Glue strain guide')).toBeLessThan(prompt.indexOf('Gmail login page'));
-        expect(webSearchService.search).toHaveBeenCalledWith(expect.stringContaining('Gorilla Glue'), true);
+        expect(webSearchService.searchCannabis).toHaveBeenCalledWith(expect.stringContaining('Gorilla Glue'));
       });
 
       it('translates Hebrew names once via LLM when the map misses', async () => {
@@ -547,7 +548,7 @@ describe('GeneticsService', () => {
         cannlyticsService.getEnglishName.mockReturnValue(null); // map miss → LLM translation
         cannlyticsService.getStrain.mockResolvedValue(null);
         httpService.get.mockReturnValue(of({ data: { data: [] } }) as any);
-        webSearchService.search.mockResolvedValue({
+        webSearchService.searchCannabis.mockResolvedValue({
           success: true,
           result: { results: [], answer: undefined },
         } as any);
@@ -566,7 +567,7 @@ describe('GeneticsService', () => {
         // Translation + enrichment = 2 — not a separate translation per chunk-method (searchChunk/Cannlytics/Demarily)
         expect(llmClientService.generateResponse).toHaveBeenCalledTimes(2);
         expect(cannlyticsService.getStrain).toHaveBeenCalledWith('Obama Runtz');
-        expect(webSearchService.search).toHaveBeenCalledWith(expect.stringContaining('Obama Runtz'), true);
+        expect(webSearchService.searchCannabis).toHaveBeenCalledWith(expect.stringContaining('Obama Runtz'));
       });
     });
   });
