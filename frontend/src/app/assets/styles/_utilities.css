@@ -266,6 +266,12 @@
     font-size: var(--font-size-sm);
   }
 
+  /* Smallest size step — count chips and other dense inline markers. */
+  &.badge-mini {
+    padding: 0 var(--space-2);
+    font-size: var(--font-size-xxs);
+  }
+
   /* Two-line leaderboard tag (title + subtitle) — stacked text, no wrap. */
   &.badge-detailed {
     white-space: nowrap;

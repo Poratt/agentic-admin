@@ -41,11 +41,6 @@
         }
     }
 
-    .col-count {
-        width: 80px;
-        text-align: center;
-    }
-
     .col-base-url {
         max-width: 300px;
         overflow: hidden;
@@ -78,9 +73,18 @@
         align-items: center;
     }
 
-    .count-value {
-        font-family: var(--font-code);
-        color: var(--color-text-secondary);
+    /* Name on the left, count badge pinned to the cell's right edge →
+       badges line up in one column down the table. */
+    .provider-cell {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        min-width: 0;
+
+        .row-label {
+            min-width: 0;
+        }
     }
 
     .expand-panel-row {

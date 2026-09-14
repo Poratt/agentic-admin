@@ -256,9 +256,6 @@
                                 <th pSortableColumn="baseUrl">
                                     <div class="sortable-column-header">baseUrl <p-sort-icon field="baseUrl" /></div>
                                 </th>
-                                <th class="col-count" pSortableColumn="modelsCount">
-                                    <div class="sortable-column-header">Models <p-sort-icon field="modelsCount" /></div>
-                                </th>
                                 <th class="col-actions"></th>
                             </tr>
                         </ng-template>
@@ -277,11 +274,15 @@
                                         <i class="ph ph-caret-right"></i>
                                     </button>
                                 </td>
-                                <td class="row-label">{{ provider.label }}</td>
+                                <td>
+                                    <div class="provider-cell">
+                                        <span class="row-label">{{ provider.label }}</span>
+                                        <span class="badge badge-info badge-mini">{{ provider.modelsCount }}</span>
+                                    </div>
+                                </td>
                                 <td class="row-meta row-meta--mono col-base-url" appTooltip [text]="provider.baseUrl">
                                     {{ provider.baseUrl }}
                                 </td>
-                                <td class="col-count count-value">{{ provider.modelsCount }}</td>
                                 <td class="col-actions">
                                     @if (isAdmin()) {
                                         <div class="row-actions" (click)="$event.stopPropagation()">
@@ -318,7 +319,7 @@
 
                             @if (isProviderExpanded(provider.id)) {
                                 <tr class="expand-panel-row">
-                                    <td colspan="5" class="expand-panel-cell">
+                                    <td colspan="4" class="expand-panel-cell">
                                         @if (provider.modelsCount === 0) {
                                             <div class="empty-state roomy">
                                                 <span class="ph ph-cube-simple"></span>
@@ -700,7 +701,7 @@
                         </ng-template>
                         <ng-template #emptymessage>
                             <tr>
-                                <td colspan="5">
+                                <td colspan="4">
                                     <div class="page-state table-empty-state">
                                         <span class="icon ph ph-magnifying-glass-minus"></span>
                                         <h4 class="title">No providers found.</h4>
