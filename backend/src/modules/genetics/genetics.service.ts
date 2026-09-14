@@ -517,7 +517,11 @@ export class GeneticsService {
         if (saved?.englishName) return saved.englishName;
         // Hardcoded map (free), then LLM if absent
         const mapped = this.cannlyticsService.getEnglishName(name);
-        if (mapped) return mapped;
+        if (mapped) {
+            // Backfill the row too — otherwise map-known names never get englishName in the DB.
+            await this.geneticsRepository.update({ name }, { englishName: mapped });
+            return mapped;
+        }
         try {
             const response = await this.llmClientService.generateResponse({
                 prompt: `Return ONLY the English name for this Hebrew cannabis strain name: "${name}". No explanation, just the English name.`,

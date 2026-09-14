@@ -462,7 +462,7 @@ describe('GeneticsService', () => {
       });
 
       it('does NOT record when the hardcoded map covers the name', async () => {
-        const existing = makeGenetics({ name: 'Gorilla Glue' });
+        const existing = makeGenetics({ name: 'גורילה גלו' });
         repo.findOne.mockResolvedValue(existing);
         repo.save.mockResolvedValue(existing);
 
@@ -486,10 +486,11 @@ describe('GeneticsService', () => {
           }),
         } as any);
 
-        await service.enrichSingle('Gorilla Glue');
+        await service.enrichSingle('גורילה גלו');
 
-        // Map hit — no LLM call for translation, so no DB update for englishName
-        // (repo.update is called during enrichSingle for enrichment data, not englishName)
+        // Map hit — no LLM call for translation and nothing recorded in the tracker,
+        // but the row IS backfilled with englishName so the DB doesn't stay empty.
+        expect(repo.update).toHaveBeenCalledWith({ name: 'גורילה גלו' }, { englishName: 'Gorilla Glue' });
       });
     });
 
