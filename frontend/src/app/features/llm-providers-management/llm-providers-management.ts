@@ -8,6 +8,7 @@ import { DialogModule } from 'primeng/dialog';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { CheckboxModule } from 'primeng/checkbox';
 import { SelectModule } from 'primeng/select';
+import { Tabs, TabList, Tab } from 'primeng/tabs';
 import { Confirmation, ConfirmationService, MessageService } from 'primeng/api';
 import { AuthStore } from '../../core/store/auth.store';
 import { UserRole } from '../../core/enums/user-role.enum';
@@ -60,6 +61,9 @@ const COPY_FEEDBACK_MS = 5000;
         ToggleSwitchModule,
         CheckboxModule,
         SelectModule,
+        Tabs,
+        TabList,
+        Tab,
         TooltipDirective,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
@@ -98,6 +102,11 @@ export class LlmProvidersManagement implements OnInit {
 
     // Inner tab selection: the provider table or the model statistics.
     activeTab = signal('providers');
+
+    /** PrimeNG tabs emit string|number|undefined — only real view keys switch the view. */
+    setActiveTab(value: string | number | undefined) {
+        if (typeof value === 'string') this.activeTab.set(value);
+    }
 
     testingModelId = signal<number>(0);
     // Provider id with a background test-all run in flight (drives button state + polling).

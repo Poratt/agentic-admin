@@ -2,24 +2,12 @@
     <div class="catalog-toolbar stacked">
         <!-- Floor 1: the view switch on one edge, the primary action on the other. -->
         <div class="toolbar-row">
-            <div class="toggle-group elevated">
-                <button
-                    type="button"
-                    class="toggle-btn"
-                    [class.active]="activeTab() === 'providers'"
-                    (click)="activeTab.set('providers')"
-                >
-                    <i class="ph ph-rows"></i> Providers
-                </button>
-                <button
-                    type="button"
-                    class="toggle-btn"
-                    [class.active]="activeTab() === 'stats'"
-                    (click)="activeTab.set('stats')"
-                >
-                    <i class="ph ph-chart-bar"></i> Statistics
-                </button>
-            </div>
+            <p-tabs [value]="activeTab()" (valueChange)="setActiveTab($event)">
+                <p-tablist>
+                    <p-tab value="providers"> <i class="ph ph-rows"></i> Providers </p-tab>
+                    <p-tab value="stats"> <i class="ph ph-chart-bar"></i> Statistics </p-tab>
+                </p-tablist>
+            </p-tabs>
 
             @if (activeTab() === 'providers' && pageState() === PageStates.Ready && isAdmin()) {
                 <button type="button" class="primary-btn filled sm" (click)="openAddProviderDialog()">
@@ -81,9 +69,7 @@
                     <span class="icon ph ph-warning"></span>
                     <h4 class="title">Could not load model statistics.</h4>
                     <p class="subtitle">{{ llmProviderStore.modelStatsError() }}</p>
-                    <button class="primary-btn sm" type="button" (click)="llmProviderStore.loadModelStats()">
-                        Try again
-                    </button>
+                    <button class="primary-btn sm" type="button" (click)="llmProviderStore.loadModelStats()">Try again</button>
                 </div>
             } @else if (statsRows().length === 0) {
                 <div class="page-state empty-state roomy">
@@ -100,8 +86,7 @@
                     <span class="legend-item">
                         <i class="ph ph-lightning"></i>
                         <strong>Real</strong> — calls the app actually made. A model needs
-                        {{ llmProviderStore.modelStats()!.minimumSample }} successful-ranked runs to
-                        win a badge.
+                        {{ llmProviderStore.modelStats()!.minimumSample }} successful-ranked runs to win a badge.
                     </span>
                 </div>
 
@@ -205,522 +190,529 @@
             }
         </div>
     } @else {
-    @switch (pageState()) {
-        @case (PageStates.Loading) {
-            <div class="page-state loading-state">
-                <span class="custom-loader"></span>
-            </div>
-        }
-        @case (PageStates.Error) {
-            <div class="page-state error-state stagger stagger-up">
-                <span class="icon ph ph-warning"></span>
-                <h4 class="title">An error occurred while loading LLM providers.</h4>
-                <p class="subtitle">Please try again later.</p>
-                <button class="primary-btn sm" type="button" (click)="llmProviderStore.reload()">Try again</button>
-            </div>
-        }
-        @case (PageStates.Empty) {
-            <div class="page-state empty-state roomy">
-                <span class="icon ph ph-exclude"></span>
-                <h4 class="title">No LLM providers found.</h4>
-                <p class="subtitle">No providers are currently defined in the system.</p>
-            </div>
-        }
-        @case (PageStates.Ready) {
-            <!-- Deliberately not "Showing N": this counts the providers in the current Active/All
-                 filter, not the rows left after the search box, so "Showing" would overstate it. -->
-            <div class="caption-row">
-                <p class="table-caption">
-                    {{ llmProviders().length }} {{ llmProviders().length === 1 ? 'provider' : 'providers' }}
-                </p>
-                <div class="caption-tags">
-                @if (fastestStatsRow(); as fastest) {
-                    <span
-                        class="badge badge-warning badge-detailed"
-                        appTooltip
-                        [text]="'Fastest mean latency in ' + leaderBasisLabel(fastest.providerKey, fastest.modelKey)"
-                    >
-                        <i class="ph ph-lightning"></i>
-                        <span class="badge-lines">
-                            <span class="badge-subtitle">{{ fastest.providerKey }}</span>
-                            <span class="badge-title">{{ statsLabel(fastest) }}</span>
-                        </span>
-                    </span>
-                }
-                @if (mostStableStatsRow(); as stable) {
-                    <span
-                        class="badge badge-success badge-detailed"
-                        appTooltip
-                        [text]="'Highest success rate in ' + leaderBasisLabel(stable.providerKey, stable.modelKey)"
-                    >
-                        <i class="ph ph-shield-check"></i>
-                        <span class="badge-lines">
-                            <span class="badge-subtitle">{{ stable.providerKey }}</span>
-                            <span class="badge-title">{{ statsLabel(stable) }}</span>
-                        </span>
-                    </span>
-                }
+        @switch (pageState()) {
+            @case (PageStates.Loading) {
+                <div class="page-state loading-state">
+                    <span class="custom-loader"></span>
                 </div>
-            </div>
-            <div class="glass-effect card table-container">
-                <p-table #table [value]="llmProviders()" dataKey="id" [globalFilterFields]="globalFilterFields" [rowHover]="true">
-                    <ng-template #header>
-                        <tr>
-                            <th class="col-expand"></th>
-                            <th pSortableColumn="key">
-                                <div class="sortable-column-header">Name <p-sort-icon field="key" /></div>
-                            </th>
-                            <th pSortableColumn="baseUrl">
-                                <div class="sortable-column-header">baseUrl <p-sort-icon field="baseUrl" /></div>
-                            </th>
-                            <th class="col-count" pSortableColumn="modelsCount">
-                                <div class="sortable-column-header">Models <p-sort-icon field="modelsCount" /></div>
-                            </th>
-                            <th class="col-actions"></th>
-                        </tr>
-                    </ng-template>
+            }
+            @case (PageStates.Error) {
+                <div class="page-state error-state stagger stagger-up">
+                    <span class="icon ph ph-warning"></span>
+                    <h4 class="title">An error occurred while loading LLM providers.</h4>
+                    <p class="subtitle">Please try again later.</p>
+                    <button class="primary-btn sm" type="button" (click)="llmProviderStore.reload()">Try again</button>
+                </div>
+            }
+            @case (PageStates.Empty) {
+                <div class="page-state empty-state roomy">
+                    <span class="icon ph ph-exclude"></span>
+                    <h4 class="title">No LLM providers found.</h4>
+                    <p class="subtitle">No providers are currently defined in the system.</p>
+                </div>
+            }
+            @case (PageStates.Ready) {
+                <!-- Deliberately not "Showing N": this counts the providers in the current Active/All
+                 filter, not the rows left after the search box, so "Showing" would overstate it. -->
+                <div class="caption-row">
+                    <p class="table-caption">{{ llmProviders().length }} {{ llmProviders().length === 1 ? 'provider' : 'providers' }}</p>
+                    <div class="caption-tags">
+                        @if (fastestStatsRow(); as fastest) {
+                            <span
+                                class="badge badge-warning badge-detailed"
+                                appTooltip
+                                [text]="'Fastest mean latency in ' + leaderBasisLabel(fastest.providerKey, fastest.modelKey)"
+                            >
+                                <i class="ph ph-lightning"></i>
+                                <span class="badge-lines">
+                                    <span class="badge-subtitle">{{ fastest.providerKey }}</span>
+                                    <span class="badge-title">{{ statsLabel(fastest) }}</span>
+                                </span>
+                            </span>
+                        }
+                        @if (mostStableStatsRow(); as stable) {
+                            <span
+                                class="badge badge-success badge-detailed"
+                                appTooltip
+                                [text]="'Highest success rate in ' + leaderBasisLabel(stable.providerKey, stable.modelKey)"
+                            >
+                                <i class="ph ph-shield-check"></i>
+                                <span class="badge-lines">
+                                    <span class="badge-subtitle">{{ stable.providerKey }}</span>
+                                    <span class="badge-title">{{ statsLabel(stable) }}</span>
+                                </span>
+                            </span>
+                        }
+                    </div>
+                </div>
+                <div class="glass-effect card table-container">
+                    <p-table #table [value]="llmProviders()" dataKey="id" [globalFilterFields]="globalFilterFields" [rowHover]="true">
+                        <ng-template #header>
+                            <tr>
+                                <th class="col-expand"></th>
+                                <th pSortableColumn="key">
+                                    <div class="sortable-column-header">Name <p-sort-icon field="key" /></div>
+                                </th>
+                                <th pSortableColumn="baseUrl">
+                                    <div class="sortable-column-header">baseUrl <p-sort-icon field="baseUrl" /></div>
+                                </th>
+                                <th class="col-count" pSortableColumn="modelsCount">
+                                    <div class="sortable-column-header">Models <p-sort-icon field="modelsCount" /></div>
+                                </th>
+                                <th class="col-actions"></th>
+                            </tr>
+                        </ng-template>
 
-                    <ng-template #body let-provider>
-                        <tr class="clickable-row" (click)="toggleProvider(provider.id)">
-                            <td class="col-expand">
-                                <button
-                                    type="button"
-                                    class="icon-only transparent-btn chevron-btn"
-                                    [class.open]="isProviderExpanded(provider.id)"
-                                    [attr.aria-label]="isProviderExpanded(provider.id) ? 'Collapse' : 'Expand'"
-                                    appTooltip
-                                    [text]="isProviderExpanded(provider.id) ? 'Collapse' : 'Expand'"
-                                >
-                                    <i class="ph ph-caret-right"></i>
-                                </button>
-                            </td>
-                            <td class="row-label">{{ provider.label }}</td>
-                            <td class="row-meta row-meta--mono col-base-url" appTooltip [text]="provider.baseUrl">
-                                {{ provider.baseUrl }}
-                            </td>
-                            <td class="col-count count-value">{{ provider.modelsCount }}</td>
-                            <td class="col-actions">
-                                @if (isAdmin()) {
-                                    <div class="row-actions" (click)="$event.stopPropagation()">
-                                        <p-toggleswitch
-                                            [ngModel]="provider.active"
-                                            (ngModelChange)="setProviderActive(provider, $event)"
-                                            [ariaLabel]="provider.active ? 'Deactivate provider' : 'Activate provider'"
-                                        />
-                                        <button
-                                            type="button"
-                                            class="icon-only transparent-btn sm"
-                                            aria-label="Edit"
-                                            appTooltip
-                                            [text]="'Edit provider'"
-                                            (click)="openEditProviderDialog(provider)"
-                                        >
-                                            <i class="ph ph-pencil-simple"></i>
-                                        </button>
+                        <ng-template #body let-provider>
+                            <tr class="clickable-row" (click)="toggleProvider(provider.id)">
+                                <td class="col-expand">
+                                    <button
+                                        type="button"
+                                        class="icon-only transparent-btn chevron-btn"
+                                        [class.open]="isProviderExpanded(provider.id)"
+                                        [attr.aria-label]="isProviderExpanded(provider.id) ? 'Collapse' : 'Expand'"
+                                        appTooltip
+                                        [text]="isProviderExpanded(provider.id) ? 'Collapse' : 'Expand'"
+                                    >
+                                        <i class="ph ph-caret-right"></i>
+                                    </button>
+                                </td>
+                                <td class="row-label">{{ provider.label }}</td>
+                                <td class="row-meta row-meta--mono col-base-url" appTooltip [text]="provider.baseUrl">
+                                    {{ provider.baseUrl }}
+                                </td>
+                                <td class="col-count count-value">{{ provider.modelsCount }}</td>
+                                <td class="col-actions">
+                                    @if (isAdmin()) {
+                                        <div class="row-actions" (click)="$event.stopPropagation()">
+                                            <p-toggleswitch
+                                                [ngModel]="provider.active"
+                                                (ngModelChange)="setProviderActive(provider, $event)"
+                                                [ariaLabel]="provider.active ? 'Deactivate provider' : 'Activate provider'"
+                                            />
+                                            <button
+                                                type="button"
+                                                class="icon-only transparent-btn sm"
+                                                aria-label="Edit"
+                                                appTooltip
+                                                [text]="'Edit provider'"
+                                                (click)="openEditProviderDialog(provider)"
+                                            >
+                                                <i class="ph ph-pencil-simple"></i>
+                                            </button>
 
-                                        <button
-                                            type="button"
-                                            class="icon-only danger-btn sm"
-                                            aria-label="Delete provider permanently"
-                                            appTooltip
-                                            [text]="'Delete permanently'"
-                                            (click)="deleteProvider(provider.id)"
-                                        >
-                                            <i class="ph ph-trash"></i>
-                                        </button>
-                                    </div>
-                                }
-                            </td>
-                        </tr>
-
-                        @if (isProviderExpanded(provider.id)) {
-                            <tr class="expand-panel-row">
-                                <td colspan="5" class="expand-panel-cell">
-                                    @if (provider.modelsCount === 0) {
-                                        <div class="empty-state roomy">
-                                            <span class="ph ph-cube-simple"></span>
-                                            <p>No models configured for this provider.</p>
-                                            @if (isAdmin()) {
-                                                <div class="row-actions">
-                                                    <button
-                                                        type="button"
-                                                        class="transparent-btn sm"
-                                                        (click)="openSyncDialog(provider)"
-                                                        aria-label="Sync models from provider"
-                                                        appTooltip
-                                                        [text]="'Sync from provider'"
-                                                    >
-                                                        <i class="ph ph-cloud-arrow-down"></i>
-                                                        Sync
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        class="primary-btn filled sm"
-                                                        (click)="openAddModelDialog(provider.id)"
-                                                    >
-                                                        <i class="ph ph-plus"></i>
-                                                        Add Model
-                                                    </button>
-                                                </div>
-                                            }
+                                            <button
+                                                type="button"
+                                                class="icon-only danger-btn sm"
+                                                aria-label="Delete provider permanently"
+                                                appTooltip
+                                                [text]="'Delete permanently'"
+                                                (click)="deleteProvider(provider.id)"
+                                            >
+                                                <i class="ph ph-trash"></i>
+                                            </button>
                                         </div>
-                                    } @else {
-                                        <p-table
-                                            [value]="provider.models"
-                                            dataKey="id"
-                                            [rowHover]="true"
-                                            class="subtable-wrapper"
-                                            sortField="performanceScore"
-                                            [sortOrder]="-1"
-                                            sortMode="single"
-                                        >
-                                            <ng-template #header>
-                                                <tr>
-                                                    <th class="col-expand xs"></th>
-                                                    <th pSortableColumn="label">
-                                                        <div class="sortable-column-header">Model <p-sort-icon field="label" /></div>
-                                                    </th>
-                                                    <th class="col-perf" pSortableColumn="performanceScore">
-                                                        <div class="sortable-column-header">
-                                                            Performance <p-sort-icon field="performanceScore" />
-                                                        </div>
-                                                    </th>
-                                                    <th class="col-test">
-                                                        @if (isAdmin()) {
-                                                            <button
-                                                                type="button"
-                                                                class="icon-only transparent-btn sm"
-                                                                [class.testing]="testingAllProviderId() === provider.id"
-                                                                [disabled]="testingAllProviderId() === provider.id"
-                                                                aria-label="Test all models"
-                                                                appTooltip
-                                                                [text]="
-                                                                    testingAllProviderId() === provider.id
-                                                                        ? 'Testing in background...'
-                                                                        : 'Test all models'
-                                                                "
-                                                                (click)="testAllModels(provider)"
-                                                            >
-                                                                <i
-                                                                    [class]="
-                                                                        testingAllProviderId() === provider.id
-                                                                            ? 'ph ph-spinner-gap ph-spin'
-                                                                            : 'ph ph-lightning-a'
-                                                                    "
-                                                                ></i>
-                                                            </button>
-                                                        }
-                                                    </th>
-                                                    <th class="col-actions">
-                                                        @if (isAdmin()) {
-                                                            <div class="row-actions">
-                                                                <button
-                                                                    type="button"
-                                                                    class="icon-only transparent-btn sm"
-                                                                    aria-label="Sync models from provider"
-                                                                    appTooltip
-                                                                    [text]="'Sync from provider'"
-                                                                    (click)="openSyncDialog(provider)"
-                                                                >
-                                                                    <i class="ph ph-cloud-arrow-down"></i>
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    class="icon-only transparent-btn sm"
-                                                                    aria-label="Add model"
-                                                                    appTooltip
-                                                                    [text]="'Add model'"
-                                                                    (click)="openAddModelDialog(provider.id)"
-                                                                >
-                                                                    <i class="ph ph-plus"></i>
-                                                                </button>
-                                                            </div>
-                                                        }
-                                                    </th>
-                                                </tr>
-                                            </ng-template>
+                                    }
+                                </td>
+                            </tr>
 
-                                            <ng-template #body let-model>
-                                                <tr>
-                                                    <td class="col-expand xs">
-                                                        @if (model.hasTests) {
-                                                            <button
-                                                                type="button"
-                                                                class="icon-only transparent-btn chevron-btn sm"
-                                                                [class.open]="isModelExpanded(model.id)"
-                                                                [attr.aria-label]="isModelExpanded(model.id) ? 'Collapse' : 'Expand'"
-                                                                appTooltip
-                                                                [text]="isModelExpanded(model.id) ? 'Collapse' : 'Expand'"
-                                                                (click)="toggleModel(model.id)"
-                                                            >
-                                                                <i class="ph ph-caret-right"></i>
-                                                            </button>
-                                                        }
-                                                    </td>
-                                                    <td class="clickable" (click)="toggleModel(model.id)">
-                                                        <div class="row-title">
-                                                            <div class="row-headline">
-                                                                <span class="row-label">{{ model.label }}</span>
-                                                                @if (isFastest(provider.key, model.key)) {
-                                                                    <span
-                                                                        class="badge badge-warning"
-                                                                        appTooltip
-                                                                        [text]="'Fastest mean latency in ' + leaderBasisLabel(provider.key, model.key)"
-                                                                    >
-                                                                        <i class="ph ph-lightning"></i> Fastest
-                                                                    </span>
-                                                                }
-                                                                @if (isMostStable(provider.key, model.key)) {
-                                                                    <span
-                                                                        class="badge badge-success"
-                                                                        appTooltip
-                                                                        [text]="'Highest success rate in ' + leaderBasisLabel(provider.key, model.key)"
-                                                                    >
-                                                                        <i class="ph ph-shield-check"></i> Most stable
-                                                                    </span>
-                                                                }
+                            @if (isProviderExpanded(provider.id)) {
+                                <tr class="expand-panel-row">
+                                    <td colspan="5" class="expand-panel-cell">
+                                        @if (provider.modelsCount === 0) {
+                                            <div class="empty-state roomy">
+                                                <span class="ph ph-cube-simple"></span>
+                                                <p>No models configured for this provider.</p>
+                                                @if (isAdmin()) {
+                                                    <div class="row-actions">
+                                                        <button
+                                                            type="button"
+                                                            class="transparent-btn sm"
+                                                            (click)="openSyncDialog(provider)"
+                                                            aria-label="Sync models from provider"
+                                                            appTooltip
+                                                            [text]="'Sync from provider'"
+                                                        >
+                                                            <i class="ph ph-cloud-arrow-down"></i>
+                                                            Sync
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="primary-btn filled sm"
+                                                            (click)="openAddModelDialog(provider.id)"
+                                                        >
+                                                            <i class="ph ph-plus"></i>
+                                                            Add Model
+                                                        </button>
+                                                    </div>
+                                                }
+                                            </div>
+                                        } @else {
+                                            <p-table
+                                                [value]="provider.models"
+                                                dataKey="id"
+                                                [rowHover]="true"
+                                                class="subtable-wrapper"
+                                                sortField="performanceScore"
+                                                [sortOrder]="-1"
+                                                sortMode="single"
+                                            >
+                                                <ng-template #header>
+                                                    <tr>
+                                                        <th class="col-expand xs"></th>
+                                                        <th pSortableColumn="label">
+                                                            <div class="sortable-column-header">Model <p-sort-icon field="label" /></div>
+                                                        </th>
+                                                        <th class="col-perf" pSortableColumn="performanceScore">
+                                                            <div class="sortable-column-header">
+                                                                Performance <p-sort-icon field="performanceScore" />
                                                             </div>
-                                                            <div
-                                                                class="row-subtitle-inline"
-                                                                (click)="copyModelKey($event, model.key)"
-                                                            >
-                                                                <span class="row-subtitle row-subtitle--flex">{{ model.key }}</span>
+                                                        </th>
+                                                        <th class="col-test">
+                                                            @if (isAdmin()) {
                                                                 <button
                                                                     type="button"
-                                                                    class="icon-only transparent-btn xs"
-                                                                    [class.copied]="copiedModelKey() === model.key"
-                                                                    aria-label="Copy model key"
-                                                                    appTooltip
-                                                                    [text]="'Copy key'"
-                                                                >
-                                                                    <i
-                                                                        [class]="
-                                                                            copiedModelKey() === model.key ? 'ph ph-check' : 'ph ph-copy'
-                                                                        "
-                                                                    ></i>
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td class="col-perf">
-                                                        @if (model.hasTests) {
-                                                            <div class="metric-cell">
-                                                                <span
-                                                                    class="metric-primary"
-                                                                    [class]="performanceClass(model.successPercentage)"
-                                                                >
-                                                                    {{ model.successPercentage }}%
-                                                                </span>
-                                                                <span class="metric-secondary">
-                                                                    {{ formatLatency(model.latencyAverage) }}
-                                                                </span>
-                                                            </div>
-                                                        } @else {
-                                                            <span class="metric-empty">No tests yet</span>
-                                                        }
-                                                    </td>
-                                                    <td class="col-test">
-                                                        @if (isAdmin()) {
-                                                            <button
-                                                                type="button"
-                                                                class="icon-only transparent-btn sm"
-                                                                [class.testing]="testingModelId() === model.id"
-                                                                [disabled]="testingModelId() === model.id"
-                                                                aria-label="Run test"
-                                                                appTooltip
-                                                                [text]="testingModelId() === model.id ? 'Testing...' : 'Test model'"
-                                                                (click)="testModel(model.id)"
-                                                            >
-                                                                <i
-                                                                    [class]="
-                                                                        testingModelId() === model.id
-                                                                            ? 'ph ph-spinner-gap ph-spin'
-                                                                            : 'ph ph-lightning'
-                                                                    "
-                                                                ></i>
-                                                            </button>
-                                                        }
-                                                    </td>
-                                                    <td class="col-actions">
-                                                        @if (isAdmin()) {
-                                                            <div class="row-actions">
-                                                                <p-toggleswitch
-                                                                    [ngModel]="model.active"
-                                                                    (ngModelChange)="setModelActive(provider.id, model, $event)"
-                                                                    [ariaLabel]="model.active ? 'Deactivate model' : 'Activate model'"
-                                                                />
-                                                                <button
-                                                                    type="button"
-                                                                    class="icon-only accent-btn sm"
+                                                                    class="icon-only transparent-btn sm"
+                                                                    [class.testing]="testingAllProviderId() === provider.id"
+                                                                    [disabled]="testingAllProviderId() === provider.id"
+                                                                    aria-label="Test all models"
                                                                     appTooltip
                                                                     [text]="
-                                                                        llmProviderStore.defaultModelId() === model.id
-                                                                            ? 'Default model'
-                                                                            : 'Set as default'
+                                                                        testingAllProviderId() === provider.id
+                                                                            ? 'Testing in background...'
+                                                                            : 'Test all models'
                                                                     "
-                                                                    (click)="setDefaultModel(model)"
+                                                                    (click)="testAllModels(provider)"
                                                                 >
                                                                     <i
                                                                         [class]="
-                                                                            llmProviderStore.defaultModelId() === model.id
-                                                                                ? 'ph-fill ph-star'
-                                                                                : 'ph ph-star'
+                                                                            testingAllProviderId() === provider.id
+                                                                                ? 'ph ph-spinner-gap ph-spin'
+                                                                                : 'ph ph-lightning-a'
                                                                         "
                                                                     ></i>
                                                                 </button>
+                                                            }
+                                                        </th>
+                                                        <th class="col-actions">
+                                                            @if (isAdmin()) {
+                                                                <div class="row-actions">
+                                                                    <button
+                                                                        type="button"
+                                                                        class="icon-only transparent-btn sm"
+                                                                        aria-label="Sync models from provider"
+                                                                        appTooltip
+                                                                        [text]="'Sync from provider'"
+                                                                        (click)="openSyncDialog(provider)"
+                                                                    >
+                                                                        <i class="ph ph-cloud-arrow-down"></i>
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        class="icon-only transparent-btn sm"
+                                                                        aria-label="Add model"
+                                                                        appTooltip
+                                                                        [text]="'Add model'"
+                                                                        (click)="openAddModelDialog(provider.id)"
+                                                                    >
+                                                                        <i class="ph ph-plus"></i>
+                                                                    </button>
+                                                                </div>
+                                                            }
+                                                        </th>
+                                                    </tr>
+                                                </ng-template>
 
+                                                <ng-template #body let-model>
+                                                    <tr>
+                                                        <td class="col-expand xs">
+                                                            @if (model.hasTests) {
+                                                                <button
+                                                                    type="button"
+                                                                    class="icon-only transparent-btn chevron-btn sm"
+                                                                    [class.open]="isModelExpanded(model.id)"
+                                                                    [attr.aria-label]="isModelExpanded(model.id) ? 'Collapse' : 'Expand'"
+                                                                    appTooltip
+                                                                    [text]="isModelExpanded(model.id) ? 'Collapse' : 'Expand'"
+                                                                    (click)="toggleModel(model.id)"
+                                                                >
+                                                                    <i class="ph ph-caret-right"></i>
+                                                                </button>
+                                                            }
+                                                        </td>
+                                                        <td class="clickable" (click)="toggleModel(model.id)">
+                                                            <div class="row-title">
+                                                                <div class="row-headline">
+                                                                    <span class="row-label">{{ model.label }}</span>
+                                                                    @if (isFastest(provider.key, model.key)) {
+                                                                        <span
+                                                                            class="badge badge-warning"
+                                                                            appTooltip
+                                                                            [text]="
+                                                                                'Fastest mean latency in ' +
+                                                                                leaderBasisLabel(provider.key, model.key)
+                                                                            "
+                                                                        >
+                                                                            <i class="ph ph-lightning"></i> Fastest
+                                                                        </span>
+                                                                    }
+                                                                    @if (isMostStable(provider.key, model.key)) {
+                                                                        <span
+                                                                            class="badge badge-success"
+                                                                            appTooltip
+                                                                            [text]="
+                                                                                'Highest success rate in ' +
+                                                                                leaderBasisLabel(provider.key, model.key)
+                                                                            "
+                                                                        >
+                                                                            <i class="ph ph-shield-check"></i> Most stable
+                                                                        </span>
+                                                                    }
+                                                                </div>
+                                                                <div class="row-subtitle-inline" (click)="copyModelKey($event, model.key)">
+                                                                    <span class="row-subtitle row-subtitle--flex">{{ model.key }}</span>
+                                                                    <button
+                                                                        type="button"
+                                                                        class="icon-only transparent-btn xs"
+                                                                        [class.copied]="copiedModelKey() === model.key"
+                                                                        aria-label="Copy model key"
+                                                                        appTooltip
+                                                                        [text]="'Copy key'"
+                                                                    >
+                                                                        <i
+                                                                            [class]="
+                                                                                copiedModelKey() === model.key
+                                                                                    ? 'ph ph-check'
+                                                                                    : 'ph ph-copy'
+                                                                            "
+                                                                        ></i>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td class="col-perf">
+                                                            @if (model.hasTests) {
+                                                                <div class="metric-cell">
+                                                                    <span
+                                                                        class="metric-primary"
+                                                                        [class]="performanceClass(model.successPercentage)"
+                                                                    >
+                                                                        {{ model.successPercentage }}%
+                                                                    </span>
+                                                                    <span class="metric-secondary">
+                                                                        {{ formatLatency(model.latencyAverage) }}
+                                                                    </span>
+                                                                </div>
+                                                            } @else {
+                                                                <span class="metric-empty">No tests yet</span>
+                                                            }
+                                                        </td>
+                                                        <td class="col-test">
+                                                            @if (isAdmin()) {
                                                                 <button
                                                                     type="button"
                                                                     class="icon-only transparent-btn sm"
-                                                                    aria-label="Edit model"
+                                                                    [class.testing]="testingModelId() === model.id"
+                                                                    [disabled]="testingModelId() === model.id"
+                                                                    aria-label="Run test"
                                                                     appTooltip
-                                                                    [text]="'Edit model'"
-                                                                    (click)="openEditModelDialog(provider.id, model)"
+                                                                    [text]="testingModelId() === model.id ? 'Testing...' : 'Test model'"
+                                                                    (click)="testModel(model.id)"
                                                                 >
-                                                                    <i class="ph ph-pencil-simple"></i>
+                                                                    <i
+                                                                        [class]="
+                                                                            testingModelId() === model.id
+                                                                                ? 'ph ph-spinner-gap ph-spin'
+                                                                                : 'ph ph-lightning'
+                                                                        "
+                                                                    ></i>
                                                                 </button>
+                                                            }
+                                                        </td>
+                                                        <td class="col-actions">
+                                                            @if (isAdmin()) {
+                                                                <div class="row-actions">
+                                                                    <p-toggleswitch
+                                                                        [ngModel]="model.active"
+                                                                        (ngModelChange)="setModelActive(provider.id, model, $event)"
+                                                                        [ariaLabel]="model.active ? 'Deactivate model' : 'Activate model'"
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        class="icon-only accent-btn sm"
+                                                                        appTooltip
+                                                                        [text]="
+                                                                            llmProviderStore.defaultModelId() === model.id
+                                                                                ? 'Default model'
+                                                                                : 'Set as default'
+                                                                        "
+                                                                        (click)="setDefaultModel(model)"
+                                                                    >
+                                                                        <i
+                                                                            [class]="
+                                                                                llmProviderStore.defaultModelId() === model.id
+                                                                                    ? 'ph-fill ph-star'
+                                                                                    : 'ph ph-star'
+                                                                            "
+                                                                        ></i>
+                                                                    </button>
 
-                                                                <button
-                                                                    type="button"
-                                                                    class="icon-only danger-btn sm"
-                                                                    aria-label="Delete model permanently"
-                                                                    appTooltip
-                                                                    [text]="'Delete permanently'"
-                                                                    (click)="hardDeleteModel(provider.id, model.id)"
-                                                                >
-                                                                    <i class="ph ph-trash"></i>
-                                                                </button>
-                                                            </div>
-                                                        }
-                                                    </td>
-                                                </tr>
+                                                                    <button
+                                                                        type="button"
+                                                                        class="icon-only transparent-btn sm"
+                                                                        aria-label="Edit model"
+                                                                        appTooltip
+                                                                        [text]="'Edit model'"
+                                                                        (click)="openEditModelDialog(provider.id, model)"
+                                                                    >
+                                                                        <i class="ph ph-pencil-simple"></i>
+                                                                    </button>
 
-                                                @if (model.hasTests && isModelExpanded(model.id)) {
-                                                    <tr class="nested-panel-row">
-                                                        <td colspan="6" class="nested-panel-cell">
-                                                            <table class="inner-table">
-                                                                <thead>
-                                                                    <tr>
-                                                                        <th>Date &amp; time</th>
-                                                                        <th>Legal/Latency</th>
-                                                                        <th>Status</th>
-                                                                        <th>Log output</th>
-                                                                        <th class="col-actions">
-                                                                            @if (isAdmin()) {
-                                                                                <button
-                                                                                    type="button"
-                                                                                    class="icon-only danger-btn sm"
-                                                                                    aria-label="Delete all test results"
-                                                                                    appTooltip
-                                                                                    [text]="'Delete all test results'"
-                                                                                    (click)="
-                                                                                        deleteAllTestResults(
-                                                                                            provider.id,
-                                                                                            model.id,
-                                                                                            model.testResults.length
-                                                                                        )
-                                                                                    "
-                                                                                >
-                                                                                    <i class="ph ph-trash"></i>
-                                                                                </button>
-                                                                            }
-                                                                        </th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    @for (result of model.testResults; track result.id) {
+                                                                    <button
+                                                                        type="button"
+                                                                        class="icon-only danger-btn sm"
+                                                                        aria-label="Delete model permanently"
+                                                                        appTooltip
+                                                                        [text]="'Delete permanently'"
+                                                                        (click)="hardDeleteModel(provider.id, model.id)"
+                                                                    >
+                                                                        <i class="ph ph-trash"></i>
+                                                                    </button>
+                                                                </div>
+                                                            }
+                                                        </td>
+                                                    </tr>
+
+                                                    @if (model.hasTests && isModelExpanded(model.id)) {
+                                                        <tr class="nested-panel-row">
+                                                            <td colspan="6" class="nested-panel-cell">
+                                                                <table class="inner-table">
+                                                                    <thead>
                                                                         <tr>
-                                                                            <td class="col-datetime">
-                                                                                {{ result.createdAt | date: 'dd/MM/yy HH:mm' }}
-                                                                            </td>
-                                                                            <td class="col-code">
-                                                                                {{ formatLatency(result.responseTimeMs) }}
-                                                                            </td>
-                                                                            <td>
-                                                                                <span
-                                                                                    class="status-text"
-                                                                                    [class.ok]="result.status === 'success'"
-                                                                                    [class.err]="result.status !== 'success'"
-                                                                                >
-                                                                                    {{ result.status === 'success' ? 'SUCCESS' : 'ERROR' }}
-                                                                                </span>
-                                                                            </td>
-                                                                            <td
-                                                                                [class.log-ok]="result.status === 'success'"
-                                                                                [class.log-err]="result.status !== 'success'"
-                                                                            >
-                                                                                {{ result.errorMessage || 'OK' }}
-                                                                            </td>
-                                                                            <td class="col-actions">
+                                                                            <th>Date &amp; time</th>
+                                                                            <th>Legal/Latency</th>
+                                                                            <th>Status</th>
+                                                                            <th>Log output</th>
+                                                                            <th class="col-actions">
                                                                                 @if (isAdmin()) {
                                                                                     <button
                                                                                         type="button"
                                                                                         class="icon-only danger-btn sm"
-                                                                                        aria-label="Delete test result"
+                                                                                        aria-label="Delete all test results"
                                                                                         appTooltip
-                                                                                        [text]="'Delete test result'"
+                                                                                        [text]="'Delete all test results'"
                                                                                         (click)="
-                                                                                            deleteTestResult(
+                                                                                            deleteAllTestResults(
                                                                                                 provider.id,
                                                                                                 model.id,
-                                                                                                result.id
+                                                                                                model.testResults.length
                                                                                             )
                                                                                         "
                                                                                     >
                                                                                         <i class="ph ph-trash"></i>
                                                                                     </button>
                                                                                 }
-                                                                            </td>
+                                                                            </th>
                                                                         </tr>
-                                                                    }
-                                                                </tbody>
-                                                            </table>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        @for (result of model.testResults; track result.id) {
+                                                                            <tr>
+                                                                                <td class="col-datetime">
+                                                                                    {{ result.createdAt | date: 'dd/MM/yy HH:mm' }}
+                                                                                </td>
+                                                                                <td class="col-code">
+                                                                                    {{ formatLatency(result.responseTimeMs) }}
+                                                                                </td>
+                                                                                <td>
+                                                                                    <span
+                                                                                        class="status-text"
+                                                                                        [class.ok]="result.status === 'success'"
+                                                                                        [class.err]="result.status !== 'success'"
+                                                                                    >
+                                                                                        {{
+                                                                                            result.status === 'success'
+                                                                                                ? 'SUCCESS'
+                                                                                                : 'ERROR'
+                                                                                        }}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td
+                                                                                    [class.log-ok]="result.status === 'success'"
+                                                                                    [class.log-err]="result.status !== 'success'"
+                                                                                >
+                                                                                    {{ result.errorMessage || 'OK' }}
+                                                                                </td>
+                                                                                <td class="col-actions">
+                                                                                    @if (isAdmin()) {
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            class="icon-only danger-btn sm"
+                                                                                            aria-label="Delete test result"
+                                                                                            appTooltip
+                                                                                            [text]="'Delete test result'"
+                                                                                            (click)="
+                                                                                                deleteTestResult(
+                                                                                                    provider.id,
+                                                                                                    model.id,
+                                                                                                    result.id
+                                                                                                )
+                                                                                            "
+                                                                                        >
+                                                                                            <i class="ph ph-trash"></i>
+                                                                                        </button>
+                                                                                    }
+                                                                                </td>
+                                                                            </tr>
+                                                                        }
+                                                                    </tbody>
+                                                                </table>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </ng-template>
+
+                                                <ng-template #emptymessage>
+                                                    <tr>
+                                                        <td colspan="6" class="empty-cell">
+                                                            <div class="empty-state roomy">
+                                                                <span class="ph ph-cube-simple"></span>
+                                                                <p>No models yet.</p>
+                                                                @if (isAdmin()) {
+                                                                    <button
+                                                                        type="button"
+                                                                        class="primary-btn filled sm"
+                                                                        (click)="openAddModelDialog(provider.id)"
+                                                                    >
+                                                                        <i class="ph ph-plus"></i>
+                                                                        Add Model
+                                                                    </button>
+                                                                }
+                                                            </div>
                                                         </td>
                                                     </tr>
-                                                }
-                                            </ng-template>
-
-                                            <ng-template #emptymessage>
-                                                <tr>
-                                                    <td colspan="6" class="empty-cell">
-                                                        <div class="empty-state roomy">
-                                                            <span class="ph ph-cube-simple"></span>
-                                                            <p>No models yet.</p>
-                                                            @if (isAdmin()) {
-                                                                <button
-                                                                    type="button"
-                                                                    class="primary-btn filled sm"
-                                                                    (click)="openAddModelDialog(provider.id)"
-                                                                >
-                                                                    <i class="ph ph-plus"></i>
-                                                                    Add Model
-                                                                </button>
-                                                            }
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                    </ng-template>
-                </p-table>
-                                    }
+                                                </ng-template>
+                                            </p-table>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </ng-template>
+                        <ng-template #emptymessage>
+                            <tr>
+                                <td colspan="5">
+                                    <div class="page-state table-empty-state">
+                                        <span class="icon ph ph-magnifying-glass-minus"></span>
+                                        <h4 class="title">No providers found.</h4>
+                                        <p class="subtitle">Try a different search term or clear the state filter.</p>
+                                    </div>
                                 </td>
                             </tr>
-                        }
-                    </ng-template>
-                    <ng-template #emptymessage>
-                        <tr>
-                            <td colspan="5">
-                                <div class="page-state table-empty-state">
-                                    <span class="icon ph ph-magnifying-glass-minus"></span>
-                                    <h4 class="title">No providers found.</h4>
-                                    <p class="subtitle">Try a different search term or clear the state filter.</p>
-                                </div>
-                            </td>
-                        </tr>
-                    </ng-template>
-                </p-table>
-            </div>
+                        </ng-template>
+                    </p-table>
+                </div>
+            }
         }
-    }
     }
 </div>
 

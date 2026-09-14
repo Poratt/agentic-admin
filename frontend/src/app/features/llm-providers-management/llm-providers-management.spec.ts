@@ -9,6 +9,15 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import { UserRole } from '../../core/enums/user-role.enum';
 import { PageStates } from '../../core/enums/page-states.enum';
 
+// PrimeNG tablist observes element sizes; the unit-test DOM has no ResizeObserver.
+if (typeof (globalThis as any).ResizeObserver === 'undefined') {
+    (globalThis as any).ResizeObserver = class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    };
+}
+
 describe('LlmProvidersManagement', () => {
     let component: LlmProvidersManagement;
     let fixture: ComponentFixture<LlmProvidersManagement>;
@@ -749,10 +758,10 @@ describe('LlmProvidersManagement', () => {
             component = fixture.componentInstance;
             fixture.detectChanges();
 
-            // Selects the real buttons inside the elevated segmented control, so a renamed wrapper
-            // or a dropped variant fails here rather than silently passing.
+            // Selects the real tabs inside the PrimeNG view switch, so a renamed wrapper
+            // or a dropped tab fails here rather than silently passing.
             const toggleButtons = Array.from(
-                fixture.nativeElement.querySelectorAll('.toolbar-row .toggle-group.elevated .toggle-btn'),
+                fixture.nativeElement.querySelectorAll('.toolbar-row p-tabs p-tab'),
             ) as HTMLButtonElement[];
             expect(toggleButtons.length).toBe(2);
 
