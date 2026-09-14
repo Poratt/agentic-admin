@@ -94,7 +94,7 @@
         display: inline-flex;
         align-items: center;
         gap: var(--space-5);
-        width: 220px;
+        min-width: 220px;
         height: 16px;
         flex-grow: 1;
         cursor: pointer;

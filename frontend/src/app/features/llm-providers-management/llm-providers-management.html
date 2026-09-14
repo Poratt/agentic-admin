@@ -857,7 +857,7 @@
     [closable]="!syncing()"
     [dismissableMask]="!syncing()"
     [style]="{ width: '680px', maxWidth: '94vw' }"
-    [draggable]="false"
+    [draggable]="true"
     [resizable]="false"
 >
     <ng-template #header>
@@ -917,16 +917,13 @@
                                     <p-checkbox
                                         [binary]="true"
                                         [inputId]="'sync-model-cb-' + g + '-' + i"
-                                        [ngModel]="isKeySelected(m.key)"
+                                        [ngModel]="m.status === 'exists' || isKeySelected(m.key)"
                                         (ngModelChange)="toggleCatalogKey(m.key, $event)"
                                         [disabled]="m.status === 'exists'"
                                     />
                                     <label class="sync-model-key" [for]="'sync-model-cb-' + g + '-' + i" appTooltip [text]="m.key">{{
                                         shortModelName(m.key)
                                     }}</label>
-                                    @if (m.status === 'exists') {
-                                        <span class="sync-tag tag-exists">Exists</span>
-                                    }
                                 </div>
                             }
                         </div>

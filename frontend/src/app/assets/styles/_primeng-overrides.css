@@ -711,10 +711,6 @@ li.p-select-option {
     white-space: nowrap;
 }
 
-.tag-exists {
-    color: var(--color-text-muted);
-}
-
 .sync-unavailable-section {
     margin-top: var(--space-3);
 }
