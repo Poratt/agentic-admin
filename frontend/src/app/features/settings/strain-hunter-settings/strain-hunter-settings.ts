@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, Injector, inject, OnInit, OnDestroy, signal, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { InputTextModule } from 'primeng/inputtext';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
@@ -23,7 +24,7 @@ import { UserRole } from '../../../core/enums/user-role.enum';
 @Component({
     selector: 'app-strain-hunter-settings',
     standalone: true,
-    imports: [CommonModule, FormsModule, TableModule, Tabs, TabList, Tab, TabPanels, TabPanel, ToastModule, TooltipDirective],
+    imports: [CommonModule, FormsModule, InputTextModule, TableModule, Tabs, TabList, Tab, TabPanels, TabPanel, ToastModule, TooltipDirective],
     templateUrl: './strain-hunter-settings.html',
     styleUrls: ['./strain-hunter-settings.css'],
     changeDetection: ChangeDetectionStrategy.Eager,
