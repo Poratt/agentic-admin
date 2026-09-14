@@ -86,7 +86,7 @@
         }
         <form (ngSubmit)="onSubmit()">
             <div class="composer-field">
-                <div class="media-mode-toggle" [class.video-active]="activeTab() === 'video'">
+                <div class="mode-toggle" [class.second-active]="activeTab() === 'video'">
                     <button type="button" [class.active]="activeTab() === 'image'" (click)="setActiveTab('image')" appTooltip text="תמונה">
                         <span class="ph ph-image"></span>
                     </button>

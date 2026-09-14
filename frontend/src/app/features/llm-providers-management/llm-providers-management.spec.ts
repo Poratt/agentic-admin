@@ -777,24 +777,20 @@ describe('LlmProvidersManagement', () => {
             // Selects the real tabs inside the PrimeNG view switch, so a renamed wrapper
             // or a dropped tab fails here rather than silently passing.
             const toggleButtons = Array.from(
-                fixture.nativeElement.querySelectorAll('.toolbar-row p-tabs p-tab'),
+                fixture.nativeElement.querySelectorAll('p-tabs p-tab'),
             ) as HTMLButtonElement[];
             expect(toggleButtons.length).toBe(2);
 
-            // Providers view: search, the state filter and the table caption all share the page.
-            expect(fixture.nativeElement.querySelector('.toolbar-search')).not.toBeNull();
-            expect(fixture.nativeElement.querySelector('p-select')).not.toBeNull();
-            // The toolbar lives in a dir="ltr" island on an RTL page while PrimeNG positions
-            // body-appended overlays with logical inset-inline-* — appending to body mirrors
-            // the panel to the wrong side, so the filter must stay appended in place.
-            expect(fixture.nativeElement.querySelector('p-select').getAttribute('appendTo')).toBe('self');
-            expect(fixture.nativeElement.querySelector('.table-caption')).not.toBeNull();
+            // Providers view: search, the state filter and the summary row all share the page.
+            expect(fixture.nativeElement.querySelector('.toolbar-row .form-field-has-icon')).not.toBeNull();
+            expect(fixture.nativeElement.querySelector('.caption-row .mode-toggle')).not.toBeNull();
+            expect(fixture.nativeElement.querySelector('.summary-row')).not.toBeNull();
 
             // Empty filtered table renders the in-table empty state (same pattern as strain-hunter).
             // Live-verified with a real search (screenshot); TestBed doesn't run PrimeNG's
             // internal filter pass, so this asserts the wiring the component owns: the search
             // input drives applyGlobalFilter, which arms the table's global filter.
-            const searchInput = fixture.nativeElement.querySelector('.toolbar-search input') as HTMLInputElement;
+            const searchInput = fixture.nativeElement.querySelector('.toolbar-row .form-field-has-icon input') as HTMLInputElement;
             searchInput.value = 'zzz-no-such-provider';
             searchInput.dispatchEvent(new Event('input'));
             fixture.detectChanges();
@@ -811,7 +807,7 @@ describe('LlmProvidersManagement', () => {
 
             const captionRow = fixture.nativeElement.querySelector('.caption-row') as HTMLElement;
             expect(captionRow).not.toBeNull();
-            expect(captionRow.querySelector('.table-caption')).not.toBeNull();
+            expect(captionRow.querySelector('.mode-toggle')).not.toBeNull();
             expect(captionRow.querySelector('.caption-tags')).not.toBeNull();
             expect(captionRow.querySelector('.badge-warning')?.textContent).toContain('Fast');
             expect(captionRow.querySelector('.badge-success')?.textContent).toContain('Slow');
@@ -825,21 +821,41 @@ describe('LlmProvidersManagement', () => {
             fixture.detectChanges();
 
             expect(component.activeTab()).toBe('stats');
-            expect(fixture.nativeElement.querySelector('.toolbar-search')).toBeNull();
-            expect(fixture.nativeElement.querySelector('p-select')).toBeNull();
-            expect(fixture.nativeElement.querySelector('.table-caption')).toBeNull();
+            expect(fixture.nativeElement.querySelector('.toolbar-row .form-field-has-icon')).toBeNull();
+            expect(fixture.nativeElement.querySelector('.caption-row .mode-toggle')).toBeNull();
             expect(fixture.nativeElement.querySelector('.stats-panel')).not.toBeNull();
 
             toggleButtons[0].click();
             fixture.detectChanges();
 
             expect(component.activeTab()).toBe('providers');
-            expect(fixture.nativeElement.querySelector('.toolbar-search')).not.toBeNull();
-            expect(fixture.nativeElement.querySelector('p-select')).not.toBeNull();
+            expect(fixture.nativeElement.querySelector('.toolbar-row .form-field-has-icon')).not.toBeNull();
+            expect(fixture.nativeElement.querySelector('.caption-row .mode-toggle')).not.toBeNull();
             expect(fixture.nativeElement.querySelector('.stats-panel')).toBeNull();
         });
 
-        it('captions the table with the provider count', () => {
+        it('switches the inactive filter from the mode toggle', () => {
+            mockProviderStore.pageState.mockReturnValue(PageStates.Ready);
+            fixture.destroy();
+            fixture = TestBed.createComponent(LlmProvidersManagement);
+            component = fixture.componentInstance;
+            fixture.detectChanges();
+
+            const buttons = Array.from(
+                fixture.nativeElement.querySelectorAll('.caption-row .mode-toggle button'),
+            ) as HTMLButtonElement[];
+            expect(buttons.length).toBe(2);
+
+            buttons[1].click();
+            fixture.detectChanges();
+
+            expect(component.showInactive()).toBe(true);
+            expect(
+                fixture.nativeElement.querySelector('.caption-row .mode-toggle'),
+            ).not.toBeNull();
+        });
+
+        it('shows the provider count in the summary row', () => {
             mockProviderStore.pageState.mockReturnValue(PageStates.Ready);
             fixture.destroy();
             fixture = TestBed.createComponent(LlmProvidersManagement);
@@ -847,9 +863,11 @@ describe('LlmProvidersManagement', () => {
             fixture.detectChanges();
 
             const count = component.llmProviders().length;
-            const caption = fixture.nativeElement.querySelector('.table-caption') as HTMLElement;
+            const value = fixture.nativeElement.querySelector('.summary-row .summary-value') as HTMLElement;
+            const label = fixture.nativeElement.querySelector('.summary-row .summary-label') as HTMLElement;
 
-            expect((caption?.textContent ?? '').trim()).toBe(`${count} ${count === 1 ? 'provider' : 'providers'}`);
+            expect((value?.textContent ?? '').trim()).toBe(`${count}`);
+            expect((label?.textContent ?? '').trim()).toBe('ספקים');
         });
 
         it('falls back to the raw key when a model is no longer configured', () => {

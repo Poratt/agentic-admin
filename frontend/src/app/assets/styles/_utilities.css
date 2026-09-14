@@ -466,6 +466,12 @@
       justify-content: space-between;
       gap: var(--space-4);
       flex-wrap: wrap;
+
+      /* A tab switch in the row spans it like the genetics/terpenes tablist bar. */
+      >p-tabs {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
     }
 
     /* Scoped to this variant on purpose — the base .toolbar-search sizing is shared with the
@@ -502,15 +508,6 @@
   }
 }
 
-/* --- Table Caption --- */
-/* Small muted line above a table card: result counts, "showing N of M" and similar. Sits on the
-   same left edge as the card so the toolbar and the table read as one column. */
-.table-caption {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-}
-
 /* --- Empty State (single source of truth) ---
    Canonical compact empty block for in-card / in-table placeholders (icon + line or two).
    The `:not(.page-state)` guard keeps `page-state empty-state` compositions on the page-state
@@ -525,12 +522,13 @@
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
 
-  > .ph {
+  >.ph {
     font-size: var(--font-size-xl);
   }
 }
 
 .empty-state {
+
   /* A bare <p> would otherwise take the global `p` type (md/secondary) instead of
      inheriting the container's muted/sm like the <span> texts do. */
   p {
@@ -543,7 +541,7 @@
     padding: var(--space-16) var(--space-8);
     text-align: center;
 
-    > .ph {
+    >.ph {
       font-size: 2rem;
       color: var(--color-text-muted);
       opacity: 0.5;
@@ -566,14 +564,12 @@
 
   .summary-item {
     display: inline-flex;
-    align-items: baseline;
+    align-items: center;
     gap: var(--space-2);
 
     .ph {
       font-size: var(--font-size-sm);
       color: var(--color-primary);
-      /* Keep icon visually centered relative to baseline text */
-      transform: translateY(1px);
     }
 
     .summary-label {
@@ -837,6 +833,75 @@
 /* --- Generic Table Column Utilities --- */
 .col-expand {
   width: 32px;
+}
+
+/* --- Mode toggle (sliding segmented switch) ---
+   Two-option pill with a sliding indicator (::before covers the active half).
+   Both options share equal width (flex: 1), so the 50% indicator always aligns —
+   icon-only or short text labels alike. `.second-active` slides it to option two. */
+.mode-toggle {
+  position: relative;
+  z-index: 0;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 1px;
+  padding: 1px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  direction: ltr;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 1px;
+    bottom: 1px;
+    left: 1px;
+    width: calc(50% - 1px);
+    background: var(--color-primary);
+    border-radius: var(--radius-pill);
+    transition: left 220ms cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 0;
+  }
+
+  &.second-active::before {
+    left: 50%;
+  }
+
+  button {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    padding: 2px var(--space-4);
+    border: 0;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xxs);
+    white-space: nowrap;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition: color 220ms ease, transform 160ms ease-out;
+
+    .ph {
+      font-size: var(--font-size-xs);
+    }
+
+    &:hover {
+      color: var(--color-text-primary);
+    }
+
+    &:active {
+      transform: scale(0.97);
+    }
+
+    &.active {
+      color: var(--color-bg);
+    }
+  }
 }
 
 /* --- Generic Tag List --- */

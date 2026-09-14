@@ -10,7 +10,6 @@ import { Table, TableModule } from 'primeng/table';
 import { DialogModule } from 'primeng/dialog';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { CheckboxModule } from 'primeng/checkbox';
-import { SelectModule } from 'primeng/select';
 import { Tabs, TabList, Tab } from 'primeng/tabs';
 import { Confirmation, ConfirmationService, MessageService } from 'primeng/api';
 import { AuthStore } from '../../core/store/auth.store';
@@ -63,7 +62,6 @@ const COPY_FEEDBACK_MS = 5000;
         DialogModule,
         ToggleSwitchModule,
         CheckboxModule,
-        SelectModule,
         Tabs,
         TabList,
         Tab,
@@ -87,13 +85,6 @@ export class LlmProvidersManagement implements OnInit {
     globalFilter = signal('');
     // Deactivated providers are hidden by default; admins can reveal them to re-activate.
     showInactive = signal(false);
-
-    // Drives the toolbar's filter dropdown. The values are the `showInactive` flag itself, so the
-    // select binds straight to the existing signal and `toggleShowInactive` needs no extra state.
-    protected readonly activeFilterOptions = [
-        { label: 'Active only', value: false },
-        { label: 'All providers', value: true },
-    ];
 
     ngOnInit(): void {
         this.llmProviderStore.loadUserDefaultModel();
