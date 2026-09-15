@@ -10,6 +10,7 @@ import {
     ChangeDetectionStrategy,
     effect,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -21,6 +22,8 @@ import { AutoScrollBottomDirective } from '../../../core/directives/auto-scroll-
 import { ChatMessage, ChatMessageActionEvent, ChatMessageStreamState } from '../chat-message/chat-message';
 import { UsersStore } from '../../../core/store/users.store';
 import { Select } from 'primeng/select';
+import { TieredMenu } from 'primeng/tieredmenu';
+import { MenuItem } from 'primeng/api';
 import { LlmProviderStore } from '../../../core/store/llm-provider.store';
 import { ChatService } from '../../../core/services/chat.service';
 import { LlmProviderService } from '../../../core/services/llm-provider.service';
@@ -28,7 +31,7 @@ import { LlmProviderService } from '../../../core/services/llm-provider.service'
 @Component({
     selector: 'app-chat',
     standalone: true,
-    imports: [CommonModule, ReactiveFormsModule, AutoScrollBottomDirective, ChatMessage, Select],
+    imports: [CommonModule, ReactiveFormsModule, AutoScrollBottomDirective, ChatMessage, Select, TieredMenu],
     templateUrl: './chat.html',
     changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './chat.css',
@@ -63,7 +66,7 @@ export class Chat implements OnInit, OnDestroy {
 
                 if (userDefaultId != null) {
                     for (const group of groups) {
-                        const match = group.items?.find(m => m.id === userDefaultId);
+                        const match = group.items?.find((m) => m.id === userDefaultId);
                         if (match) {
                             modelToSelect = match;
                             break;
@@ -82,7 +85,6 @@ export class Chat implements OnInit, OnDestroy {
         });
     }
 
-
     messages = signal<IChatMessage[]>([]);
     loading = signal<boolean>(false);
     historyLoading = signal<boolean>(false);
@@ -95,12 +97,37 @@ export class Chat implements OnInit, OnDestroy {
     selectedImageBase64 = signal<string | null>(null);
     selectedImagePreview = signal<string | null>(null);
 
-    pendingConfirmation = signal<{ actionId: string; action: string; target: string; metadata?: Record<string, any> } | null>(null);
+    pendingConfirmation = signal<{
+        actionId: string;
+        action: string;
+        target: string;
+        metadata?: Record<string, any>;
+    } | null>(null);
 
     currentUserProfile = this.userStore.currentUserProfile;
 
     // 🚀 Here we pull only text-capable (chat) models from the store 🚀
     models = this.llmProviderStore.chatModels;
+
+    selectedModel = computed(() => {
+        const id = this.selectedModelId();
+        if (!id) return null;
+        for (const provider of this.models()) {
+            const found = provider.items.find((m) => m.id === id);
+            if (found) return found;
+        }
+        return null;
+    });
+
+    modelMenuItems = computed<MenuItem[]>(() => {
+        return this.models().map((provider) => ({
+            label: provider.label,
+            items: provider.items.map((model) => ({
+                label: model.label,
+                command: () => this.chatForm?.patchValue({ model: model.id }),
+            })),
+        }));
+    });
 
     promptText = signal('');
 
@@ -113,6 +140,12 @@ export class Chat implements OnInit, OnDestroy {
     chatForm: FormGroup = this.fb.group({
         prompt: ['', []],
         model: ['', []],
+    });
+
+    // Reactive mirror of the model control: reading `.value` directly inside a
+    // computed creates no dependency, so the picker label froze at its first read.
+    private readonly selectedModelId = toSignal(this.chatForm.get('model')!.valueChanges, {
+        initialValue: this.chatForm.get('model')!.value as number | null,
     });
 
     private routeSub?: Subscription;
@@ -263,7 +296,9 @@ export class Chat implements OnInit, OnDestroy {
         this.chatService.getMessageImages(strippedIds).subscribe({
             next: (imageMap) => {
                 this.messages.update((msgs) =>
-                    msgs.map((m) => (m.id && imageMap[m.id] !== undefined ? { ...m, imageUrl: imageMap[m.id] ?? undefined } : m)),
+                    msgs.map((m) =>
+                        m.id && imageMap[m.id] !== undefined ? { ...m, imageUrl: imageMap[m.id] ?? undefined } : m,
+                    ),
                 );
                 this.hasMoreImages.set(false);
             },
@@ -293,13 +328,25 @@ export class Chat implements OnInit, OnDestroy {
 
         const currentId = this.chatStore.currentSessionId();
         if (currentId) {
-            this.sendPromptToSession(promptValue, currentId, modelSelection, capturedImage, capturedPreview ?? undefined);
+            this.sendPromptToSession(
+                promptValue,
+                currentId,
+                modelSelection,
+                capturedImage,
+                capturedPreview ?? undefined,
+            );
             return;
         }
 
         this.chatStore.createSessionForMessage(false).subscribe({
             next: (session) => {
-                this.sendPromptToSession(promptValue, session.id, modelSelection, capturedImage, capturedPreview ?? undefined);
+                this.sendPromptToSession(
+                    promptValue,
+                    session.id,
+                    modelSelection,
+                    capturedImage,
+                    capturedPreview ?? undefined,
+                );
             },
             error: () => {
                 this.loading.set(false);
@@ -307,7 +354,13 @@ export class Chat implements OnInit, OnDestroy {
         });
     }
 
-    private sendPromptToSession(promptValue: string, sessionId: number, modelSelection?: ChatModelSelection, image?: string, imagePreview?: string) {
+    private sendPromptToSession(
+        promptValue: string,
+        sessionId: number,
+        modelSelection?: ChatModelSelection,
+        image?: string,
+        imagePreview?: string,
+    ) {
         this.cancelActiveStream();
         this.actionError.set(null);
 
@@ -334,101 +387,103 @@ export class Chat implements OnInit, OnDestroy {
         const isFirstMessage = this.messages().length <= 2;
         const streamStartTime = Date.now();
 
-        this.activeStreamSub = this.chatService.sendMessageStream(promptValue, sessionId, modelSelection, image).subscribe({
-            next: (event) => {
-                if (event.type === 'confirmation' && event.action && event.target) {
-                    this.pendingConfirmation.set({
-                        actionId: event.actionId,
-                        action: event.action,
-                        target: event.target,
-                        metadata: event.metadata,
-                    });
-                    return;
-                }
+        this.activeStreamSub = this.chatService
+            .sendMessageStream(promptValue, sessionId, modelSelection, image)
+            .subscribe({
+                next: (event) => {
+                    if (event.type === 'confirmation' && event.action && event.target) {
+                        this.pendingConfirmation.set({
+                            actionId: event.actionId,
+                            action: event.action,
+                            target: event.target,
+                            metadata: event.metadata,
+                        });
+                        return;
+                    }
 
-                if (event.type === 'render' && event.component && event.data) {
+                    if (event.type === 'render' && event.component && event.data) {
+                        this.messages.update((prev) => {
+                            const updated = [...prev];
+                            const current = updated[assistantIndex];
+                            if (!current) return prev;
+                            const blocks = current.renderBlocks ?? [];
+                            updated[assistantIndex] = {
+                                ...current,
+                                renderBlocks: [...blocks, { component: event.component, data: event.data }],
+                            };
+                            return updated;
+                        });
+                        return;
+                    }
+
+                    if (event.type === 'step' && event.message && event.icon) {
+                        this.messages.update((prev) => {
+                            const updated = [...prev];
+                            const current = updated[assistantIndex];
+                            if (!current) return prev;
+
+                            const currentSteps = current.steps || [];
+
+                            updated[assistantIndex] = {
+                                ...current,
+                                steps: [...currentSteps, { icon: event.icon, message: event.message }],
+                            };
+
+                            return updated;
+                        });
+                        return;
+                    }
+
+                    if (event.type === 'token' && event.content) {
+                        this.pendingTokenBuffer.push(event.content);
+                        this.pendingAssistantIndex = assistantIndex;
+                        this.scheduleTokenFlush();
+                    }
+                },
+                error: (err) => {
+                    this.activeStreamSub = undefined;
+                    this.flushPendingTokens();
+                    this.loading.set(false);
+                    this.activeStreamState.set('errored');
+                    const errorDetail = err?.message ? ` (${err.message})` : '';
                     this.messages.update((prev) => {
                         const updated = [...prev];
                         const current = updated[assistantIndex];
                         if (!current) return prev;
-                        const blocks = current.renderBlocks ?? [];
+
                         updated[assistantIndex] = {
                             ...current,
-                            renderBlocks: [...blocks, { component: event.component, data: event.data }],
+                            content: `[שגיאה בקבלת תגובה מהשרת${errorDetail}. נא לנסות שוב]`,
                         };
+
                         return updated;
                     });
-                    return;
-                }
+                },
+                complete: () => {
+                    this.activeStreamSub = undefined;
+                    this.flushPendingTokens();
+                    this.loading.set(false);
+                    this.activeStreamState.set('completed');
 
-                if (event.type === 'step' && event.message && event.icon) {
+                    const responseTimeMs = Date.now() - streamStartTime;
                     this.messages.update((prev) => {
                         const updated = [...prev];
                         const current = updated[assistantIndex];
                         if (!current) return prev;
-
-                        const currentSteps = current.steps || [];
-
-                        updated[assistantIndex] = {
-                            ...current,
-                            steps: [...currentSteps, { icon: event.icon, message: event.message }],
-                        };
-
+                        updated[assistantIndex] = { ...current, responseTimeMs };
                         return updated;
                     });
-                    return;
-                }
 
-                if (event.type === 'token' && event.content) {
-                    this.pendingTokenBuffer.push(event.content);
-                    this.pendingAssistantIndex = assistantIndex;
-                    this.scheduleTokenFlush();
-                }
-            },
-            error: (err) => {
-                this.activeStreamSub = undefined;
-                this.flushPendingTokens();
-                this.loading.set(false);
-                this.activeStreamState.set('errored');
-                const errorDetail = err?.message ? ` (${err.message})` : '';
-                this.messages.update((prev) => {
-                    const updated = [...prev];
-                    const current = updated[assistantIndex];
-                    if (!current) return prev;
+                    const currentSession = this.chatStore.sessions().find((s) => {
+                        return s.id === sessionId;
+                    });
 
-                    updated[assistantIndex] = {
-                        ...current,
-                        content: `[שגיאה בקבלת תגובה מהשרת${errorDetail}. נא לנסות שוב]`,
-                    };
+                    // Always reload session list so recent-activity sorting updates
+                    this.chatStore.reload();
 
-                    return updated;
-                });
-            },
-            complete: () => {
-                this.activeStreamSub = undefined;
-                this.flushPendingTokens();
-                this.loading.set(false);
-                this.activeStreamState.set('completed');
-
-                const responseTimeMs = Date.now() - streamStartTime;
-                this.messages.update((prev) => {
-                    const updated = [...prev];
-                    const current = updated[assistantIndex];
-                    if (!current) return prev;
-                    updated[assistantIndex] = { ...current, responseTimeMs };
-                    return updated;
-                });
-
-                const currentSession = this.chatStore.sessions().find((s) => {
-                    return s.id === sessionId;
-                });
-
-                // Always reload session list so recent-activity sorting updates
-                this.chatStore.reload();
-
-                this.router.navigate(['/chat'], { queryParams: { sessionId }, replaceUrl: true });
-            },
-        });
+                    this.router.navigate(['/chat'], { queryParams: { sessionId }, replaceUrl: true });
+                },
+            });
     }
 
     onPromptInput(event: Event): void {
@@ -597,7 +652,7 @@ export class Chat implements OnInit, OnDestroy {
                     content: errorMessage,
                 };
                 this.messages.update((prev) => [...prev, assistantMsg]);
-            }
+            },
         });
     }
 
@@ -614,9 +669,6 @@ export class Chat implements OnInit, OnDestroy {
             trigger?.blur();
         });
     }
-
-
-
 
     private editMessage(message: IChatMessage): void {
         if (message.role !== 'user') return;
@@ -652,19 +704,18 @@ export class Chat implements OnInit, OnDestroy {
         }
 
         for (const provider of this.llmProviderStore.providers()) {
-            const model = provider.models?.find(m => m.id === selectedModelId);
+            const model = provider.models?.find((m) => m.id === selectedModelId);
 
             if (model) {
                 return {
                     provider: provider.key,
-                    model: model.key
+                    model: model.key,
                 };
             }
         }
 
         return undefined;
     }
-
 
     stopStreaming(): void {
         if (!this.activeStreamSub) {

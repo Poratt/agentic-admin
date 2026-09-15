@@ -50,6 +50,20 @@ describe('Chat', () => {
     const mockLlmProviderService = {};
 
     beforeEach(async () => {
+        Object.defineProperty(window, 'matchMedia', {
+            writable: true,
+            value: vi.fn().mockImplementation((query: string) => ({
+                matches: false,
+                media: query,
+                onchange: null,
+                addListener: vi.fn(),
+                removeListener: vi.fn(),
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+                dispatchEvent: vi.fn(),
+            })),
+        });
+
         await TestBed.configureTestingModule({
             imports: [Chat, ReactiveFormsModule],
             providers: [
@@ -71,6 +85,29 @@ describe('Chat', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    describe('model picker', () => {
+        beforeEach(() => {
+            mockLlmProviderStore.chatModels.mockReturnValue([
+                { label: 'P1', items: [{ id: 7, label: 'M7', capability: 'text' }] },
+            ] as any);
+        });
+
+        it('resolves the selected model from the form value', () => {
+            component.chatForm.patchValue({ model: 7 });
+
+            expect(component.chatForm.get('model')?.value).toBe(7);
+            expect(component.models().length).toBe(1);
+            expect(component.selectedModel()?.label).toBe('M7');
+        });
+
+        it('tiered-menu command updates the displayed model', () => {
+            const cmd = component.modelMenuItems()[0].items![0].command;
+            cmd!({} as any);
+
+            expect(component.selectedModel()?.label).toBe('M7');
+        });
     });
 
     describe('canSend', () => {
@@ -261,9 +298,7 @@ describe('Chat', () => {
     describe('onPaste', () => {
         it('should process image from clipboard', () => {
             const file = new File(['x'], 'paste.png', { type: 'image/png' });
-            const items = [
-                { type: 'image/png', getAsFile: () => file },
-            ];
+            const items = [{ type: 'image/png', getAsFile: () => file }];
             const event = {
                 clipboardData: { items },
                 preventDefault: vi.fn(),
