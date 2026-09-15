@@ -362,6 +362,18 @@ button.star-btn {
   padding: var(--space-1);
 }
 
+/* 4d-ii. Toggle Group — bare variant.
+   No track / padding / border, just spaced buttons in a row. Use when the parent
+   field already supplies framing (e.g. a dialog form-field) and the segmented
+   look would add noise. */
+.toggle-group.bare {
+  gap: var(--space-10);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+}
+
 .toggle-btn {
   display: inline-flex;
   align-items: center;

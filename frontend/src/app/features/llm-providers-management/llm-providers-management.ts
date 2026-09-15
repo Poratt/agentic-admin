@@ -236,8 +236,19 @@ export class LlmProvidersManagement implements OnInit {
     modelForm: FormGroup = this.fb.group({
         key: ['', [Validators.required, Validators.pattern(/^\S+$/)]],
         label: ['', [Validators.required]],
+        capability: ['text', [Validators.required]],
         active: [true],
     });
+
+    readonly capabilityOptions: ReadonlyArray<{ label: string; value: 'text' | 'image' | 'video' }> = [
+        { label: 'Text', value: 'text' },
+        { label: 'Image', value: 'image' },
+        { label: 'Video', value: 'video' },
+    ];
+
+    setCapability(value: 'text' | 'image' | 'video'): void {
+        this.modelForm.get('capability')?.setValue(value);
+    }
 
     editingProviderId = signal<number | null>(null);
     editingModelProviderId = signal<number | null>(null);
@@ -637,7 +648,7 @@ export class LlmProvidersManagement implements OnInit {
     // ── Model dialog ─────────────────────────────────────────────────
 
     openAddModelDialog(providerId: number) {
-        this.modelForm.reset({ key: '', label: '', active: true });
+        this.modelForm.reset({ key: '', label: '', capability: 'text', active: true });
         this.editingModelProviderId.set(providerId);
         this.editingModelId.set(null);
         this.modelDialogVisible.set(true);
@@ -772,6 +783,7 @@ export class LlmProvidersManagement implements OnInit {
         this.modelForm.patchValue({
             key: model.key,
             label: model.label,
+            capability: model.capability,
             active: model.active,
         });
         this.editingModelProviderId.set(providerId);

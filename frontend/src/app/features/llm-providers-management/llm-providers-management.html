@@ -827,6 +827,25 @@
             }
         </div>
 
+        <div class="form-field">
+            <label>Capability <span class="required">*</span></label>
+            <div class="toggle-group bare" role="radiogroup" aria-label="Capability">
+                @for (option of capabilityOptions; track option.value) {
+                    <button
+                        type="button"
+                        class="toggle-btn"
+                        role="radio"
+                        [class.active]="modelForm.get('capability')?.value === option.value"
+                        [attr.aria-checked]="modelForm.get('capability')?.value === option.value"
+                        (click)="setCapability(option.value)"
+                    >
+                        {{ option.label }}
+                    </button>
+                }
+            </div>
+            <span class="field-hint">What this model is used for (text chat, image, or video generation).</span>
+        </div>
+
         <div class="form-field form-field-switch">
             <label for="model-active">Active</label>
             <p-toggleswitch formControlName="active" inputId="model-active" />
