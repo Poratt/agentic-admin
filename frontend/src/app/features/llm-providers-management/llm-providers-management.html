@@ -53,16 +53,12 @@
     <!-- Caption row: state filter + leaderboard tags, providers view only. -->
     <div class="" dir="ltr">
         @if (activeTab() === 'providers' && pageState() === PageStates.Ready) {
-                <div class="caption-row">
-                    <div class="mode-toggle" [class.second-active]="showInactive()">
-                        <button type="button" [class.active]="!showInactive()" (click)="toggleShowInactive(false)">
-                            פעילים בלבד
-                        </button>
-                        <button type="button" [class.active]="showInactive()" (click)="toggleShowInactive(true)">
-                            כל הספקים
-                        </button>
-                    </div>
-                    <div class="caption-tags">
+            <div class="caption-row">
+                <div class="mode-toggle" [class.second-active]="showInactive()">
+                    <button type="button" [class.active]="!showInactive()" (click)="toggleShowInactive(false)">פעילים בלבד</button>
+                    <button type="button" [class.active]="showInactive()" (click)="toggleShowInactive(true)">כל הספקים</button>
+                </div>
+                <div class="caption-tags">
                     @if (fastestStatsRow(); as fastest) {
                         <span
                             class="badge badge-warning badge-detailed"
@@ -588,7 +584,7 @@
                                                                         <th>Legal/Latency</th>
                                                                         <th>Status</th>
                                                                         <th>Log output</th>
-                                                                        <th class="col-actions">
+                                                                        <th class="col-actions col-actions-end">
                                                                             @if (isAdmin()) {
                                                                                 <button
                                                                                     type="button"
@@ -634,7 +630,7 @@
                                                                             >
                                                                                 {{ result.errorMessage || 'OK' }}
                                                                             </td>
-                                                                            <td class="col-actions">
+                                                                            <td class="col-actions col-actions-end">
                                                                                 @if (isAdmin()) {
                                                                                     <button
                                                                                         type="button"

@@ -308,6 +308,9 @@ export class LlmProvidersManagement implements OnInit {
         const rows = this.llmProviderStore.modelStats()?.rows ?? [];
 
         return [...rows].sort((a, b) => {
+            // Orphaned history (model no longer configured) always sinks to the bottom.
+            if (!a.label && b.label) return 1;
+            if (a.label && !b.label) return -1;
             if (a.real && !b.real) return -1;
             if (!a.real && b.real) return 1;
             if (a.real && b.real && a.real.avgMs !== b.real.avgMs) return a.real.avgMs - b.real.avgMs;

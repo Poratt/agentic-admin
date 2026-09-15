@@ -724,6 +724,19 @@ describe('LlmProvidersManagement', () => {
             ]);
         });
 
+        it('sinks rows with no label (no longer configured) below everything else', () => {
+            mockProviderStore.modelStats.mockReturnValue({
+                ...statsData,
+                rows: [
+                    { ...statsData.rows[0], label: null },
+                    ...statsData.rows.slice(1),
+                ],
+            });
+
+            const ids = component.statsRows().map((row) => row.id);
+            expect(ids[ids.length - 1]).toBe('openrouter::slow-model');
+        });
+
         it('flags the fastest and most stable models from the backend leaderboard', () => {
             mockProviderStore.modelStats.mockReturnValue(statsData);
 
@@ -876,7 +889,9 @@ describe('LlmProvidersManagement', () => {
                 rows: [{ ...statsData.rows[2], label: null }],
             });
 
-            expect(component.statsLabel(component.statsRows()[0])).toBe('unused-model');
+            expect(component.statsLabel(component.statsRows().find((row) => row.id === 'openrouter::unused-model')!)).toBe(
+                'unused-model',
+            );
         });
 
         it('writes ?view= to the URL when the view changes', () => {
