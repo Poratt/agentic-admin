@@ -9,7 +9,7 @@ Last updated: 2026-09-15
 - **Dialogs:** `[draggable]="true"` on providers / model / strain-hunter image+compare dialogs.
 - **Cleanup (this session):** removed the swap's orphans — unused `NgZone` import + inject, unused `@ViewChild('menu') modelMenu`, dead `setDefaultModel(event, model)`, and the `<!-- Test -->` markers.
 - **Verified:** frontend **571/571 (57 files), TEST_EXIT=0**; `ng build` exit 0 (pre-existing `strain-hunter.css` budget warning only); compiled dist CSS contains the submenu rule; graphify updated. No architecture-diagram change.
-- **Committed + pushed:** `main` (6 files) — see HANDOFF.md for the hash.
+- **Committed + pushed:** `main` — commit `184053a` (9 files: 6 code + 3 session docs).
 - **Open:** (1) picking a model now also writes the user's global default; (2) `perf-badge`/`latency-pill` no longer shown in the chat picker; (3) `400px` is hardcoded (no token exists); (4) unconditional `bottom: 0` can overflow upward for a group near the top of the viewport.
 
 ## 2026-09-13 — ✅ DONE: catalog-toolbar redesign + model statistics tab + ranking hardening

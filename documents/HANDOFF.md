@@ -2,7 +2,7 @@
 
 ## 2026-09-15 — ✅ DONE: chat model picker = `p-tiered-menu`, positioned by declarative CSS + dialogs draggable
 
-**Context:** the picker swap landed in the working tree from another agent's session (files frozen at 22:55). This session verified it independently, removed the orphans it left, tuned the submenu rule, committed and pushed.
+**Context:** the picker swap landed in the working tree from another agent's session (files frozen at 22:55). This session verified it independently, removed the orphans it left, tuned the submenu rule — committed `184053a` + pushed `main` (9 files, +90/-79).
 
 **The fix (what replaced the "annoying" imperative JS):** the JS submenu-flip is gone — `adjustSubmenus()` (two `setTimeout`s, `getComputedStyle` per submenu, writing `style.top/bottom/maxHeight/overflowY` straight into the DOM, under `NgZone.runOutsideAngular`) was deleted. Positioning is now declarative CSS in `_primeng-overrides.css`, inside the existing `.p-tieredmenu` block:
 
