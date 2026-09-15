@@ -21,7 +21,6 @@ import { ChatModelSelection, IChatMessage, IRenderBlock } from '../../../core/mo
 import { AutoScrollBottomDirective } from '../../../core/directives/auto-scroll-bottom.directive';
 import { ChatMessage, ChatMessageActionEvent, ChatMessageStreamState } from '../chat-message/chat-message';
 import { UsersStore } from '../../../core/store/users.store';
-import { Select } from 'primeng/select';
 import { TieredMenu } from 'primeng/tieredmenu';
 import { MenuItem } from 'primeng/api';
 import { LlmProviderStore } from '../../../core/store/llm-provider.store';
@@ -31,7 +30,7 @@ import { LlmProviderService } from '../../../core/services/llm-provider.service'
 @Component({
     selector: 'app-chat',
     standalone: true,
-    imports: [CommonModule, ReactiveFormsModule, AutoScrollBottomDirective, ChatMessage, Select, TieredMenu],
+    imports: [CommonModule, ReactiveFormsModule, AutoScrollBottomDirective, ChatMessage, TieredMenu],
     templateUrl: './chat.html',
     changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './chat.css',
@@ -120,11 +119,16 @@ export class Chat implements OnInit, OnDestroy {
     });
 
     modelMenuItems = computed<MenuItem[]>(() => {
+        const defaultId = this.llmProviderStore.defaultModelId();
         return this.models().map((provider) => ({
             label: provider.label,
             items: provider.items.map((model) => ({
                 label: model.label,
-                command: () => this.chatForm?.patchValue({ model: model.id }),
+                icon: defaultId === model.id ? 'ph ph-star ph-fill' : 'ph ph-star',
+                command: () => {
+                    this.chatForm?.patchValue({ model: model.id });
+                    this.llmProviderStore.setDefaultModel(model.id);
+                },
             })),
         }));
     });
@@ -653,20 +657,6 @@ export class Chat implements OnInit, OnDestroy {
                 };
                 this.messages.update((prev) => [...prev, assistantMsg]);
             },
-        });
-    }
-
-    setDefaultModel(event: Event, model: any): void {
-        if (this.llmProviderStore.defaultModelId() === model.id) return;
-
-        this.llmProviderStore.setDefaultModel(model.id);
-        this.chatForm.patchValue({ model: model.id });
-
-        setTimeout(() => {
-            const target = event.target as HTMLElement;
-            const selectHost = target?.closest('p-select');
-            const trigger = selectHost?.querySelector('.p-select-trigger') as HTMLElement | null;
-            trigger?.blur();
         });
     }
 

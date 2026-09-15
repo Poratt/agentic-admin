@@ -1,5 +1,48 @@
 # Documentation Handoff
 
+## 2026-09-15 — ✅ DONE: chat model picker = `p-tiered-menu`, positioned by declarative CSS + dialogs draggable
+
+**Context:** the picker swap landed in the working tree from another agent's session (files frozen at 22:55). This session verified it independently, removed the orphans it left, tuned the submenu rule, committed and pushed.
+
+**The fix (what replaced the "annoying" imperative JS):** the JS submenu-flip is gone — `adjustSubmenus()` (two `setTimeout`s, `getComputedStyle` per submenu, writing `style.top/bottom/maxHeight/overflowY` straight into the DOM, under `NgZone.runOutsideAngular`) was deleted. Positioning is now declarative CSS in `_primeng-overrides.css`, inside the existing `.p-tieredmenu` block:
+
+```css
+&.ltr { direction: ltr; }                     /* the picker overlay is an LTR island on an RTL page */
+&.chat-model-menu .p-tieredmenu-submenu {     /* chat picker: submenus always open upward, tall lists scroll */
+  top: auto !important;
+  bottom: 0 !important;
+  max-height: 400px;
+  overflow: auto;
+}
+```
+Driven by `styleClass="chat-model-menu ltr"` on the `p-tiered-menu`. `direction: ltr` on an overlay has precedent in the same file (`.p-confirmdialog`). Compiled-output proof from `dist`: `.p-tieredmenu.chat-model-menu .p-tieredmenu-submenu{top:auto!important;bottom:0!important;max-height:400px;overflow:auto}`.
+
+**Also in this diff (not written in this session):** chat picker replaced `p-select` → `p-tiered-menu` (label from `selectedModel()`, star icon per model, `command` patches the form + calls `llmProviderStore.setDefaultModel`); `[draggable]="true"` on 3 dialogs (providers, model, strain-hunter image + compare).
+
+**Cleanup performed (orphans the swap left behind):** `chat.ts` — unused `NgZone` import + `inject(NgZone)`, unused `@ViewChild('menu') modelMenu`, dead `setDefaultModel(event, model)` (no caller left; its body still hunted `closest('p-select')`); `chat.html` — `<!-- Test -->` / `<!-- End test -->` markers. `ViewChild` (promptTextarea/fileInput) and `TieredMenu` (component `imports`) left intact.
+
+**Files (6):** `frontend/src/app/features/chat/chat/chat.ts` · `chat.html` · `chat.spec.ts` (store mock gains `setDefaultModel: vi.fn()`) · `frontend/src/app/assets/styles/_primeng-overrides.css` · `frontend/src/app/features/llm-providers-management/llm-providers-management.html` · `frontend/src/app/features/strain-hunter/strain-hunter.html`.
+
+**VERIFIED (final tree):**
+- `frontend` → `.\node_modules\.bin\ng.cmd test --watch=false` → **571/571 passed (57 files), TEST_EXIT=0**.
+- `frontend` → `.\node_modules\.bin\ng.cmd build` → **BUILD_EXIT=0** (only the pre-existing `strain-hunter.css` budget warning, 8.84 kB > 8 kB).
+- Spec guard for the new picker: `chat.spec.ts` "tiered-menu command updates the displayed model".
+- Command gotcha (re-confirmed): `npx ng test` fails with *"could not determine executable to run"* — call the local binary with system Node 24 on PATH: `$env:PATH = 'C:\Program Files\nodejs;' + $env:PATH; & '.\node_modules\.bin\ng.cmd' test --watch=false`.
+- `graphify update .` run → 4952 nodes / 8328 edges / 344 communities; `graphify-out/graph.json` + `GRAPH_REPORT.md` refreshed (its `exit 1` is only a stderr warning being treated as an error).
+- No architecture-diagram change (UI-only swap, no new endpoints/providers/flows).
+
+**Decisions made:** replace the imperative JS flip with an unconditional CSS `bottom: 0` (far simpler, zero DOM writes) — accepted tradeoff below. Kept the selector nested inside `.p-tieredmenu` (project nesting convention) — it compiles to the flat `.p-tieredmenu.chat-model-menu .p-tieredmenu-submenu` the user asked for.
+
+**Open questions for the user:**
+1. Picking a model in the chat menu also calls `llmProviderStore.setDefaultModel()` → persists the user's **global** default (POST `/llm/set-default-model`); previously only the star button did that.
+2. The menu shows label + star icon only — the old `p-select` option template's `perf-badge` (success %) and `latency-pill` are no longer visible in the chat picker.
+3. `max-height: 400px` is a hardcoded value (Golden Rule #3 wants `var(--token)`); no suitable token exists in `_variables.css` — add one and switch if wanted.
+4. `bottom: 0 !important` is unconditional: a group whose parent item sits near the top of the viewport can still overflow upward (the deleted JS flipped only when needed).
+
+**Next exact step:** user's visual check of the picker (open the menu in both provider groups, confirm submenus open upward and the label updates) → then decide on the 4 open items above.
+
+---
+
 ## 2026-09-13 — ✅ DONE: catalog-toolbar redesign + model statistics tab + ranking hardening
 
 **Toolbar (user brief):** stacked 2-floor toolbar — floor 1: elevated segmented view switch (Providers/Statistics) + Add Provider; floor 2 (providers only): search + state filter. New global `.toggle-group.elevated` variant (`_buttons.css`) + `.toolbar-row` (component CSS); base `.toggle-group` untouched (shared ×3). Counter as muted caption above table. No Tailwind in project — brief's Tailwind names translated to token system.

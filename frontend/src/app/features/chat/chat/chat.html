@@ -110,63 +110,11 @@
                     </button>
 
                     <div class="chat-prompt-actions-right">
-                        <p-select
-                            [options]="models()"
-                            formControlName="model"
-                            [group]="true"
-                            optionGroupLabel="label"
-                            optionLabel="label"
-                            optionValue="id"
-                            placeholder="בחר מודל"
-                            appendTo="body"
-                            size="small"
-                            class="custom-select transparent"
-                        >
-                            <ng-template let-group #group>
-                                <span class="group-label">
-                                    {{ group.label }}
-                                </span>
-                            </ng-template>
-                            <ng-template let-model #item>
-                                <div class="select-option">
-                                    <div class="select-option-main">
-                                        <span class="item-name">{{ model.label }}</span>
-                                        <button
-                                            type="button"
-                                            class="star-btn"
-                                            [class.star-active]="llmProviderStore.defaultModelId() === model.id"
-                                            [attr.aria-label]="
-                                                llmProviderStore.defaultModelId() === model.id ? 'Default model' : 'Set as default'
-                                            "
-                                            (click)="setDefaultModel($event, model)"
-                                        >
-                                            <span
-                                                [class]="
-                                                    llmProviderStore.defaultModelId() === model.id ? 'ph ph-star ph-fill' : 'ph ph-star'
-                                                "
-                                            ></span>
-                                        </button>
-                                        <div class="select-option-meta">
-                                            <span
-                                                class="perf-badge"
-                                                [class.perf-good]="model.performancePercentage >= 80"
-                                                [class.perf-warn]="model.performancePercentage >= 50 && model.performancePercentage < 80"
-                                                [class.perf-bad]="model.performancePercentage < 50"
-                                                >{{ model.performancePercentage }}%
-                                            </span>
-                                            <span class="latency-pill">
-                                                <span class="ph ph-timer"></span>
-                                                {{
-                                                    model.latencyAverageMs > 1000
-                                                        ? (model.latencyAverageMs / 1000 | number: '1.1-1') + 's'
-                                                        : model.latencyAverageMs + 'ms'
-                                                }}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </ng-template>
-                        </p-select>
+                        <button type="button" class="sm" (click)="menu.toggle($event)">
+                            <span>{{ selectedModel()?.label ?? 'בחר מודל' }}</span>
+                            <span class="ph ph-caret-down"></span>
+                        </button>
+                        <p-tiered-menu #menu [model]="modelMenuItems()" [popup]="true" styleClass="chat-model-menu ltr" />
 
                         <button
                             [type]="loading() ? 'button' : 'submit'"

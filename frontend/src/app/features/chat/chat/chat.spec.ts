@@ -44,6 +44,7 @@ describe('Chat', () => {
         defaultModelId: vi.fn(() => null),
         loadUserDefaultModel: vi.fn(),
         reload: vi.fn(),
+        setDefaultModel: vi.fn(),
         chatModels: vi.fn(() => []),
     };
 

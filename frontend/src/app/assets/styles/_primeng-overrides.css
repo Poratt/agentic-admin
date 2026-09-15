@@ -447,6 +447,10 @@ li.p-select-option {
   backdrop-filter: blur(var(--glass-blur)) !important;
   -webkit-backdrop-filter: blur(var(--glass-blur)) !important;
 
+  &.ltr {
+    direction: ltr;
+  }
+
   .p-tieredmenu-root-list {
     padding: 0 !important;
     gap: 0 !important;
@@ -494,6 +498,14 @@ li.p-select-option {
   .p-tieredmenu-separator {
     border-color: var(--color-border) !important;
     margin: var(--space-1) 0 !important;
+  }
+
+  /* Chat model menu: submenus always open upward, tall lists scroll */
+  &.chat-model-menu .p-tieredmenu-submenu {
+    top: auto !important;
+    bottom: 0 !important;
+    max-height: 400px;
+    overflow: auto;
   }
 }
 
