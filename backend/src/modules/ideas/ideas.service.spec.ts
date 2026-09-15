@@ -436,4 +436,46 @@ describe('IdeasService — persistence (Phase 1)', () => {
       }
     });
   });
+
+  describe('generateGroundedIdeasForCron', () => {
+    const grounded = (title: string) => ({ result: [{ title, groundedInSignals: true }] }) as any;
+
+    function mockDiscovery(domains: string[]) {
+      jest
+        .spyOn(service as any, 'discoverTopics')
+        .mockResolvedValue(domains.map((domain) => ({ domain, rationale: 'test' })));
+    }
+
+    it('accepts distinct grounded candidates up to the target', async () => {
+      mockDiscovery(['agency profitability tracking', 'freelance contract review']);
+      const gen = jest.spyOn(service, 'generateIdeas').mockImplementation(async (domain: string) => grounded(domain));
+
+      const out = await service.generateGroundedIdeasForCron(5, 1);
+
+      expect(out.map((r) => r.topic.domain)).toEqual(['agency profitability tracking', 'freelance contract review']);
+      expect(gen).toHaveBeenCalledTimes(2);
+    });
+
+    it('skips near-duplicate domains', async () => {
+      mockDiscovery(['agency profitability tracking', 'agency profitability tracking hours']);
+      jest.spyOn(service, 'generateIdeas').mockImplementation(async (domain: string) => grounded(domain));
+
+      const out = await service.generateGroundedIdeasForCron(5, 1);
+
+      expect(out.map((r) => r.topic.domain)).toEqual(['agency profitability tracking']);
+    });
+
+    it('skips ungrounded and failed candidates', async () => {
+      mockDiscovery(['alpha niche', 'beta niche', 'gamma niche']);
+      jest
+        .spyOn(service, 'generateIdeas')
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValueOnce({ result: [{ title: 'x', groundedInSignals: false }] } as any)
+        .mockImplementation(async (domain: string) => grounded(domain));
+
+      const out = await service.generateGroundedIdeasForCron(5, 1);
+
+      expect(out.map((r) => r.topic.domain)).toEqual(['gamma niche']);
+    });
+  });
 });

@@ -27,6 +27,12 @@ import { SavedIdea } from './entities/saved-idea.entity';
 
 const MAX_DOMAIN_LENGTH = 500;
 const MAX_PARALLEL_VALIDATION = 3;
+// Candidate sessions are independent (own searches, signals, LLM calls), so they run
+// in bounded-parallel batches. Kept at 3: higher bursts hit provider 429s on free tiers.
+const MAX_PARALLEL_SESSIONS = 3;
+// Two domains are duplicates when their token overlap is this high — prevents a run of
+// five sessions on near-identical topics ("agency profitability" x5).
+const DOMAIN_DUPLICATE_JACCARD = 0.6;
 const OVERALL_TIMEOUT_MS = 150_000;
 // Search engines (incl. SearXNG) return noisy/empty results on long boolean
 // queries. Cap `searchQuery` to a short, focused phrase so buildSignalQueries
@@ -507,27 +513,56 @@ export class IdeasService {
     }
 
     const results: { topic: DiscoveredTopic; response: GenerateIdeasResponse }[] = [];
-    for (const candidate of candidates) {
-      if (results.length >= targetCount) break;
+    for (let i = 0; i < candidates.length && results.length < targetCount; i += MAX_PARALLEL_SESSIONS) {
+      const batch = candidates.slice(i, i + MAX_PARALLEL_SESSIONS);
+      const settled = await Promise.allSettled(
+        batch.map(async (candidate) => ({
+          topic: candidate,
+          response: await this.generateIdeas(candidate.domain, 5, undefined, userId, providerOverride, modelOverride, candidate.searchQuery),
+        })),
+      );
 
-      try {
-        const response = await this.generateIdeas(candidate.domain, 5, undefined, userId, providerOverride, modelOverride, candidate.searchQuery);
-
-        const grounded = (response.result ?? []).some((idea) => idea.groundedInSignals);
-        if (grounded && (response.result ?? []).length > 0) {
-          results.push({ topic: candidate, response });
-          this.logger.log(`Grounded cron: accepted "${candidate.domain}" (${response.result?.length} ideas, grounded)`);
-        } else {
-          this.logger.warn(`Grounded cron: skipping ungrounded candidate domain: "${candidate.domain}"`);
+      for (const s of settled) {
+        if (results.length >= targetCount) break;
+        if (s.status === 'rejected') {
+          this.logger.warn(`Grounded cron: candidate failed: ${s.reason instanceof Error ? s.reason.message : 'unknown'}`);
+          continue;
         }
-      } catch (error) {
-        this.logger.warn(`Grounded cron: candidate "${candidate.domain}" failed: ${error instanceof Error ? error.message : 'unknown'}`);
-        // Continue with the next candidate.
+        const { topic, response } = s.value;
+        const grounded = (response.result ?? []).some((idea) => idea.groundedInSignals);
+        if (!grounded || (response.result ?? []).length === 0) {
+          this.logger.warn(`Grounded cron: skipping ungrounded candidate domain: "${topic.domain}"`);
+          continue;
+        }
+        if (this.isDuplicateDomain(topic.domain, results.map((r) => r.topic.domain))) {
+          this.logger.warn(`Grounded cron: skipping near-duplicate domain: "${topic.domain}"`);
+          continue;
+        }
+        results.push({ topic, response });
+        this.logger.log(`Grounded cron: accepted "${topic.domain}" (${response.result?.length} ideas, grounded)`);
       }
     }
 
     this.logger.log(`Grounded cron: produced ${results.length}/${targetCount} grounded session(s) from ${candidates.length} candidate(s)`);
     return results;
+  }
+
+  /**
+   * Jaccard token overlap between a domain and accepted ones. Hebrew and Latin tokens
+   * mix freely — tokenization is whitespace only, comparison is exact-match.
+   */
+  private isDuplicateDomain(domain: string, accepted: string[]): boolean {
+    const tokensOf = (text: string): Set<string> =>
+      new Set(text.toLowerCase().split(/\s+/).filter((t) => t.length > 1));
+    const tokens = tokensOf(domain);
+    if (tokens.size === 0) return false;
+    return accepted.some((other) => {
+      const otherTokens = tokensOf(other);
+      if (otherTokens.size === 0) return false;
+      const intersection = [...tokens].filter((t) => otherTokens.has(t)).length;
+      const union = new Set([...tokens, ...otherTokens]).size;
+      return union > 0 && intersection / union > DOMAIN_DUPLICATE_JACCARD;
+    });
   }
 
   private sanitizeDomain(domain: string): string {
