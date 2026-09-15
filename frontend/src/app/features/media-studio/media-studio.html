@@ -258,27 +258,17 @@
                         }
                     </div>
 
-                    <div class="composer-actions">
-                        <p-select
-                            [options]="activeModels()"
-                            [ngModel]="activeModelId()"
-                            (ngModelChange)="setActiveModelId($event)"
-                            optionLabel="label"
-                            optionValue="id"
-                            placeholder="בחר מודל"
-                            appendTo="body"
-                            size="small"
-                            class="custom-select transparent"
-                            name="model"
-                        >
-                            <ng-template let-item #item>
-                                <div class="select-option">
-                                    <div class="select-option-main">
-                                        <span class="item-name">{{ item.label }}</span>
-                                    </div>
-                                </div>
-                            </ng-template>
-                        </p-select>
+                    <div class="chat-prompt-actions-right">
+                        <button type="button" class="sm" (click)="menu.toggle($event)">
+                            <span>{{ selectedModelLabel() ?? 'בחר מודל' }}</span>
+                            <span class="ph ph-caret-down"></span>
+                        </button>
+                        <p-tiered-menu
+                            #menu
+                            [model]="activeModelMenuItems()"
+                            [popup]="true"
+                            styleClass="chat-model-menu ltr"
+                        />
 
                         <button
                             [type]="isLoading() ? 'button' : 'submit'"

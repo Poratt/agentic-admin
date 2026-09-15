@@ -36,6 +36,21 @@ describe('IdeasForm', () => {
   };
 
   beforeEach(async () => {
+    // PrimeNG TieredMenu calls window.matchMedia in ngOnInit; JSDOM doesn't ship it.
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
     storeMock = {
       domain: signal(''),
       count: vi.fn().mockReturnValue(5),

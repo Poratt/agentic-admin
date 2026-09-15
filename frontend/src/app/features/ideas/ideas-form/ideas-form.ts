@@ -1,14 +1,15 @@
 import { Component, inject, ChangeDetectionStrategy, effect, computed, ViewChild, ElementRef, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { Select } from 'primeng/select';
+import { TieredMenu } from 'primeng/tieredmenu';
+import { MenuItem } from 'primeng/api';
 import { IdeasStore } from '../../../core/store/ideas.store';
 import { LlmProviderStore } from '../../../core/store/llm-provider.store';
 
 @Component({
   selector: 'app-ideas-form',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, Select],
+  imports: [CommonModule, ReactiveFormsModule, TieredMenu],
   templateUrl: './ideas-form.html',
   changeDetection: ChangeDetectionStrategy.Eager,
 })
@@ -26,6 +27,31 @@ export class IdeasForm implements OnInit {
     domain: ['', []],
     count: [5, []],
     model: ['', []],
+  });
+
+  selectedModel = computed(() => {
+    const id = this.ideasForm.get('model')?.value;
+    if (!id) return null;
+    for (const provider of this.models()) {
+      const found = provider.items.find((m: any) => m.id === id);
+      if (found) return found;
+    }
+    return null;
+  });
+
+  modelMenuItems = computed<MenuItem[]>(() => {
+    const defaultId = this.llmProviderStore.defaultModelId();
+    return this.models().map((provider) => ({
+      label: provider.label,
+      items: provider.items.map((model) => ({
+        label: model.label,
+        icon: defaultId === model.id ? 'ph ph-star ph-fill' : 'ph ph-star',
+        command: () => {
+          this.ideasForm.patchValue({ model: model.id });
+          this.llmProviderStore.setDefaultModel(model.id);
+        },
+      })),
+    }));
   });
 
   canGenerate = computed(() => this.store.domain().trim().length > 0);
@@ -111,20 +137,6 @@ export class IdeasForm implements OnInit {
       this.store.setCount(current - 1);
       this.ideasForm.patchValue({ count: current - 1 });
     }
-  }
-
-  setDefaultModel(event: Event, model: any): void {
-    if (this.llmProviderStore.defaultModelId() === model.id) return;
-
-    this.llmProviderStore.setDefaultModel(model.id);
-    this.ideasForm.patchValue({ model: model.id });
-
-    setTimeout(() => {
-      const target = event.target as HTMLElement;
-      const selectHost = target?.closest('p-select');
-      const trigger = selectHost?.querySelector('.p-select-trigger') as HTMLElement | null;
-      trigger?.blur();
-    });
   }
 
   onGenerate(): void {

@@ -2,6 +2,8 @@ import { Component, OnInit, OnDestroy, ViewChild, ElementRef, signal, computed, 
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Select } from 'primeng/select';
+import { TieredMenu } from 'primeng/tieredmenu';
+import { MenuItem } from 'primeng/api';
 import { TooltipDirective } from '../../core/directives/tooltip.directive';
 import { LlmProviderStore } from '../../core/store/llm-provider.store';
 import { LlmProvider, LlmModel } from '../../core/services/llm-provider.service';
@@ -16,7 +18,7 @@ import { firstValueFrom } from 'rxjs';
 @Component({
     selector: 'app-media-studio',
     standalone: true,
-    imports: [CommonModule, FormsModule, Select, TooltipDirective],
+    imports: [CommonModule, FormsModule, Select, TieredMenu, TooltipDirective],
     templateUrl: './media-studio.html',
     changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './media-studio.css',
@@ -109,6 +111,33 @@ export class MediaStudio implements OnInit, OnDestroy {
     activeModelId = computed(() =>
         this.activeTab() === 'image' ? this.imageModelId() : this.videoModelId(),
     );
+
+    selectedModelLabel = computed(() => {
+        const id = this.activeModelId();
+        if (id == null) return null;
+        return this.activeModels().find((m) => m.id === id)?.label ?? null;
+    });
+
+    activeModelMenuItems = computed<MenuItem[]>(() => {
+        const defaultId = this.llmProviderStore.defaultModelId();
+        const cap = this.activeTab();
+        return this.llmProviderStore.providers()
+            .filter((p) => p.active)
+            .map((p) => ({
+                label: p.label,
+                items: (p.models ?? [])
+                    .filter((m) => m.active && m.capability === cap)
+                    .map((m) => ({
+                        label: m.label,
+                        icon: defaultId === m.id ? 'ph ph-star ph-fill' : 'ph ph-star',
+                        command: () => {
+                            this.setActiveModelId(m.id);
+                            this.llmProviderStore.setDefaultModel(m.id);
+                        },
+                    })),
+            }))
+            .filter((g) => g.items.length > 0);
+    });
 
     setActiveModelId(id: number | null): void {
         if (this.activeTab() === 'image') {
@@ -431,21 +460,4 @@ export class MediaStudio implements OnInit, OnDestroy {
         }
     }
 
-    setDefaultModel(event: Event, model: { id: number }): void {
-        if (this.llmProviderStore.defaultModelId() === model.id) return;
-
-        this.llmProviderStore.setDefaultModel(model.id);
-        if (this.activeTab() === 'image') {
-            this.imageModelId.set(model.id);
-        } else {
-            this.videoModelId.set(model.id);
-        }
-
-        setTimeout(() => {
-            const target = event.target as HTMLElement;
-            const selectHost = target?.closest('p-select');
-            const trigger = selectHost?.querySelector('.p-select-trigger') as HTMLElement | null;
-            trigger?.blur();
-        });
     }
-}

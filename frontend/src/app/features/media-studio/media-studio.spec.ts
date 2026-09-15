@@ -10,10 +10,26 @@ describe('MediaStudio', () => {
   let fixture: ComponentFixture<MediaStudio>;
 
   beforeEach(async () => {
+    // PrimeNG TieredMenu calls window.matchMedia in ngOnInit; JSDOM doesn't ship it.
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
     const llmStoreMock = {
       imageModels: vi.fn().mockReturnValue([]),
       videoModels: vi.fn().mockReturnValue([]),
       defaultModelId: vi.fn().mockReturnValue(null),
+      providers: vi.fn().mockReturnValue([]),
       setDefaultModel: vi.fn(),
     };
 
