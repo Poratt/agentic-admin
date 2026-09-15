@@ -1,5 +1,6 @@
 import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import { Injectable, inject, signal, computed } from '@angular/core';
+import { forkJoin } from 'rxjs';
 import { LlmProviderService, LlmProvider, LlmModel, ModelStats } from '../../core/services/llm-provider.service';
 import { PageStates } from '../../core/enums/page-states.enum';
 import { ServiceResultContainer } from '../../core/models/service-result-container.model';
@@ -292,6 +293,20 @@ export class LlmProviderStore {
             },
             error: (err: HttpErrorResponse) => {
                 this.error.set(err?.error?.message ?? 'Failed to update model');
+                this.providersResource.reload();
+            },
+        });
+    }
+
+    /** Bulk active toggle with a single reload — the master switch in the models table. */
+    setModelsActive(modelIds: number[], active: boolean) {
+        if (modelIds.length === 0) return;
+        forkJoin(modelIds.map((modelId) => this.llmProviderService.updateModel(modelId, { active }))).subscribe({
+            next: () => {
+                this.providersResource.reload();
+            },
+            error: (err: HttpErrorResponse) => {
+                this.error.set(err?.error?.message ?? 'Failed to update models');
                 this.providersResource.reload();
             },
         });

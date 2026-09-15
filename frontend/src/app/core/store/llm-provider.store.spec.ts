@@ -188,4 +188,34 @@ describe('LlmProviderStore', () => {
             expect(llmProviderService.getModelStats).toHaveBeenCalledTimes(1);
         });
     });
+
+    describe('setModelsActive', () => {
+        it('patches every id and clears the error', () => {
+            llmProviderService.updateModel.mockReturnValue(of({ result: {} }));
+            const store = create();
+
+            store.setModelsActive([3, 7], false);
+
+            expect(llmProviderService.updateModel).toHaveBeenCalledWith(3, { active: false });
+            expect(llmProviderService.updateModel).toHaveBeenCalledWith(7, { active: false });
+            expect(store.error()).toBeNull();
+        });
+
+        it('does nothing for an empty list', () => {
+            const store = create();
+
+            store.setModelsActive([], true);
+
+            expect(llmProviderService.updateModel).not.toHaveBeenCalled();
+        });
+
+        it('sets error on failure', () => {
+            llmProviderService.updateModel.mockReturnValue(throwError(() => ({ error: { message: 'Bulk failed' } })));
+            const store = create();
+
+            store.setModelsActive([3], true);
+
+            expect(store.error()).toBe('Bulk failed');
+        });
+    });
 });

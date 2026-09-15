@@ -361,6 +361,19 @@
                                                             Performance <p-sort-icon field="performanceScore" />
                                                         </div>
                                                     </th>
+                                                    <th class="col-active">
+                                                        @if (isAdmin()) {
+                                                            <p-toggleswitch
+                                                                [ngModel]="allModelsActive(provider)"
+                                                                (ngModelChange)="setAllModelsActive(provider, $event)"
+                                                                [ariaLabel]="
+                                                                    allModelsActive(provider)
+                                                                        ? 'Deactivate all models'
+                                                                        : 'Activate all models'
+                                                                "
+                                                            />
+                                                        }
+                                                    </th>
                                                     <th class="col-test">
                                                         @if (isAdmin()) {
                                                             <button
@@ -498,6 +511,15 @@
                                                             <span class="metric-empty">No tests yet</span>
                                                         }
                                                     </td>
+                                                    <td class="col-active">
+                                                        @if (isAdmin()) {
+                                                            <p-toggleswitch
+                                                                [ngModel]="model.active"
+                                                                (ngModelChange)="setModelActive(provider.id, model, $event)"
+                                                                [ariaLabel]="model.active ? 'Deactivate model' : 'Activate model'"
+                                                            />
+                                                        }
+                                                    </td>
                                                     <td class="col-test">
                                                         @if (isAdmin()) {
                                                             <button
@@ -523,11 +545,6 @@
                                                     <td class="col-actions">
                                                         @if (isAdmin()) {
                                                             <div class="row-actions">
-                                                                <p-toggleswitch
-                                                                    [ngModel]="model.active"
-                                                                    (ngModelChange)="setModelActive(provider.id, model, $event)"
-                                                                    [ariaLabel]="model.active ? 'Deactivate model' : 'Activate model'"
-                                                                />
                                                                 <button
                                                                     type="button"
                                                                     class="icon-only accent-btn sm"

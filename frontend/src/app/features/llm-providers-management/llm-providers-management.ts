@@ -405,6 +405,19 @@ export class LlmProvidersManagement implements OnInit {
         this.llmProviderStore.updateModel(providerId, model.id, { active });
     }
 
+    /** Master switch state: on only when every model of the provider is active. */
+    allModelsActive(provider: LlmProviderView): boolean {
+        const models = provider.models ?? [];
+        return models.length > 0 && models.every((model) => model.active);
+    }
+
+    /** Master switch: flips only the models that differ, in one bulk store call. */
+    setAllModelsActive(provider: LlmProviderView, active: boolean) {
+        const ids = (provider.models ?? []).filter((model) => model.active !== active).map((model) => model.id);
+        if (ids.length === 0) return;
+        this.llmProviderStore.setModelsActive(ids, active);
+    }
+
     deleteProvider(providerId: number) {
         let confirm: Confirmation = {
             closeOnEscape: true,

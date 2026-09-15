@@ -39,6 +39,7 @@ describe('LlmProvidersManagement', () => {
         deleteProvider: vi.fn(),
         createModel: vi.fn(),
         updateModel: vi.fn(),
+        setModelsActive: vi.fn(),
         softDeleteModel: vi.fn(),
         hardDeleteModel: vi.fn(),
         deleteTestResult: vi.fn(),
@@ -342,6 +343,37 @@ describe('LlmProvidersManagement', () => {
         it('should update model active state via the store', () => {
             component.setModelActive(7, { id: 2, active: false } as any, true);
             expect(mockProviderStore.updateModel).toHaveBeenCalledWith(7, 2, { active: true });
+        });
+    });
+
+    describe('allModelsActive / setAllModelsActive', () => {
+        const provider = {
+            id: 1,
+            models: [
+                { id: 2, active: true },
+                { id: 3, active: false },
+            ],
+        } as any;
+
+        it('is true only when every model is active', () => {
+            expect(component.allModelsActive({ id: 1, models: [{ active: true }] } as any)).toBe(true);
+            expect(component.allModelsActive(provider)).toBe(false);
+            expect(component.allModelsActive({ id: 1, models: [] } as any)).toBe(false);
+        });
+
+        it('sends only the models that differ', () => {
+            component.setAllModelsActive(provider, true);
+            expect(mockProviderStore.setModelsActive).toHaveBeenCalledWith([3], true);
+        });
+
+        it('skips the store when nothing differs', () => {
+            mockProviderStore.setModelsActive.mockClear();
+            component.setAllModelsActive(provider, false);
+            expect(mockProviderStore.setModelsActive).toHaveBeenCalledWith([2], false);
+
+            mockProviderStore.setModelsActive.mockClear();
+            component.setAllModelsActive({ id: 1, models: [{ id: 2, active: false }] } as any, false);
+            expect(mockProviderStore.setModelsActive).not.toHaveBeenCalled();
         });
     });
 

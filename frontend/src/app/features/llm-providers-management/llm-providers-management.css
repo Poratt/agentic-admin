@@ -77,9 +77,17 @@
         width: 140px;
     }
 
-    .col-test,
     .col-actions {
         width: 64px;
+    }
+
+    .col-test {
+        width: 44px;
+    }
+
+    .col-active {
+        width: 56px;
+        text-align: center;
     }
 
     .row-actions {
