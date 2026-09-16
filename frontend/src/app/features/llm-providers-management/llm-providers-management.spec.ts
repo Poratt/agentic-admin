@@ -608,11 +608,11 @@ describe('LlmProvidersManagement', () => {
 
             component.testAllModels(provider);
             expect(mockProviderService.testAllModels).toHaveBeenCalledWith(12);
-            expect(component.testingAllProviderId()).toBe(12);
+            expect(component.testingAllProviderIds().has(12)).toBe(true);
             expect(mockMessageService.add).toHaveBeenCalledWith(
                 expect.objectContaining({ summary: 'Test Run Started' }),
             );
-            component.testingAllProviderId.set(0); // stop the background poll chain
+            component.testingAllProviderIds.set(new Set()); // stop the background poll chain
             mockProviderService.testAllStatus.mockReturnValue({
                 subscribe: { next: vi.fn(), error: vi.fn() } as any,
             });
@@ -624,6 +624,83 @@ describe('LlmProvidersManagement', () => {
             expect(mockMessageService.add).toHaveBeenCalledWith(
                 expect.objectContaining({ summary: 'Nothing to test' }),
             );
+        });
+
+        it('runs model tests in parallel: a second test must not clear the first', () => {
+            const handlers: any[] = [];
+            mockProviderService.testModel.mockClear();
+            mockProviderService.testModel.mockImplementation(
+                () =>
+                    ({
+                        subscribe: (h: any) => {
+                            handlers.push(h);
+                        },
+                    }) as any,
+            );
+
+            component.testModel(1);
+            component.testModel(2);
+
+            expect(mockProviderService.testModel).toHaveBeenCalledTimes(2);
+            expect(component.testingModelIds().has(1)).toBe(true);
+            expect(component.testingModelIds().has(2)).toBe(true);
+
+            // The first model finishes — only its own spinner may stop.
+            handlers[0].next({ success: true });
+            expect(component.testingModelIds().has(1)).toBe(false);
+            expect(component.testingModelIds().has(2)).toBe(true);
+
+            // Clicking a model that is already testing must not fire a second call.
+            component.testModel(2);
+            expect(mockProviderService.testModel).toHaveBeenCalledTimes(2);
+
+            // Restore the shared default — this spec has no global mock reset.
+            mockProviderService.testModel.mockImplementation(() => ({ subscribe: vi.fn() }));
+        });
+
+        it('runs test-all runs in parallel: a second provider must not clear the first', () => {
+            mockProviderService.testAllModels.mockClear();
+            mockProviderService.testAllModels.mockReturnValue({ subscribe: (h: any) => h.next({ result: { tested: 1 } }) });
+
+            const a = { id: 12, models: [{ active: true, capability: 'text' }] } as any;
+            const b = { id: 13, models: [{ active: true, capability: 'text' }] } as any;
+
+            component.testAllModels(a);
+            component.testAllModels(b);
+
+            expect(mockProviderService.testAllModels).toHaveBeenCalledTimes(2);
+            expect(component.testingAllProviderIds().has(12)).toBe(true);
+            expect(component.testingAllProviderIds().has(13)).toBe(true);
+
+            // Clicking a provider that is already running must not fire a second run.
+            component.testAllModels(a);
+            expect(mockProviderService.testAllModels).toHaveBeenCalledTimes(2);
+
+            component.ngOnDestroy(); // clears the poll chain this test started
+        });
+
+        it('stops polling after destroy instead of reloading the store from a dead component', async () => {
+            vi.useFakeTimers();
+            mockProviderService.testAllModels.mockClear();
+            mockProviderService.testAllModels.mockReturnValue({ subscribe: (h: any) => h.next({ result: { tested: 1 } }) });
+            mockProviderService.testAllStatus.mockClear();
+            mockProviderService.testAllStatus.mockReturnValue({
+                subscribe: (h: any) => h.next({ result: { running: true } }),
+            });
+
+            component.testAllModels({ id: 12, models: [{ active: true, capability: 'text' }] } as any);
+            expect(component.testingAllProviderIds().has(12)).toBe(true);
+
+            mockProviderStore.reload.mockClear();
+            component.ngOnDestroy();
+            await vi.advanceTimersByTimeAsync(60_000);
+
+            // Four more poll rounds would have fired in that window; none may run.
+            expect(mockProviderService.testAllStatus).not.toHaveBeenCalled();
+            expect(mockProviderStore.reload).not.toHaveBeenCalled();
+
+            vi.useRealTimers();
+            mockProviderService.testAllStatus.mockReturnValue({ subscribe: vi.fn() });
         });
 
         it('keeps unavailable hidden behind the toggle and counts them', () => {

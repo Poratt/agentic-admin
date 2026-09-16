@@ -400,12 +400,7 @@ export class LlmProviderService {
       throw new BadRequestException(`Provider catalog request failed (HTTP ${response.status})`);
     }
 
-    let body: { data?: Array<{ id?: string; owned_by?: string }> };
-    try {
-      body = (await response.json()) as { data?: Array<{ id?: string; owned_by?: string }> };
-    } catch {
-      throw new BadRequestException('Provider catalog returned invalid JSON');
-    }
+    const body = this.parseCatalogBody<{ data?: Array<{ id?: string; owned_by?: string }> }>(response, await response.text());
 
     const upstream = (body.data ?? [])
       .filter((m): m is { id: string; owned_by?: string } => typeof m.id === 'string' && m.id.length > 0)
@@ -416,6 +411,24 @@ export class LlmProviderService {
 
   private isCloudflareBaseUrl(baseUrl: string): boolean {
     return /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai\/v1\/?$/.test(baseUrl.trim().replace(/\/$/, ''));
+  }
+
+  /**
+   * Parses a catalog body that was already read as text. `response.json()`
+   * cannot be used here: it consumes the body, so a bare `catch {}` throws away
+   * every clue about what the provider actually returned (an HTML login page, a
+   * redirect target, an empty 200, ...).
+   */
+  private parseCatalogBody<T>(response: Response, rawBody: string): T {
+    try {
+      return JSON.parse(rawBody) as T;
+    } catch {
+      const contentType = response.headers.get('content-type') ?? 'unknown';
+      const snippet = rawBody.replace(/\s+/g, ' ').trim().slice(0, 200);
+      throw new BadRequestException(
+        `Provider catalog returned invalid JSON (content-type: ${contentType}; body starts with: ${snippet || '<empty body>'})`,
+      );
+    }
   }
 
   /**
@@ -437,7 +450,7 @@ export class LlmProviderService {
       });
       if (!res.ok) throw new BadRequestException(`Provider catalog request failed (HTTP ${res.status})`);
 
-      const body = (await res.json()) as { result?: Array<{ name?: string }> };
+      const body = this.parseCatalogBody<{ result?: Array<{ name?: string }> }>(res, await res.text());
       const rows = body.result ?? [];
       for (const row of rows) {
         if (typeof row.name === 'string' && row.name.length > 0) upstream.push({ key: row.name });

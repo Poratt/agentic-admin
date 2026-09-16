@@ -1,4 +1,14 @@
-import { Component, inject, computed, viewChild, ChangeDetectionStrategy, signal, OnInit, effect } from '@angular/core';
+import {
+    Component,
+    inject,
+    computed,
+    viewChild,
+    ChangeDetectionStrategy,
+    signal,
+    OnInit,
+    OnDestroy,
+    effect,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -71,7 +81,7 @@ const COPY_FEEDBACK_MS = 5000;
     templateUrl: './llm-providers-management.html',
     styleUrl: './llm-providers-management.css',
 })
-export class LlmProvidersManagement implements OnInit {
+export class LlmProvidersManagement implements OnInit, OnDestroy {
     private table = viewChild<Table>('table');
     private fb = inject(FormBuilder);
 
@@ -91,6 +101,16 @@ export class LlmProvidersManagement implements OnInit {
         // The statistics feed both the tab and the leaderboard badges on the model rows, so they are
         // fetched up front. One aggregated query — the backend does not ship the call history.
         this.llmProviderStore.loadModelStats();
+    }
+
+    ngOnDestroy(): void {
+        // The poll chain re-arms itself every 8s for up to 30 rounds (~4 min). Left
+        // alone it keeps hitting `testAllStatus` and calling `reload()` on a
+        // root-provided store after navigation, which also pins this component in
+        // memory. The copy-feedback timer has the same problem on a 5s scale.
+        this.pollTimers.forEach((timer) => clearTimeout(timer));
+        this.pollTimers.clear();
+        this.clearCopiedModelKeyTimer();
     }
 
     // Inner tab selection: the provider table or the model statistics.
@@ -124,9 +144,14 @@ export class LlmProvidersManagement implements OnInit {
         });
     }
 
-    testingModelId = signal<number>(0);
-    // Provider id with a background test-all run in flight (drives button state + polling).
-    testingAllProviderId = signal<number>(0);
+    // Every model with a single-model test in flight. A Set rather than one id, so
+    // starting a second model's test leaves the first model's spinner running.
+    testingModelIds = signal<Set<number>>(new Set());
+    // Every provider with a test-all run in flight (drives button state + polling).
+    // A Set for the same reason as above: one run per provider, in parallel.
+    testingAllProviderIds = signal<Set<number>>(new Set());
+    // One pending poll timer per provider, so parallel runs keep their own schedule.
+    private pollTimers = new Map<number, ReturnType<typeof setTimeout>>();
     // Model key whose copy icon currently shows the confirmation check instead of the copy
     // glyph. Cleared again after COPY_FEEDBACK_MS so the icon returns to its normal state.
     copiedModelKey = signal<string | null>(null);
@@ -466,10 +491,14 @@ export class LlmProvidersManagement implements OnInit {
     }
 
     testModel(modelId: number) {
-        this.testingModelId.set(modelId);
+        // Guard the double-click window: without it a fast second click fires a
+        // second real LLM call and burns provider quota for nothing.
+        if (this.testingModelIds().has(modelId)) return;
+
+        this.testingModelIds.update((ids) => new Set(ids).add(modelId));
         this.llmProviderService.testModel(modelId).subscribe({
             next: (res) => {
-                this.testingModelId.set(0);
+                this.clearModelTesting(modelId);
                 this.llmProviderStore.reload();
                 if (res?.success === false) {
                     this.messageService.add({
@@ -486,7 +515,7 @@ export class LlmProvidersManagement implements OnInit {
                 });
             },
             error: (err) => {
-                this.testingModelId.set(0);
+                this.clearModelTesting(modelId);
                 this.messageService.add({
                     severity: 'error',
                     summary: 'Test Failed',
@@ -497,8 +526,19 @@ export class LlmProvidersManagement implements OnInit {
         });
     }
 
+    /** Drops only the finished model, so a parallel test keeps its own spinner. */
+    private clearModelTesting(modelId: number) {
+        this.testingModelIds.update((ids) => {
+            const remaining = new Set(ids);
+            remaining.delete(modelId);
+            return remaining;
+        });
+    }
+
     testAllModels(provider: LlmProviderView) {
-        if (this.testingAllProviderId() !== 0) return;
+        // Guard the double-click window, and only for this provider — a run already
+        // in flight elsewhere must not block starting one here.
+        if (this.testingAllProviderIds().has(provider.id)) return;
 
         const activeTextModels = (provider.models ?? []).filter((m) => m.active && m.capability === 'text').length;
         if (activeTextModels === 0) {
@@ -510,7 +550,7 @@ export class LlmProvidersManagement implements OnInit {
             return;
         }
 
-        this.testingAllProviderId.set(provider.id);
+        this.testingAllProviderIds.update((ids) => new Set(ids).add(provider.id));
         this.llmProviderService.testAllModels(provider.id).subscribe({
             next: (res) => {
                 this.messageService.add({
@@ -521,7 +561,7 @@ export class LlmProvidersManagement implements OnInit {
                 this.pollTestResults(provider.id);
             },
             error: (err) => {
-                this.testingAllProviderId.set(0);
+                this.clearAllTesting(provider.id);
                 this.messageService.add({
                     severity: 'error',
                     summary: 'Test All Failed',
@@ -534,29 +574,43 @@ export class LlmProvidersManagement implements OnInit {
     // Reloads periodically while the backend reports the run in flight; stops
     // the moment the run finishes (status endpoint) or errors out.
     private pollTestResults(providerId: number, remainingPolls = 30) {
-        if (this.testingAllProviderId() !== providerId) return;
+        if (!this.testingAllProviderIds().has(providerId)) return;
         if (remainingPolls <= 0) {
-            this.testingAllProviderId.set(0);
+            this.clearAllTesting(providerId);
             return;
         }
-        setTimeout(() => {
-            if (this.testingAllProviderId() !== providerId) return;
+        const timer = setTimeout(() => {
+            this.pollTimers.delete(providerId);
+            if (!this.testingAllProviderIds().has(providerId)) return;
             this.llmProviderService.testAllStatus(providerId).subscribe({
                 next: (res) => {
-                    if (this.testingAllProviderId() !== providerId) return;
+                    if (!this.testingAllProviderIds().has(providerId)) return;
                     this.llmProviderStore.reload();
                     if (res.result?.running) {
                         this.pollTestResults(providerId, remainingPolls - 1);
                     } else {
-                        this.testingAllProviderId.set(0);
+                        this.clearAllTesting(providerId);
                         this.llmProviderStore.reload();
                     }
                 },
-                error: () => {
-                    if (this.testingAllProviderId() === providerId) this.testingAllProviderId.set(0);
-                },
+                error: () => this.clearAllTesting(providerId),
             });
         }, 8_000);
+        this.pollTimers.set(providerId, timer);
+    }
+
+    /** Drops only the finished provider, so a parallel run keeps its own state. */
+    private clearAllTesting(providerId: number) {
+        const timer = this.pollTimers.get(providerId);
+        if (timer) {
+            clearTimeout(timer);
+            this.pollTimers.delete(providerId);
+        }
+        this.testingAllProviderIds.update((ids) => {
+            const remaining = new Set(ids);
+            remaining.delete(providerId);
+            return remaining;
+        });
     }
 
     toggleProvider(providerId: number) {
@@ -736,6 +790,10 @@ export class LlmProvidersManagement implements OnInit {
             }
             return next;
         });
+    }
+
+    clearCatalogSearch() {
+        this.catalogSearch.set('');
     }
 
     closeSyncDialog() {

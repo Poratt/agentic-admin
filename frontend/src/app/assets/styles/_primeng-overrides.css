@@ -439,6 +439,15 @@ li.p-select-option {
     gap: var(--space-3);
     margin-bottom: var(--space-3);
 
+    .toolbar-search {
+      flex: 1 1 auto;
+      min-width: 0;
+
+      .form-field-has-icon {
+        width: 100%;
+      }
+    }
+
     .sync-bulk {
       display: inline-flex;
       gap: var(--space-2);

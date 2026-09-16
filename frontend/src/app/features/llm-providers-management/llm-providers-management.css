@@ -3,60 +3,6 @@
 :host {
     display: block;
 
-    .subtable,
-    .inner-table {
-        z-index: 5;
-        width: 100%;
-        border-collapse: collapse;
-        overflow: hidden;
-
-        th {
-            text-align: left;
-        }
-    }
-
-    /* Expanded models card: a real box (not an overlay), so no height guessing.
-       The fixed negative top margin tucks it under the trigger row for the merged
-       look; the panel itself sizes freely below it. */
-    .subtable-wrapper {
-        position: relative;
-        margin: calc(var(--space-2) * -2) calc(var(--space-2) * 4) calc(var(--space-2) * 2);
-        border: 1px solid var(--color-border);
-        border-radius: 0px;
-        box-shadow: 0 0 2px var(--color-border);
-
-    }
-
-    /* Rounded bottom only when the expanded card is the table's last row —
-       middle expansions stay square because more rows follow them. */
-    tr.expand-panel-row:last-child .subtable-wrapper {
-        border-radius: 0 0 var(--radius-md) var(--radius-md);
-    }
-
-    .subtable {
-        th {
-            font-size: var(--font-size-xs);
-            font-weight: var(--font-weight-medium);
-            color: var(--color-text-muted);
-            padding: var(--space-4) var(--space-8);
-            border-bottom: 1px solid var(--color-border-strong);
-        }
-
-        td {
-            padding: var(--space-6) var(--space-8);
-            font-size: var(--font-size-sm);
-            border-bottom: 1px solid var(--color-border);
-        }
-
-        tbody {
-            tr {
-                &:hover {
-                    background: var(--color-surface-hover);
-                }
-            }
-        }
-    }
-
     .col-base-url {
         max-width: 300px;
         overflow: hidden;
@@ -196,38 +142,6 @@
         }
     }
 
-    .inner-table {
-        background: transparent;
-        border: none;
-        border-radius: 0;
-
-        th {
-            font-size: var(--font-size-xs);
-            font-weight: var(--font-weight-medium);
-            color: var(--color-text-muted);
-            padding: var(--space-1) var(--space-2);
-            border-bottom: 1px solid var(--color-border-strong);
-        }
-
-        .col-actions-end {
-            text-align: end;
-        }
-
-        td {
-            padding: var(--space-1) var(--space-2);
-            font-size: var(--font-size-sm);
-            border-bottom: 1px solid var(--color-border);
-        }
-
-        tr {
-            &:last-child {
-                td {
-                    border-bottom: none;
-                }
-            }
-        }
-    }
-
     .col-datetime {
         font-family: var(--font-code);
         font-size: var(--font-size-xs);
@@ -272,17 +186,8 @@
         }
     }
 
-    .clickable {
-        cursor: pointer;
-        color: var(--color-primary);
-        transition: color var(--transition-fast), background var(--transition-fast);
-
-        &:hover {
-            color: var(--primary-400);
-        }
-    }
-
-
+    /* .clickable lives in the global table overrides — it is shared with the
+       strain-hunter settings tables, so it cannot stay component-scoped. */
 
     .empty-cell {
         padding: 0;

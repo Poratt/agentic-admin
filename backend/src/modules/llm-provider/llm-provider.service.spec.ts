@@ -132,12 +132,13 @@ describe('LlmProviderService.getProviderCatalog', () => {
     };
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        data: [
-          { id: 'openai/gpt-oss-20b', owned_by: 'openai' },
-          { id: 'moonshotai/kimi-k2.6', owned_by: 'moonshotai' },
-        ],
-      }),
+      text: async () =>
+        JSON.stringify({
+          data: [
+            { id: 'openai/gpt-oss-20b', owned_by: 'openai' },
+            { id: 'moonshotai/kimi-k2.6', owned_by: 'moonshotai' },
+          ],
+        }),
     });
     jest.spyOn(global, 'fetch').mockImplementation(fetchMock as any);
     const svc = makeCatalogService(providerRepo, modelRepo);
@@ -164,6 +165,34 @@ describe('LlmProviderService.getProviderCatalog', () => {
     await expect(svc.getProviderCatalog(12)).rejects.toThrow(BadRequestException);
   });
 
+  it('reports the content-type and body snippet when the catalog body is not JSON', async () => {
+    const providerRepo = providerRepoFor({ id: 12, key: 'nara', baseUrl: 'https://router.bynara.id', apiKey: 'k' });
+    const modelRepo = { find: jest.fn() };
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'text/html; charset=utf-8' },
+      text: async () => '<!DOCTYPE html><html lang="en"><head><title>Login</title></head></html>',
+    } as any);
+    const svc = makeCatalogService(providerRepo, modelRepo);
+
+    await expect(svc.getProviderCatalog(12)).rejects.toThrow(
+      /invalid JSON \(content-type: text\/html; charset=utf-8; body starts with: <!DOCTYPE html>/,
+    );
+  });
+
+  it('flags an empty catalog body instead of reporting a blank snippet', async () => {
+    const providerRepo = providerRepoFor({ id: 12, key: 'nara', baseUrl: 'https://router.bynara.id', apiKey: 'k' });
+    const modelRepo = { find: jest.fn() };
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      headers: { get: () => null },
+      text: async () => '',
+    } as any);
+    const svc = makeCatalogService(providerRepo, modelRepo);
+
+    await expect(svc.getProviderCatalog(12)).rejects.toThrow(/content-type: unknown; body starts with: <empty body>/);
+  });
+
   it('falls back to the Cloudflare native catalog on 405 and maps names to keys', async () => {
     const providerRepo = providerRepoFor({
       id: 30,
@@ -177,12 +206,13 @@ describe('LlmProviderService.getProviderCatalog', () => {
       .mockResolvedValueOnce({ ok: false, status: 405 } as any)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          result: [
-            { name: '@cf/openai/gpt-oss-120b', task: { name: 'Text Generation' } },
-            { name: '@cf/meta/llama-2', task: { name: 'Text Generation' } },
-          ],
-        }),
+        text: async () =>
+          JSON.stringify({
+            result: [
+              { name: '@cf/openai/gpt-oss-120b', task: { name: 'Text Generation' } },
+              { name: '@cf/meta/llama-2', task: { name: 'Text Generation' } },
+            ],
+          }),
       } as any);
     jest.spyOn(global, 'fetch').mockImplementation(fetchMock as any);
     const svc = makeCatalogService(providerRepo, modelRepo);
@@ -195,6 +225,30 @@ describe('LlmProviderService.getProviderCatalog', () => {
       { key: '@cf/meta/llama-2', owned_by: undefined, status: 'exists' },
       { key: '@cf/openai/gpt-oss-120b', status: 'new' },
     ]);
+  });
+
+  it('reports the Cloudflare catalog body when it is not JSON either', async () => {
+    const providerRepo = providerRepoFor({
+      id: 30,
+      key: 'cloudflare',
+      baseUrl: 'https://api.cloudflare.com/client/v4/accounts/acc123/ai/v1',
+      apiKey: 'cf-key',
+    });
+    const modelRepo = { find: jest.fn() };
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 405 } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'text/html; charset=utf-8' },
+        text: async () => '<html><body>Cloudflare error</body></html>',
+      } as any);
+    jest.spyOn(global, 'fetch').mockImplementation(fetchMock as any);
+    const svc = makeCatalogService(providerRepo, modelRepo);
+
+    await expect(svc.getProviderCatalog(30)).rejects.toThrow(
+      /invalid JSON \(content-type: text\/html; charset=utf-8; body starts with: <html>/,
+    );
   });
 });
 

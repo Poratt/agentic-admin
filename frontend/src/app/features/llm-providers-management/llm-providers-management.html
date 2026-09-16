@@ -349,7 +349,12 @@
                                             }
                                         </div>
                                     } @else {
-                                        <p-table [value]="provider.models" dataKey="id" [rowHover]="true" class="subtable-wrapper">
+                                        <p-table
+                                            [value]="provider.models"
+                                            dataKey="id"
+                                            [rowHover]="true"
+                                            class="table-frame data-table spacious"
+                                        >
                                             <ng-template #header>
                                                 <tr>
                                                     <th class="col-expand xs"></th>
@@ -379,12 +384,12 @@
                                                             <button
                                                                 type="button"
                                                                 class="icon-only transparent-btn sm"
-                                                                [class.testing]="testingAllProviderId() === provider.id"
-                                                                [disabled]="testingAllProviderId() === provider.id"
+                                                                [class.testing]="testingAllProviderIds().has(provider.id)"
+                                                                [disabled]="testingAllProviderIds().has(provider.id)"
                                                                 aria-label="Test all models"
                                                                 appTooltip
                                                                 [text]="
-                                                                    testingAllProviderId() === provider.id
+                                                                    testingAllProviderIds().has(provider.id)
                                                                         ? 'Testing in background...'
                                                                         : 'Test all models'
                                                                 "
@@ -392,7 +397,7 @@
                                                             >
                                                                 <i
                                                                     [class]="
-                                                                        testingAllProviderId() === provider.id
+                                                                        testingAllProviderIds().has(provider.id)
                                                                             ? 'ph ph-spinner-gap ph-spin'
                                                                             : 'ph ph-lightning-a'
                                                                     "
@@ -525,16 +530,16 @@
                                                             <button
                                                                 type="button"
                                                                 class="icon-only transparent-btn sm"
-                                                                [class.testing]="testingModelId() === model.id"
-                                                                [disabled]="testingModelId() === model.id"
+                                                                [class.testing]="testingModelIds().has(model.id)"
+                                                                [disabled]="testingModelIds().has(model.id)"
                                                                 aria-label="Run test"
                                                                 appTooltip
-                                                                [text]="testingModelId() === model.id ? 'Testing...' : 'Test model'"
+                                                                [text]="testingModelIds().has(model.id) ? 'Testing...' : 'Test model'"
                                                                 (click)="testModel(model.id)"
                                                             >
                                                                 <i
                                                                     [class]="
-                                                                        testingModelId() === model.id
+                                                                        testingModelIds().has(model.id)
                                                                             ? 'ph ph-spinner-gap ph-spin'
                                                                             : 'ph ph-lightning'
                                                                     "
@@ -594,7 +599,7 @@
                                                 @if (model.hasTests && isModelExpanded(model.id)) {
                                                     <tr class="nested-panel-row">
                                                         <td colspan="6" class="nested-panel-cell">
-                                                            <table class="inner-table">
+                                                            <table class="data-table compact">
                                                                 <thead>
                                                                     <tr>
                                                                         <th>Date &amp; time</th>
@@ -898,14 +903,28 @@
         </div>
     } @else {
         <div class="sync-toolbar">
-            <input
-                pInputText
-                type="text"
-                class="form-control"
-                placeholder="Search models..."
-                [value]="catalogSearch()"
-                (input)="catalogSearch.set($any($event.target).value)"
-            />
+            <div class="toolbar-search">
+                <div class="form-field-has-icon sm">
+                    <span class="field-icon ph ph-magnifying-glass"></span>
+                    <input
+                        pInputText
+                        type="text"
+                        class="form-control"
+                        placeholder="Search models..."
+                        [value]="catalogSearch()"
+                        (input)="catalogSearch.set($any($event.target).value)"
+                    />
+                    <button
+                        type="button"
+                        class="icon-only transparent-btn sm search-clear-btn"
+                        [class.is-visible]="catalogSearch()"
+                        aria-label="Clear search"
+                        (click)="clearCatalogSearch()"
+                    >
+                        <span class="ph ph-x"></span>
+                    </button>
+                </div>
+            </div>
             <span class="sync-bulk">
                 <button type="button" class="transparent-btn sm" (click)="selectAllNew()">Select All</button>
                 <button type="button" class="transparent-btn sm" (click)="deselectAll()">Deselect All</button>
