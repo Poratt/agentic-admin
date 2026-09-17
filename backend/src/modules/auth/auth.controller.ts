@@ -104,7 +104,7 @@ export class AuthController {
   @UseGuards(JwtRefreshGuard)
   @ApiOperation({
     summary: 'Refresh access token using refresh token',
-    summaryHe: 'מחדש את טוקן הגישה ברקע כדי להישאר מחובר',
+    summaryHe: 'מחדש את טוקן הגישה כדי להישאר מחובר',
     toolIcon: 'ph-arrows-clockwise',
     description:
       'JwtRefreshGuard reads the refresh token from the cookie or Authorization header. ' +
@@ -130,7 +130,7 @@ export class AuthController {
   @HttpCode(200)
   @ApiOperation({
     summary: 'Logout and invalidate session',
-    summaryHe: 'מתנתק מהמערכת ומסיים את סשן העבודה בבטחה',
+    summaryHe: 'מתנתק מהמערכת ומסיים את הסשן',
     toolIcon: 'ph-sign-out',
     description:
       'Always succeeds, even when the access token is already expired: revokes the stored refresh token (best-effort, from the refresh cookie) and removes auth cookies from the response.',
@@ -154,7 +154,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get current authenticated user payload',
-    summaryHe: 'מציג את פרטי הפרופיל המהירים של המשתמש הנוכחי',
+    summaryHe: 'מציג את פרטי הפרופיל של המשתמש הנוכחי',
     toolIcon: 'ph-user-circle',
     description:
       'Reads req.user as populated by JwtAuthGuard. No database query is made. ' +
