@@ -109,7 +109,7 @@ describe('StrainHunter', () => {
             component.toggleCompare({ id: 2 });
             component.toggleCompare({ id: 1 });
 
-            expect(component.compareItems().map((item) => item.id)).toEqual([2, 1]);
+            expect(component.compareItems().map((item) => item['id'])).toEqual([2, 1]);
         });
 
         it('keeps compared strains when active filters change', () => {
@@ -118,7 +118,7 @@ describe('StrainHunter', () => {
             component.activeFilters.set([{ key: 'brand', fields: ['brand'], label: 'X', value: 'X', name: 'מותג' }]);
 
             expect(component.items()).toEqual([]);
-            expect(component.compareItems().map((item) => item.id)).toEqual([1]);
+            expect(component.compareItems().map((item) => item['id'])).toEqual([1]);
         });
 
         it('mirrors main columns (1:1 with columns(), embedded fields excluded)', () => {
@@ -142,7 +142,7 @@ describe('StrainHunter', () => {
 
             // Selection order before any sort.
             const base = component.compareItems();
-            expect(base.map((item) => item.id)).toEqual([1, 2]);
+            expect(base.map((item) => item['id'])).toEqual([1, 2]);
 
             const asc: any = { field: 'price', order: 1, data: [...base] };
             component.sortCompareTable(asc);

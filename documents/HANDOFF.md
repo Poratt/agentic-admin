@@ -3367,3 +3367,29 @@ documents/
   - Did not introduce a per-tool or per-component instruction list in the code; the single rule covers all of them generically.
   - Did not add a JSON-mode constraint or a `tools`-only response mode — the LLM still needs to produce natural prose around the render event for the brief intro, the system protection warnings, and the data-integrity confirmations.
 - **Files touched:** `backend/src/modules/admin-agent/constants/system-context.constant.ts`, `documents/HANDOFF.md`, `documents/STATUS.md`, `documents/LOG.md`.
+
+## 2026-09-17 Session (Fix TS4111 build error in strain-hunter)
+
+- User hit `ng serve` build failure: `TS4111: Property 'symbols' comes from an index signature, so it must be accessed with ['symbols']` at `strain-hunter.ts:298:39`.
+- **Root cause:** commit `b6d8f10` (2026-09-17, "feat(search): token search across every search field via shared helper") added `columnText(item: StrainRow, field)` with dot access `item.symbols`. `StrainRow = ScoredStrain<Record<string, unknown>>` is an index-signature type and the project enables `noPropertyAccessFromIndexSignature: true`, so dot access is a compile error. The identical code at line 333 doesn't fail only because there `item` is typed `any` (from `rawItems = signal<any[]>`).
+- **Fix:** one line — `item.symbols` → `item['symbols']` in `columnText`.
+- **Verification:** `npm run build` from `frontend/` — pass (exit 0, "Application bundle generation complete"). Pre-existing warning: strain-hunter.css exceeds the 8 kB component-style budget (8.84 kB) — unrelated to this change.
+- **Files touched:** `frontend/src/app/features/strain-hunter/strain-hunter.ts`, `documents/HANDOFF.md`.
+
+## 2026-09-17 Session (continued — Deduplicate symbols-text logic in strain-hunter)
+
+- **Committed:** see commit for strain-hunter fixes (TS4111 fix + columnText dedup + rawItems typing). The llm-providers-management changes and HANDOFF/STATUS edits visible in the working tree belong to other sessions and are NOT part of that commit.
+
+- Follow-up to the TS4111 fix: the active-filter ternary at line ~333 duplicated `columnText` exactly (same symbols ternary + same `formatValue` fallback + same `trim()`).
+- **Change:** replaced the filter's inline ternary with `this.columnText(item, field).toLowerCase().includes(val)` — one shared helper for both token search and active-filter matching. Net −10 lines.
+- **Verification:** `npm test -- --watch=false` from `frontend/` — 594/594 passed (same as pre-change baseline). `npm run build` — pass, only the pre-existing strain-hunter.css budget warning.
+- **Files touched:** `frontend/src/app/features/strain-hunter/strain-hunter.ts`, `documents/HANDOFF.md`.
+
+## 2026-09-17 Session (continued — Type rawItems, drop the any[])
+
+- `rawItems` was `signal<any[]>`, which is why the pre-existing `item.symbols` dot-access at the filter path (line ~333) never failed compilation while the identical new code in `columnText` did — `any` hides index-signature violations.
+- **Change:** `rawItems = signal<Record<string, unknown>[]>([])` — NOT `StrainRow[]`: rawItems holds pre-scoring API rows (`response.result.items`, typed `Record<string, unknown>[]` in `StrainHunterResponse`), and `score`/`breakdown` are only added later by `calculateScore`. First attempt with `StrainRow[]` correctly failed TS2345 at `rawItems.set(items)`.
+- Follow-on fixes: `columnText` parameter typed `Record<string, unknown>`; `item.price` → `item['price']`, `item?.id` → `item?.['id']` (TS4111, `noPropertyAccessFromIndexSignature`); compareItems now flows typed records through `calculateScore` (generic infers `Record<string, unknown>` instead of `any`). Spec assertions `item.id` → `item['id']` (3 places).
+- Templates untouched — PrimeNG `Table.value` is `InputSignal<any[]>`, body-template context is `any`, `SortEvent.data` is `any[]`, so `strictTemplates` is unaffected.
+- **Verification:** `npm test -- --watch=false` from `frontend/` — 604/604 passed (llm-providers-management.spec gained tests from another session; strain-hunter.spec 63/63). `npm run build` — pass, only the pre-existing strain-hunter.css budget warning.
+- **Files touched:** `frontend/src/app/features/strain-hunter/strain-hunter.ts`, `frontend/src/app/features/strain-hunter/strain-hunter.spec.ts`, `documents/HANDOFF.md`.

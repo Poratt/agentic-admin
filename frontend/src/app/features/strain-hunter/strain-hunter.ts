@@ -238,7 +238,7 @@ export class StrainHunter implements OnInit {
         'lastScrapedAt',
     ];
 
-    rawItems = signal<any[]>([]);
+    rawItems = signal<Record<string, unknown>[]>([]);
     loading = signal(true);
     refreshing = signal(false);
     error = signal<string | null>(null);
@@ -292,10 +292,10 @@ export class StrainHunter implements OnInit {
     readonly terpeneTooltip = signal<TerpeneTooltipPos | null>(null);
 
     /** Text of one searched column — symbols render as a comma-joined string. */
-    private columnText(item: StrainRow, field: string): string {
+    private columnText(item: Record<string, unknown>, field: string): string {
         return (
             field === 'symbols'
-                ? this.getSymbols(item.symbols)
+                ? this.getSymbols(item['symbols'])
                       .map((s) => s.alt)
                       .join(', ')
                 : this.formatValue(item[field])
@@ -311,7 +311,7 @@ export class StrainHunter implements OnInit {
 
         const filtered = raw.filter((item) => {
             if (hasPriceFilter) {
-                const price = this.toNumber(this.formatValue(item.price));
+                const price = this.toNumber(this.formatValue(item['price']));
                 if (price === null || price < priceMin || price > priceMax) {
                     return false;
                 }
@@ -327,15 +327,7 @@ export class StrainHunter implements OnInit {
 
             return filters.every((filter) => {
                 const val = filter.value.toLowerCase().trim();
-                return filter.fields.some((field) => {
-                    const valueToCompare =
-                        field === 'symbols'
-                            ? this.getSymbols(item.symbols)
-                                  .map((s) => s.alt)
-                                  .join(', ')
-                            : this.formatValue(item[field]);
-                    return valueToCompare.trim().toLowerCase().includes(val);
-                });
+                return filter.fields.some((field) => this.columnText(item, field).toLowerCase().includes(val));
             });
         });
 
@@ -511,7 +503,7 @@ export class StrainHunter implements OnInit {
     compareItems = computed(() => {
         const raw = this.rawItems();
         return this.compareIds()
-            .map((id) => raw.find((item) => item?.id === id))
+            .map((id) => raw.find((item) => item?.['id'] === id))
             .filter((item) => item !== undefined)
             .map((item) => this.matchingEngine.calculateScore(item));
     });
@@ -894,7 +886,7 @@ export class StrainHunter implements OnInit {
         this.lastSort = null;
         this.activeSortField.set(null);
         this.table()?.reset();
-        const rawIndex = new Map(this.rawItems().map((item, index) => [item.id, index]));
+        const rawIndex = new Map(this.rawItems().map((item, index) => [item['id'], index] as const));
         data.sort((first, second) => (rawIndex.get(first.id) ?? 0) - (rawIndex.get(second.id) ?? 0));
     }
 
