@@ -378,14 +378,14 @@ describe('LlmProvidersManagement', () => {
     });
 
     describe('showInactive filter', () => {
-        it('should hide inactive providers by default and show them when toggled', () => {
+        it('should show all providers by default and hide inactive when toggled off', () => {
             mockProviderStore.providers.mockReturnValue([
                 { id: 1, active: true, models: [] },
                 { id: 2, active: false, models: [] },
             ]);
-            expect(component.llmProviders().map((p) => p.id)).toEqual([1]);
-            component.toggleShowInactive(true);
             expect(component.llmProviders().map((p) => p.id)).toEqual([1, 2]);
+            component.toggleShowInactive(false);
+            expect(component.llmProviders().map((p) => p.id)).toEqual([1]);
         });
 
         it('should sort inactive providers to the bottom when shown', () => {
@@ -394,8 +394,36 @@ describe('LlmProvidersManagement', () => {
                 { id: 1, active: true, models: [] },
                 { id: 3, active: false, models: [] },
             ]);
-            component.toggleShowInactive(true);
             expect(component.llmProviders().map((p) => p.id)).toEqual([1, 2, 3]);
+        });
+    });
+
+    describe('sortProviders', () => {
+        const rows = () => [
+            { id: 1, key: 'b', active: true, modelsCount: 2 },
+            { id: 2, key: 'a', active: false, modelsCount: 9 },
+            { id: 3, key: 'c', active: true, modelsCount: 1 },
+        ];
+
+        it('sorts by column but keeps inactive at the bottom', () => {
+            const data = rows() as any;
+            component.sortProviders({ data, field: 'key', order: 1 } as any);
+
+            expect(data.map((p: any) => p.id)).toEqual([1, 3, 2]);
+        });
+
+        it('keeps inactive at the bottom in descending order too', () => {
+            const data = rows() as any;
+            component.sortProviders({ data, field: 'key', order: -1 } as any);
+
+            expect(data.map((p: any) => p.id)).toEqual([3, 1, 2]);
+        });
+
+        it('restores active-first order when sorting is cleared', () => {
+            const data = rows() as any;
+            component.sortProviders({ data } as any);
+
+            expect(data.map((p: any) => p.id)).toEqual([1, 3, 2]);
         });
     });
 

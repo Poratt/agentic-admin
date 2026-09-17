@@ -246,7 +246,7 @@
         }
         @case (PageStates.Ready) {
             <div class="glass-effect card table-container" dir="ltr">
-                <p-table #table [value]="llmProviders()" dataKey="id" [globalFilterFields]="globalFilterFields" [rowHover]="true">
+                <p-table #table [value]="llmProviders()" dataKey="id" [globalFilterFields]="globalFilterFields" [rowHover]="true" [customSort]="true" (sortFunction)="sortProviders($event)">
                     <ng-template #header>
                         <tr>
                             <th class="col-expand"></th>

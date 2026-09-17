@@ -13,7 +13,6 @@ import type { LlmProvider, LlmToolCall } from '../llm/types/llm.types';
 
 const MAX_ITERATIONS = 10;
 const MAX_DUPLICATE_TOOL_CALLS = 2;
-const MAX_CALLS_PER_TOOL = 3;
 const PARALLEL_UNSAFE_TOOL_NAMES = new Set([
   'LlmController_testLlm',
   'LlmController_testAll',
@@ -60,7 +59,6 @@ type ToolCallResult = {
 export class AdminAgentService implements OnModuleInit {
   private readonly logger = new Logger(AdminAgentService.name);
   private readonly toolCallCounter: Map<string, number> = new Map<string, number>();
-  private readonly toolNameCounter: Map<string, number> = new Map<string, number>();
   private readonly contentPolicyRetries: Map<string, number> = new Map<string, number>();
 
   constructor(
@@ -212,50 +210,22 @@ export class AdminAgentService implements OnModuleInit {
 
         const groups = this.groupToolCallsForExecution(llmResponse.toolCalls);
 
-        for (const group of groups) {
-          for (const call of group) {
-            this.recordToolCall(call);
-            this.recordToolNameIncrement(call);
-          }
-
-          const results = await this.executeToolCallGroup(group, userId, session.id);
-
-          for (const { call, resultData } of results) {
-            let parsedResult: any;
-            try {
-              parsedResult = JSON.parse(resultData);
-            } catch {
-              parsedResult = null;
+          for (const group of groups) {
+            for (const call of group) {
+              this.recordToolCall(call);
             }
 
-            // Per-tool-name cap — check AFTER content policy has had its chance
-            const toolName = call.function.name;
-            const nameCount = this.toolNameCounter.get(toolName) ?? 0;
-            if (nameCount >= MAX_CALLS_PER_TOOL && !(parsedResult?.error && this.isContentPolicyViolation(parsedResult))) {
-              // Auth/setup tools: rescue the flow before giving up.
-              const rescued = await this.tryAuthUrlRescue({
-                toolName,
-                history,
-                userId,
-                sessionId: session.id,
-                systemContext: dynamicSystemContext,
-                provider,
-                model,
-              });
-              if (rescued) {
-                await this.agentSessionService.saveMessage(userId, session.id, 'assistant', rescued);
-                return rescued;
+            const results = await this.executeToolCallGroup(group, userId, session.id);
+
+            for (const { call, resultData } of results) {
+              let parsedResult: any;
+              try {
+                parsedResult = JSON.parse(resultData);
+              } catch {
+                parsedResult = null;
               }
 
-              this.logger.warn(
-                `[AgentLoopBreaker] userId=${userId} sessionId=${session.id} toolName=${toolName} — tool called ${nameCount} times in one turn, breaking the loop.`,
-              );
-              const breakerMessage = `הסוכן ניסה להשתמש בכלי "${toolName}" יותר מ-${MAX_CALLS_PER_TOOL} פעמים באותו תור, ונעצר. כנראה שהמודל תקע בלולאה. אפשר לנסות שוב עם מודל אחר או לנסח את הבקשה מחדש.`;
-              await this.agentSessionService.saveMessage(userId, session.id, 'assistant', breakerMessage);
-              return breakerMessage;
-            }
-
-            if (parsedResult?.error === 'CONFIRMATION_REQUIRED') {
+              if (parsedResult?.error === 'CONFIRMATION_REQUIRED') {
               throw new Error('הפעולה דורשת אישור משתמש — יש להשתמש בשיחה הסטרימינגית לאישור פעולות רגישות.');
             }
 
@@ -399,7 +369,6 @@ export class AdminAgentService implements OnModuleInit {
             const toolIcon = endpoint?.toolIcon || STEP_ICONS.tool;
 
             this.recordToolCall(call);
-            this.recordToolNameIncrement(call);
 
             yield JSON.stringify({ type: 'step', icon: toolIcon, message: `${description}...` }) + '\n';
           }
@@ -412,38 +381,6 @@ export class AdminAgentService implements OnModuleInit {
               parsedResult = JSON.parse(resultData);
             } catch {
               parsedResult = null;
-            }
-
-            // Per-tool-name cap — check AFTER content policy has had its chance
-            const toolName = call.function.name;
-            const nameCount = this.toolNameCounter.get(toolName) ?? 0;
-            if (nameCount >= MAX_CALLS_PER_TOOL && !(parsedResult?.error && this.isContentPolicyViolation(parsedResult))) {
-              // Auth/setup tools: rescue the flow before giving up.
-              const rescued = await this.tryAuthUrlRescue({
-                toolName,
-                history,
-                userId,
-                sessionId: session.id,
-                systemContext: dynamicSystemContext,
-                provider,
-                model,
-              });
-              if (rescued) {
-                yield JSON.stringify({ type: 'token', content: rescued }) + '\n';
-                await this.agentSessionService.saveMessage(userId, session.id, 'assistant', rescued, {
-                  renderSpec: collectedRenderBlocks.length > 0 ? JSON.stringify(collectedRenderBlocks) : null,
-                });
-                return;
-              }
-
-              this.logger.warn(
-                `[AgentLoopBreaker] userId=${userId} sessionId=${session.id} toolName=${toolName} — tool called ${nameCount} times in one turn, breaking the loop.`,
-              );
-              const breakerMessage = `הסוכן ניסה להשתמש בכלי "${toolName}" יותר מ-${MAX_CALLS_PER_TOOL} פעמים באותו תור, ונעצר. כנראה שהמודל תקע בלולאה. אפשר לנסות שוב עם מודל אחר או לנסח את הבקשה מחדש.`;
-              yield JSON.stringify({ type: 'step', icon: STEP_ICONS.error, message: breakerMessage }) + '\n';
-              yield JSON.stringify({ type: 'token', content: breakerMessage }) + '\n';
-              await this.agentSessionService.saveMessage(userId, session.id, 'assistant', breakerMessage);
-              return;
             }
 
             if (parsedResult?.error === 'CONFIRMATION_REQUIRED') {
@@ -689,7 +626,6 @@ export class AdminAgentService implements OnModuleInit {
 
   private resetToolCallCounter(): void {
     this.toolCallCounter.clear();
-    this.toolNameCounter.clear();
     this.contentPolicyRetries.clear();
   }
 
@@ -731,24 +667,6 @@ export class AdminAgentService implements OnModuleInit {
       // MAX_DUPLICATE_TOOL_CALLS=2 means "allow 2 calls, trip on the 3rd".
       // A pending call with count >= 3 would be the 3rd (or later) execution.
       if (count > MAX_DUPLICATE_TOOL_CALLS) {
-        return call;
-      }
-    }
-    return null;
-  }
-
-  private recordToolNameIncrement(call: LlmToolCall): number {
-    const name = call.function.name;
-    const next = (this.toolNameCounter.get(name) ?? 0) + 1;
-    this.toolNameCounter.set(name, next);
-    return next;
-  }
-
-  private findExcessToolCalls(calls: LlmToolCall[]): LlmToolCall | null {
-    for (const call of calls) {
-      const name = call.function.name;
-      const count = this.toolNameCounter.get(name) ?? 0;
-      if (count >= MAX_CALLS_PER_TOOL) {
         return call;
       }
     }

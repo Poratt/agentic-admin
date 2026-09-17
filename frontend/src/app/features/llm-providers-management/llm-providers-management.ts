@@ -22,6 +22,7 @@ import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { CheckboxModule } from 'primeng/checkbox';
 import { Tabs, TabList, Tab } from 'primeng/tabs';
 import { Confirmation, ConfirmationService, MessageService } from 'primeng/api';
+import type { SortEvent } from 'primeng/api';
 import { AuthStore } from '../../core/store/auth.store';
 import { UserRole } from '../../core/enums/user-role.enum';
 import { LlmProviderStore } from '../../core/store/llm-provider.store';
@@ -94,7 +95,7 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     protected readonly globalFilterFields = ['id', 'key', 'label', 'baseUrl', 'createdAt'];
     globalFilter = signal('');
     // Deactivated providers are hidden by default; admins can reveal them to re-activate.
-    showInactive = signal(false);
+    showInactive = signal(true);
 
     ngOnInit(): void {
         this.llmProviderStore.loadUserDefaultModel();
@@ -452,6 +453,28 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
         const ids = (provider.models ?? []).filter((model) => model.active !== active).map((model) => model.id);
         if (ids.length === 0) return;
         this.llmProviderStore.setModelsActive(ids, active);
+    }
+
+    private readonly providerSortCollator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+
+    /** Custom table sort that always sinks inactive providers to the bottom. */
+    sortProviders(event: SortEvent) {
+        if (!event.data) return;
+        const data = event.data as LlmProviderView[];
+        const order = event.order ?? 1;
+        if (event.field) {
+            const field = event.field as keyof LlmProviderView;
+            data.sort((a, b) => {
+                const first = a[field];
+                const second = b[field];
+                if (typeof first === 'number' && typeof second === 'number') return (first - second) * order;
+                return this.providerSortCollator.compare(String(first ?? ''), String(second ?? '')) * order;
+            });
+        }
+        // Stable partition: inactive sink regardless of column or direction.
+        const active = data.filter((p) => p.active);
+        const inactive = data.filter((p) => !p.active);
+        event.data.splice(0, event.data.length, ...active, ...inactive);
     }
 
     deleteProvider(providerId: number) {
