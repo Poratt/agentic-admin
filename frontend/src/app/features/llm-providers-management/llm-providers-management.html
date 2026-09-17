@@ -10,14 +10,14 @@
     <!-- Floor 2: search, filters and the primary action — providers view only. -->
     @if (activeTab() === 'providers' && pageState() === PageStates.Ready) {
         <div class="toolbar-row">
-            <div class="form-field-has-icon sm">
+            <div class="form-field-has-icon sm wide">
                 <span class="field-icon ph ph-magnifying-glass"></span>
                 <input
                     pInputText
                     type="text"
                     [value]="globalFilter()"
                     (input)="applyGlobalFilter($event)"
-                    placeholder="חיפוש ספקים..."
+                    placeholder="חיפוש ספקים, מודלים ובדיקות..."
                     class="form-control"
                 />
                 <button
@@ -104,13 +104,41 @@
                 <p class="subtitle">{{ llmProviderStore.modelStatsError() }}</p>
                 <button class="primary-btn sm" type="button" (click)="llmProviderStore.loadModelStats()">Try again</button>
             </div>
-        } @else if (statsRows().length === 0) {
+        } @else if (filteredStatsRows().length === 0) {
             <div class="page-state empty-state roomy">
                 <span class="icon ph ph-chart-bar"></span>
-                <h4 class="title">No models to rank yet.</h4>
-                <p class="subtitle">Statistics appear once providers and models are configured.</p>
+                @if (globalFilter()) {
+                    <h4 class="title">No statistics match this search.</h4>
+                    <p class="subtitle">Try a different search term.</p>
+                } @else {
+                    <h4 class="title">No models to rank yet.</h4>
+                    <p class="subtitle">Statistics appear once providers and models are configured.</p>
+                }
             </div>
         } @else {
+            <div class="toolbar-row">
+                <div class="form-field-has-icon sm wide">
+                    <span class="field-icon ph ph-magnifying-glass"></span>
+                    <input
+                        pInputText
+                        type="text"
+                        [value]="globalFilter()"
+                        (input)="applyGlobalFilter($event)"
+                        placeholder="חיפוש בסטטיסטיקות..."
+                        class="form-control"
+                    />
+                    <button
+                        type="button"
+                        class="icon-only transparent-btn sm search-clear-btn"
+                        [class.is-visible]="globalFilter()"
+                        aria-label="נקה חיפוש"
+                        (click)="clearGlobalFilter()"
+                    >
+                        <span class="ph ph-x"></span>
+                    </button>
+                </div>
+            </div>
+
             <div class="stats-legend" dir="ltr">
                 <span class="legend-item">
                     <i class="ph ph-plugs-connected"></i>
@@ -123,7 +151,7 @@
                 </span>
             </div>
 
-            <p-table [value]="statsRows()" dataKey="id" [rowHover]="true" class="stats-table" dir="ltr">
+            <p-table [value]="filteredStatsRows()" dataKey="id" [rowHover]="true" class="stats-table" dir="ltr">
                 <ng-template #header>
                     <tr>
                         <th pSortableColumn="modelKey">
@@ -246,7 +274,7 @@
         }
         @case (PageStates.Ready) {
             <div class="glass-effect card table-container" dir="ltr">
-                <p-table #table [value]="llmProviders()" dataKey="id" [globalFilterFields]="globalFilterFields" [rowHover]="true" [customSort]="true" (sortFunction)="sortProviders($event)">
+                <p-table [value]="filteredProviders()" dataKey="id" [rowHover]="true" [customSort]="true" (sortFunction)="sortProviders($event)">
                     <ng-template #header>
                         <tr>
                             <th class="col-expand"></th>

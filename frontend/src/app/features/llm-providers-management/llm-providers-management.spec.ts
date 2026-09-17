@@ -937,19 +937,21 @@ describe('LlmProvidersManagement', () => {
             expect(fixture.nativeElement.querySelector('.summary-row')).not.toBeNull();
 
             // Empty filtered table renders the in-table empty state (same pattern as strain-hunter).
-            // Live-verified with a real search (screenshot); TestBed doesn't run PrimeNG's
-            // internal filter pass, so this asserts the wiring the component owns: the search
-            // input drives applyGlobalFilter, which arms the table's global filter.
+            // Filtering is a computed over the search signal rather than PrimeNG's internal
+            // filter pass, so it runs synchronously in TestBed: a hopeless query empties the
+            // table and the empty state appears, and clearing restores the rows.
             const searchInput = fixture.nativeElement.querySelector('.toolbar-row .form-field-has-icon input') as HTMLInputElement;
             searchInput.value = 'zzz-no-such-provider';
             searchInput.dispatchEvent(new Event('input'));
             fixture.detectChanges();
 
             expect(component.globalFilter()).toBe('zzz-no-such-provider');
-            expect(fixture.nativeElement.querySelector('.table-empty-state')).toBeNull();
+            expect(fixture.nativeElement.querySelector('.table-empty-state')).not.toBeNull();
 
             component.clearGlobalFilter();
             expect(component.globalFilter()).toBe('');
+            fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('.table-empty-state')).toBeNull();
 
             // Caption tags: the leaderboard winners render beside the count once stats load.
             mockProviderStore.modelStats.mockReturnValue(statsData);
@@ -971,9 +973,10 @@ describe('LlmProvidersManagement', () => {
             fixture.detectChanges();
 
             expect(component.activeTab()).toBe('stats');
-            expect(fixture.nativeElement.querySelector('.toolbar-row .form-field-has-icon')).toBeNull();
             expect(fixture.nativeElement.querySelector('.caption-row .mode-toggle')).toBeNull();
             expect(fixture.nativeElement.querySelector('.stats-panel')).not.toBeNull();
+            // The statistics view has its own search box bound to the same global filter.
+            expect(fixture.nativeElement.querySelector('.stats-panel .form-field-has-icon input')).not.toBeNull();
 
             toggleButtons[0].click();
             fixture.detectChanges();
@@ -1058,6 +1061,202 @@ describe('LlmProvidersManagement', () => {
             fixture.detectChanges();
 
             expect(component.activeTab()).toBe('stats');
+        });
+    });
+
+    describe('global search across all tables', () => {
+        const searchableProviders = [
+            {
+                id: 1,
+                key: 'openai',
+                label: 'OpenAI',
+                baseUrl: 'https://api.openai.com',
+                active: true,
+                createdAt: '2026-01-01',
+                updatedAt: '2026-01-01',
+                models: [
+                    {
+                        id: 11,
+                        key: 'openai/gpt-4o',
+                        label: 'GPT-4o',
+                        active: true,
+                        sortOrder: 0,
+                        capability: 'text',
+                        providerId: 1,
+                        createdAt: '',
+                        updatedAt: '',
+                        testResults: [
+                            { id: 101, createdAt: '2026-09-01', responseTimeMs: 800, status: 'success', errorMessage: null },
+                            { id: 102, createdAt: '2026-09-02', responseTimeMs: 0, status: 'error', errorMessage: 'rate limited, retry later' },
+                        ],
+                    },
+                    {
+                        id: 12,
+                        key: 'openai/dall-e-3',
+                        label: 'DALL-E 3',
+                        active: true,
+                        sortOrder: 1,
+                        capability: 'image',
+                        providerId: 1,
+                        createdAt: '',
+                        updatedAt: '',
+                        testResults: [],
+                    },
+                ],
+            },
+            {
+                id: 2,
+                key: 'anthropic',
+                label: 'Anthropic',
+                baseUrl: 'https://api.anthropic.com',
+                active: true,
+                createdAt: '2026-01-01',
+                updatedAt: '2026-01-01',
+                models: [
+                    {
+                        id: 21,
+                        key: 'anthropic/claude-opus',
+                        label: 'Claude Opus',
+                        active: true,
+                        sortOrder: 0,
+                        capability: 'text',
+                        providerId: 2,
+                        createdAt: '',
+                        updatedAt: '',
+                        testResults: [],
+                    },
+                ],
+            },
+        ];
+
+        const searchableStats = {
+            minimumSample: 3,
+            fastestId: 'openai::gpt-4o',
+            mostStableId: 'openai::gpt-4o',
+            rows: [
+                {
+                    id: 'openai::gpt-4o',
+                    providerKey: 'openai',
+                    modelKey: 'openai/gpt-4o',
+                    label: 'GPT-4o',
+                    active: true,
+                    ping: { runs: 4, successRate: 100, avgMs: 250, minMs: 200 },
+                    real: { runs: 8, successRate: 50, avgMs: 800, minMs: 700 },
+                    lastCallAt: '2026-09-13T11:00:00.000Z',
+                    rankingBasis: 'real',
+                },
+                {
+                    id: 'anthropic::opus',
+                    providerKey: 'anthropic',
+                    modelKey: 'anthropic/claude-opus',
+                    label: 'Claude Opus',
+                    active: true,
+                    ping: null,
+                    real: null,
+                    lastCallAt: null,
+                    rankingBasis: null,
+                },
+            ],
+        };
+
+        beforeEach(() => {
+            // Mocks first, fixture second: llmProviders() is a computed over a plain mock
+            // function (zero signal deps), so a detectChanges before the mocks are set would
+            // evaluate and cache stale rows for the whole test. Same pattern as the view
+            // tests above — set the store, then recreate the component on top of it.
+            mockProviderStore.providers.mockReturnValue(searchableProviders);
+            mockProviderStore.modelStats.mockReturnValue(searchableStats);
+            fixture.destroy();
+            fixture = TestBed.createComponent(LlmProvidersManagement);
+            component = fixture.componentInstance;
+            fixture.detectChanges();
+        });
+
+        afterEach(() => {
+            component.globalFilter.set('');
+            mockProviderStore.providers.mockReturnValue([]);
+            mockProviderStore.modelStats.mockReturnValue(null);
+        });
+
+        it('returns everything when the query is empty', () => {
+            expect(component.filteredProviders().length).toBe(2);
+            expect(component.filteredProviders()[0].models.length).toBe(2);
+            expect(component.filteredStatsRows().length).toBe(2);
+        });
+
+        it('matches a provider by its own columns and keeps the whole roster', () => {
+            component.globalFilter.set('api.openai');
+
+            const visible = component.filteredProviders();
+            expect(visible.map((p) => p.key)).toEqual(['openai']);
+            expect(visible[0].models.length).toBe(2);
+            expect(visible[0].modelsCount).toBe(2);
+        });
+
+        it('narrows to the matching models when only a model hits', () => {
+            component.globalFilter.set('dall');
+
+            const visible = component.filteredProviders();
+            expect(visible.map((p) => p.key)).toEqual(['openai']);
+            expect(visible[0].models.map((m) => m.key)).toEqual(['openai/dall-e-3']);
+            expect(visible[0].modelsCount).toBe(1);
+        });
+
+        it('matches model capability and performance columns', () => {
+            component.globalFilter.set('image');
+
+            const visible = component.filteredProviders();
+            expect(visible.map((p) => p.key)).toEqual(['openai']);
+            expect(visible[0].models.map((m) => m.key)).toEqual(['openai/dall-e-3']);
+        });
+
+        it('finds providers through test-result log output and narrows to the matching results', () => {
+            component.globalFilter.set('rate limited');
+
+            const visible = component.filteredProviders();
+            expect(visible.map((p) => p.key)).toEqual(['openai']);
+            expect(visible[0].models.map((m) => m.key)).toEqual(['openai/gpt-4o']);
+            expect(visible[0].models[0].testResults!.map((r) => r.id)).toEqual([102]);
+        });
+
+        it('searches token-wise, order-free and punctuation-insensitive', () => {
+            component.globalFilter.set('gpt 4o');
+
+            const visible = component.filteredProviders();
+            expect(visible.map((p) => p.key)).toEqual(['openai']);
+            expect(visible[0].models.map((m) => m.key)).toEqual(['openai/gpt-4o']);
+        });
+
+        it('returns no providers when nothing matches', () => {
+            component.globalFilter.set('zzz-no-such-thing');
+
+            expect(component.filteredProviders()).toEqual([]);
+        });
+
+        it('searches every statistics column, both measurement sources', () => {
+            component.globalFilter.set('9000');
+            expect(component.filteredStatsRows()).toEqual([]);
+
+            component.globalFilter.set('800');
+            expect(component.filteredStatsRows().map((row) => row.id)).toEqual(['openai::gpt-4o']);
+
+            component.globalFilter.set('250');
+            expect(component.filteredStatsRows().map((row) => row.id)).toEqual(['openai::gpt-4o']);
+
+            component.globalFilter.set('11:00');
+            expect(component.filteredStatsRows().map((row) => row.id)).toEqual(['openai::gpt-4o']);
+        });
+
+        it('matches statistics rows by model label', () => {
+            component.globalFilter.set('opus');
+
+            expect(component.filteredStatsRows().map((row) => row.id)).toEqual(['anthropic::opus']);
+        });
+
+        it('returns no statistics rows when nothing matches', () => {
+            component.globalFilter.set('zzz-no-such-thing');
+
+            expect(component.filteredStatsRows()).toEqual([]);
         });
     });
 });

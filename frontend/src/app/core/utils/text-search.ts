@@ -3,13 +3,13 @@
  *
  * The query is split on whitespace into tokens; every token must appear in the
  * haystack, order-free ("nemo 35" finds "nvidia/nemotron-3.5-lightning").
- * Dots, dashes and underscores are noise, so "nemo 3.5" and "nemotron 35" are
- * the same query. Matching is case-insensitive substring inside the normalized
- * haystack.
+ * Dots, dashes, underscores, slashes and colons are noise, so "nemo 3.5" and
+ * "nemotron 35" are the same query, and "openai gpt" finds "openai/gpt-4o".
+ * Matching is case-insensitive substring inside the normalized haystack.
  */
 
 export function normalizeSearchToken(value: string): string {
-    return value.toLowerCase().replace(/[.\-_]/g, '');
+    return value.toLowerCase().replace(/[.\-_/:]/g, '');
 }
 
 export function tokenizeSearchQuery(query: string | null | undefined): string[] {

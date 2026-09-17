@@ -2,7 +2,6 @@ import {
     Component,
     inject,
     computed,
-    viewChild,
     ChangeDetectionStrategy,
     signal,
     OnInit,
@@ -16,7 +15,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 
 import { InputTextModule } from 'primeng/inputtext';
-import { Table, TableModule } from 'primeng/table';
+import { TableModule } from 'primeng/table';
 import { DialogModule } from 'primeng/dialog';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -34,12 +33,12 @@ import {
     LlmProvider,
     LlmProviderService,
     LlmModel,
-    ProviderCatalogEntry,
     ModelStatsRow,
+    ModelUsageStats,
+    ProviderCatalogEntry,
     modelStatsId,
 } from '../../core/services/llm-provider.service';
-import { filterBySearch } from '../../core/utils/text-search';
-import { TOKEN_SEARCH_MATCH_MODE } from '../../core/config/token-search-filter';
+import { filterBySearch, matchesSearch } from '../../core/utils/text-search';
 
 export interface LlmModelView extends LlmModel {
     testResults?: any[];
@@ -79,7 +78,6 @@ const COPY_FEEDBACK_MS = 5000;
     styleUrl: './llm-providers-management.css',
 })
 export class LlmProvidersManagement implements OnInit, OnDestroy {
-    private table = viewChild<Table>('table');
     private fb = inject(FormBuilder);
 
     protected authStore = inject(AuthStore);
@@ -88,7 +86,6 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     protected confirmService = inject(ConfirmationService);
     protected messageService = inject(MessageService);
     protected readonly PageStates = PageStates;
-    protected readonly globalFilterFields = ['id', 'key', 'label', 'baseUrl', 'createdAt'];
     globalFilter = signal('');
     // Deactivated providers are hidden by default; admins can reveal them to re-activate.
     showInactive = signal(true);
@@ -325,6 +322,79 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     });
 
     /**
+     * One search box across every table: a provider stays visible when its own
+     * columns hit or when any nested model / test result hits. A direct provider
+     * hit shows the whole roster; a nested-only hit narrows to the matching
+     * models (and, inside those, to the matching test results).
+     */
+    filteredProviders = computed<LlmProviderView[]>(() => {
+        const query = this.globalFilter();
+        if (!query.trim()) return this.llmProviders();
+        const visible: LlmProviderView[] = [];
+        for (const provider of this.llmProviders()) {
+            if (matchesSearch(query, ...this.providerHaystack(provider))) {
+                visible.push(provider);
+                continue;
+            }
+            const models: LlmModelView[] = [];
+            for (const model of provider.models) {
+                if (matchesSearch(query, ...this.modelHaystack(model))) {
+                    models.push(model);
+                    continue;
+                }
+                const results = (model.testResults ?? []).filter((result) =>
+                    matchesSearch(query, ...this.testResultHaystack(result)),
+                );
+                if (results.length > 0) models.push({ ...model, testResults: results });
+            }
+            if (models.length > 0) visible.push({ ...provider, models, modelsCount: models.length });
+        }
+        return visible;
+    });
+
+    /** Every searchable text cell of one provider row: identity, endpoint and roster size. */
+    private providerHaystack(provider: LlmProviderView): (string | null | undefined)[] {
+        return [
+            String(provider.id),
+            provider.key,
+            provider.label,
+            provider.baseUrl,
+            provider.createdAt,
+            String(provider.modelsCount),
+        ];
+    }
+
+    /** Every searchable text cell of one model row: identity, capability and measured performance. */
+    private modelHaystack(model: LlmModelView): (string | null | undefined)[] {
+        return [
+            String(model.id),
+            model.key,
+            model.label,
+            model.capability,
+            String(model.successPercentage),
+            String(model.latencyAverage),
+            this.formatLatency(model.latencyAverage),
+        ];
+    }
+
+    /** Every searchable text cell of one test-result row: time, latency, status and log output. */
+    private testResultHaystack(result: {
+        createdAt?: unknown;
+        responseTimeMs?: unknown;
+        status?: unknown;
+        errorMessage?: unknown;
+    }): (string | null | undefined)[] {
+        const latency = Number(result.responseTimeMs) || 0;
+        return [
+            String(result.createdAt ?? ''),
+            String(result.responseTimeMs ?? ''),
+            this.formatLatency(latency),
+            String(result.status ?? ''),
+            typeof result.errorMessage === 'string' ? result.errorMessage : '',
+        ];
+    }
+
+    /**
      * Statistics rows, fastest mean real-call latency first. Models with no real calls sink to the
      * bottom rather than sorting as "0 ms" — never used is not the same as instant.
      */
@@ -341,6 +411,22 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
             return (b.ping?.runs ?? 0) - (a.ping?.runs ?? 0);
         });
     });
+
+    /** The statistics table searches every displayed column, both measurement sources included. */
+    filteredStatsRows = computed<ModelStatsRow[]>(() => {
+        const query = this.globalFilter();
+        if (!query.trim()) return this.statsRows();
+        return this.statsRows().filter((row) => matchesSearch(query, ...this.statsRowHaystack(row)));
+    });
+
+    /** Every searchable text cell of one statistics row. */
+    private statsRowHaystack(row: ModelStatsRow): (string | null | undefined)[] {
+        const source = (stats: ModelUsageStats | null): string[] =>
+            stats
+                ? [String(stats.runs), String(stats.successRate), String(stats.avgMs), this.formatLatency(stats.avgMs)]
+                : [];
+        return [row.id, row.providerKey, row.modelKey, row.label, row.lastCallAt, ...source(row.ping), ...source(row.real)];
+    }
 
     /** True when this model holds the fastest mean real-call latency across the whole system. */
     isFastest(providerKey: string, modelKey: string): boolean {
@@ -405,14 +491,11 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     });
 
     applyGlobalFilter(event: Event) {
-        const value = (event.target as HTMLInputElement).value;
-        this.globalFilter.set(value);
-        this.table()?.filterGlobal(value, TOKEN_SEARCH_MATCH_MODE);
+        this.globalFilter.set((event.target as HTMLInputElement).value);
     }
 
     clearGlobalFilter() {
         this.globalFilter.set('');
-        this.table()?.filterGlobal('', TOKEN_SEARCH_MATCH_MODE);
     }
 
     toggleShowInactive(value: boolean) {

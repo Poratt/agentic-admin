@@ -287,6 +287,11 @@ select {
   &.sm {
     width: min(calc(var(--search-width) / 2), 100%);
 
+    /* Full-width compact search: sm typography and padding, base width. */
+    &.wide {
+      width: min(var(--search-width), 100%);
+    }
+
     /* Leading edge. The clear button is anchored to the trailing corner (inset-inline-end), so
        the icon sits at the leading corner (inset-inline-start) — logical on both sides, no
        overlap in either direction. */

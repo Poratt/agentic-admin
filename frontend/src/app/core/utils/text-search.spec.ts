@@ -5,6 +5,11 @@ describe('text-search', () => {
         it('lowercases and drops dots, dashes and underscores', () => {
             expect(normalizeSearchToken('Nemotron-3.5_Ultra.Pro')).toBe('nemotron35ultrapro');
         });
+
+        it('also drops slashes and colons', () => {
+            expect(normalizeSearchToken('openai/gpt-4o')).toBe('openaigpt4o');
+            expect(normalizeSearchToken('https://api.openai.com')).toBe('httpsapiopenaicom');
+        });
     });
 
     describe('tokenizeSearchQuery', () => {
@@ -30,6 +35,11 @@ describe('text-search', () => {
             expect(matchesSearch('nemo 35', key)).toBe(true);
             expect(matchesSearch('nemo 3.5', key)).toBe(true);
             expect(matchesSearch('nemotron 35', key)).toBe(true);
+        });
+
+        it('ignores slash/colon differences', () => {
+            expect(matchesSearch('openai gpt', 'openai/gpt-4o')).toBe(true);
+            expect(matchesSearch('api openai', 'https://api.openai.com')).toBe(true);
         });
 
         it('is case-insensitive and matches across several haystack parts', () => {
