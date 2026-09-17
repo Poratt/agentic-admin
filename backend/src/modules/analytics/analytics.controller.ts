@@ -26,7 +26,7 @@ export class AnalyticsController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Run a safe analytics query',
-    summaryHe: 'מריצים שאילתת אנליטיקה ומקבלים נתוני גרף מעובדים',
+    summaryHe: 'מריץ שאילתת אנליטיקה ומקבל נתוני גרף מעובדים',
     toolIcon: 'ph-chart-line',
     description:
       'Runs a supported analytics metric from the server-side catalog and returns chart-ready data.',

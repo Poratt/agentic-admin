@@ -54,7 +54,7 @@ export class IdeasController {
   @Post('generate')
   @ApiOperation({
     summary: 'Generate startup ideas',
-    summaryHe: 'מגבשים ומחוללים רעיונות סטארטאפ חדשניים ופורצי דרך',
+    summaryHe: 'מגבש ומחולל רעיונות סטארטאפ חדשניים ופורצי דרך',
     toolIcon: 'ph-lightbulb',
   } as CustomApiOperationOptions)
   async generate(@Req() req: RequestWithUser, @Body() dto: GenerateIdeasDto): Promise<GenerateIdeasResponse> {
@@ -83,7 +83,7 @@ export class IdeasController {
   @Sse()
   @ApiOperation({
     summary: 'Generate business ideas with real-time progress (SSE)',
-    summaryHe: 'מחוללים רעיונות עסקיים מעולים עם חיווי התקדמות חי בסטרמינג',
+    summaryHe: 'מחולל רעיונות עסקיים מעולים עם חיווי התקדמות חי בסטרמינג',
     toolIcon: 'ph-lightbulb',
     description:
       'Same flow as POST /ideas/generate but streams progress events (phase 0 → 1 → 2) over Server-Sent Events. Final event carries the full GenerateIdeasResponse. Use this when the UI needs a real progress bar.',

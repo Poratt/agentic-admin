@@ -21,7 +21,7 @@ export class SystemController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Get system status and metrics',
-    summaryHe: 'מציגים את מצב המערכת הכללי, העומסים ומדדי הפעילות',
+    summaryHe: 'מציג את מצב המערכת הכללי, העומסים ומדדי הפעילות',
     toolIcon: 'ph-gauge',
     description: 'Returns activity metrics and current runtime status parameters.',
   } as CustomApiOperationOptions)

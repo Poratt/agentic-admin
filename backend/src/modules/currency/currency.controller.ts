@@ -27,7 +27,7 @@ export class CurrencyController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Get exchange rates for a base currency',
-    summaryHe: 'מציגים שערי חליפין מעודכנים על בסיס מטבע נבחר',
+    summaryHe: 'מציג שערי חליפין מעודכנים על בסיס מטבע נבחר',
     toolIcon: 'ph-currency-circle-dollar',
     description: 'Retrieves current exchange rates from the external exchange-rate provider.',
   } as CustomApiOperationOptions)
@@ -52,7 +52,7 @@ export class CurrencyController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Convert currency amount',
-    summaryHe: 'ממירים סכומי כסף בין שני מטבעות לפי השער היציג העדכני',
+    summaryHe: 'ממיר סכומי כסף בין שני מטבעות לפי השער היציג העדכני',
     toolIcon: 'ph-currency-circle-dollar',
     description: 'Converts a positive amount between two supported currencies using current exchange rates.',
   } as CustomApiOperationOptions)

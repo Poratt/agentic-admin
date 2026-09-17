@@ -21,7 +21,7 @@ export class DatabaseMonitorController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Get database storage usage by table',
-    summaryHe: 'מציגים את השימוש באחסון ומספר השורות של כל טבלה ב-DB',
+    summaryHe: 'מציג את השימוש באחסון ומספר השורות של כל טבלה ב-DB',
     toolIcon: 'ph-database',
     description: 'Returns row counts and storage sizes for all tables in the database.',
   } as CustomApiOperationOptions)

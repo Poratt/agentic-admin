@@ -46,7 +46,7 @@ export class AuthController {
   @HttpCode(201)
   @ApiOperation({
     summary: 'Register a new user account',
-    summaryHe: 'יוצרים חשבון חדש ומצטרפים למשפחת המערכת',
+    summaryHe: 'יוצר חשבון חדש ומצטרף למשפחת המערכת',
     toolIcon: 'ph-user-plus',
     description:
       'Creates a new user account. Required RegisterDto fields: fullName, email, password. ' +
@@ -75,7 +75,7 @@ export class AuthController {
   @HttpCode(200)
   @ApiOperation({
     summary: 'Login with email and password',
-    summaryHe: 'נכנסים לחשבון האישי בבטחה',
+    summaryHe: 'נכנס לחשבון האישי בבטחה',
     toolIcon: 'ph-sign-in',
     description:
       'Validates user credentials. On success, the service writes access and refresh tokens to HTTP-only cookies ' +
@@ -104,7 +104,7 @@ export class AuthController {
   @UseGuards(JwtRefreshGuard)
   @ApiOperation({
     summary: 'Refresh access token using refresh token',
-    summaryHe: 'מחדשים את טוקן הגישה ברקע כדי להישאר מחוברים',
+    summaryHe: 'מחדש את טוקן הגישה ברקע כדי להישאר מחובר',
     toolIcon: 'ph-arrows-clockwise',
     description:
       'JwtRefreshGuard reads the refresh token from the cookie or Authorization header. ' +
@@ -130,7 +130,7 @@ export class AuthController {
   @HttpCode(200)
   @ApiOperation({
     summary: 'Logout and invalidate session',
-    summaryHe: 'מתנתקים מהמ系統 ומסיימים את סשן העבודה בבטחה',
+    summaryHe: 'מתנתק מהמערכת ומסיים את סשן העבודה בבטחה',
     toolIcon: 'ph-sign-out',
     description:
       'Always succeeds, even when the access token is already expired: revokes the stored refresh token (best-effort, from the refresh cookie) and removes auth cookies from the response.',
@@ -154,7 +154,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get current authenticated user payload',
-    summaryHe: 'מציגים את פרטי הפרופיל המהירים של המשתמש הנוכחי',
+    summaryHe: 'מציג את פרטי הפרופיל המהירים של המשתמש הנוכחי',
     toolIcon: 'ph-user-circle',
     description:
       'Reads req.user as populated by JwtAuthGuard. No database query is made. ' +

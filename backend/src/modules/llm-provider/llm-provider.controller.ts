@@ -39,7 +39,7 @@ export class LlmProviderController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Create new provider',
-    summaryHe: 'רושמים ספק מודלים (Provider) חדש במערכת',
+    summaryHe: 'רושם ספק מודלים (Provider) חדש במערכת',
     toolIcon: 'ph-database',
     description: 'Adds a new LLM provider to the system configuration.',
   } as CustomApiOperationOptions)
@@ -52,7 +52,7 @@ export class LlmProviderController {
   @Get()
   @ApiOperation({
     summary: 'Get all providers',
-    summaryHe: 'מציגים את כל ספקי ה-AI והמודלים המוגדרים במערכת',
+    summaryHe: 'מציג את כל ספקי ה-AI והמודלים המוגדרים במערכת',
     toolIcon: 'ph-list-bullets',
     description: 'Retrieves a list of all configured LLM providers.',
   } as CustomApiOperationOptions)
@@ -66,7 +66,7 @@ export class LlmProviderController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Update provider',
-    summaryHe: 'מעדכנים את הגדרות החיבור, הכתובת והמפתח של הספק',
+    summaryHe: 'מעדכן את הגדרות החיבור, הכתובת והמפתח של הספק',
     toolIcon: 'ph-pencil-simple',
     description: 'Updates an existing LLM provider configuration.',
   } as CustomApiOperationOptions)
@@ -81,7 +81,7 @@ export class LlmProviderController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Delete provider',
-    summaryHe: 'מוחקים ספק לצמיתות יחד עם כל המודלים שלו',
+    summaryHe: 'מוחק ספק לצמיתות יחד עם כל המודלים שלו',
     toolIcon: 'ph-trash',
     description:
       'Permanently deletes an LLM provider. DB-level cascades remove its models, their test results and user default-model rows. Note: built-in seeded providers are only re-created when the providers table is completely empty.',
@@ -96,7 +96,7 @@ export class LlmProviderController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Add model to provider',
-    summaryHe: 'מוסיפים מודל חדש תחת ספק ה-LLM שנבחר',
+    summaryHe: 'מוסיף מודל חדש תחת ספק ה-LLM שנבחר',
     toolIcon: 'ph-plus-circle',
     description: 'Creates a new model associated with the specified provider.',
   } as CustomApiOperationOptions)
@@ -110,7 +110,7 @@ export class LlmProviderController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Get provider model catalog',
-    summaryHe: 'שולפים את קטלוג המודלים החי מהספק וממזגים אותו עם המקומי (חדש / קיים / לא זמין)',
+    summaryHe: 'שולף את קטלוג המודלים החי מהספק וממזג אותו עם המקומי (חדש / קיים / לא זמין)',
     toolIcon: 'ph-cloud-arrow-down',
     description:
       "Fetches the provider's live OpenAI-compatible GET /models catalog and merges it with the local list: new (not in DB), exists, unavailable (local model the provider no longer lists). Read-only.",
@@ -129,7 +129,7 @@ export class LlmProviderController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Add selected models from catalog',
-    summaryHe: 'מוסיפים מודלים שנבחרו מהקטלוג כשהם כבויים, עם דילוג של קיימים',
+    summaryHe: 'מוסיף מודלים שנבחרו מהקטלוג כשהם כבויים, עם דילוג של קיימים',
     toolIcon: 'ph-download-simple',
     description: 'Bulk-adds model keys selected in the sync dialog with active=false, capability=text. Existing keys are skipped.',
   } as CustomApiOperationOptions)
@@ -143,7 +143,7 @@ export class LlmProviderController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Update model',
-    summaryHe: 'מעדכנים את ההגדרות, התפקיד והסטטוס הפעיל של מודל קיים',
+    summaryHe: 'מעדכן את ההגדרות, התפקיד והסטטוס הפעיל של מודל קיים',
     toolIcon: 'ph-sliders',
     description: 'Updates an existing LLM model configuration.',
   } as CustomApiOperationOptions)
@@ -157,7 +157,7 @@ export class LlmProviderController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Delete model',
-    summaryHe: 'מכבים או מוחקים מודל לצמיתות מהספק שלו',
+    summaryHe: 'מכבה או מוחק מודל לצמיתות מהספק שלו',
     toolIcon: 'ph-trash',
     description: 'Deletes an LLM model by ID.',
   } as CustomApiOperationOptions)
@@ -171,7 +171,7 @@ export class LlmProviderController {
   @UseGuards(AdminGuard)
   @ApiOperation({
     summary: 'Delete all test results for model',
-    summaryHe: 'מנקים את כל היסטוריית בדיקות החיבור של המודל',
+    summaryHe: 'מנקה את כל היסטוריית בדיקות החיבור של המודל',
     toolIcon: 'ph-eraser',
     description: 'Deletes all test results associated with the specified model.',
   } as CustomApiOperationOptions)
@@ -184,7 +184,7 @@ export class LlmProviderController {
   @Get(':id/models')
   @ApiOperation({
     summary: 'Get models for provider',
-    summaryHe: 'מציגים את כל המודלים המשויכים לספק שנבחר',
+    summaryHe: 'מציג את כל המודלים המשויכים לספק שנבחר',
     toolIcon: 'ph-cube',
     description: 'Retrieves all models associated with the given provider.',
   } as CustomApiOperationOptions)
@@ -199,7 +199,7 @@ export class LlmProviderController {
   @RequiresConfirmation()
   @ApiOperation({
     summary: 'Delete old test results',
-    summaryHe: 'מנקים בדיקות חיבור ישנות מהארכיון על בסיס תקופת שימור',
+    summaryHe: 'מנקה בדיקות חיבור ישנות מהארכיון על בסיס תקופת שימור',
     toolIcon: 'ph-broom',
     description: 'Manually triggers cleanup of LLM test results older than retention period.',
   } as CustomApiOperationOptions)
@@ -218,7 +218,7 @@ export class LlmProviderController {
   @Get('test-results')
   @ApiOperation({
     summary: 'Get test results',
-    summaryHe: 'מציגים את ההיסטוריה המלאה של בדיקות החיבור במערכת',
+    summaryHe: 'מציג את ההיסטוריה המלאה של בדיקות החיבור במערכת',
     toolIcon: 'ph-activity',
     description: 'Retrieves paginated list of LLM model test results with total count.',
   } as CustomApiOperationOptions)
@@ -236,7 +236,7 @@ export class LlmProviderController {
   @Get('stats')
   @ApiOperation({
     summary: 'Get model statistics',
-    summaryHe: 'מציגים דירוג מודלים: המהיר ביותר, היציב ביותר, וזמני תגובה בפועל',
+    summaryHe: 'מציג דירוג מודלים: המהיר ביותר, היציב ביותר, וזמני תגובה בפועל',
     toolIcon: 'ph-chart-bar',
     description:
       'Per-model usage statistics. Connectivity pings and real calls are reported separately, aggregated in SQL so the response size does not grow with call volume.',
