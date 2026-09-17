@@ -1,6 +1,16 @@
 # Project Documentation Status
 
-Last updated: 2026-09-15
+Last updated: 2026-09-17
+
+## 2026-09-17 — ✅ DONE: shared token search in every search field
+
+- **Helper:** new `core/utils/text-search.ts` — whitespace tokens, every token must appear (order-free), `.`/`-`/`_` ignored, case-insensitive, empty query ⇒ everything.
+- **Applied:** sync-models dialog (local duplicate removed) · providers toolbar · users table · chat-history · strain-hunter table (new `columnText()` haystack) · settings genetics + terpenes · matching-preferences-drawer.
+- **PrimeNG:** `core/config/token-search-filter.ts` registers `TOKEN_SEARCH_MATCH_MODE = 'tokenContains'` on `FilterService` from `initializeApp()`; both tables' `filterGlobal` calls use it.
+- **Known limit:** p-table ORs the match mode across `globalFilterFields`, so all tokens must sit in the same field (dialog has a single joined haystack → no limit).
+- **Verified:** frontend **594/594 (59 files), exit 0**; `npm run build` exit 0 (pre-existing `strain-hunter.css` budget warning only). No architecture-diagram change.
+- **Committed + pushed:** `main` — commit `b6d8f10` (11 files: 4 new + 7 edited, +218/-69); these session docs follow in their own commit.
+- **Open:** (1) `activeFilters` chips still substring — convert or keep? (2) cross-field token search on the two PrimeNG tables needs a manual `filteredValue` computed.
 
 ## 2026-09-15 — ✅ DONE: chat model picker → `p-tiered-menu` with CSS-only submenu positioning
 

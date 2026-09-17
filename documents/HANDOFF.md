@@ -1,5 +1,35 @@
 # Documentation Handoff
 
+## 2026-09-17 — ✅ DONE: token search (order-free, dot/dash-insensitive) in every search field
+
+**Context:** the sync-models dialog already had a better search than the rest of the app (whitespace tokens + normalization — "nemo 35" finds "nemotron-3.5-lightning"). User asked to extract that logic into a shared helper and apply it to every search field. Committed `b6d8f10` + pushed `main` (11 files, +218/-69).
+
+**The helper:** new `frontend/src/app/core/utils/text-search.ts` — `normalizeSearchToken()` (lowercase, strip `.`/`-`/`_`), `tokenizeSearchQuery()` (split on whitespace), `matchesSearch(query, ...haystackParts)` and `filterBySearch(items, query, toHaystack)`. Every whitespace token must appear, order-free; an empty query matches everything; `null`/`undefined` haystack parts are skipped.
+
+**Wired in (7 places previously each doing `toLowerCase().includes(query)`):** sync-models dialog (local duplicate `normalizeSearchToken` + two stale comments deleted) · providers toolbar global filter · users table global filter · chat-history titles · strain-hunter table · settings genetics + terpenes · matching-preferences-drawer genetics.
+
+**PrimeNG tables:** `core/config/token-search-filter.ts` exports `TOKEN_SEARCH_MATCH_MODE = 'tokenContains'` + `registerTokenSearchMatchMode(filterService)` (calls the public `FilterService.register`); it runs once from `initializeApp()` in `app.config.ts` (`FilterService` added to the `APP_INITIALIZER` deps), and both `filterGlobal(value, 'contains')` call sites now pass the custom mode. Registration lives at bootstrap rather than per component so a lazy-loaded table can never use the mode before it exists.
+
+**PrimeNG limitation (accepted, not a bug):** `table._filter()` applies the match mode per `globalFilterFields` entry and ORs the results, so every token must live in the *same* field — `"content safety"` will not match when `content` is in `label` and `safety` in `key`. The dialog has one joined haystack and no such limit.
+
+**Files (11):** new — `core/utils/text-search.ts` + `.spec.ts`, `core/config/token-search-filter.ts` + `.spec.ts`; edited — `app.config.ts`, `chat-history.ts`, `llm-providers-management.ts`, `strain-hunter-settings.ts`, `strain-hunter.ts`, `matching-preferences-drawer.ts`, `users-management.ts`.
+
+**VERIFIED (final tree):**
+- `frontend` → `npm test -- --watch=false` → **594/594 passed (59 files), exit 0** — 23 new specs (11 helper + 6 match-mode + 6 pre-existing dialog search specs still green).
+- `frontend` → `npm run build` → **exit 0** (only the pre-existing `strain-hunter.css` budget warning: 8.84 kB > 8 kB).
+- Command gotcha re-confirmed: `npx ng test` → *"npm error could not determine executable to run"*; `npm test -- --watch=false` (or the local `ng.cmd`) works.
+- No architecture-diagram change (frontend-only; no new endpoints, modules or flows).
+
+**Decisions made:** (1) one shared helper instead of per-component copies — same behavior everywhere, tested once; (2) the PrimeNG match mode is registered at bootstrap, not inside the two components; (3) strain-hunter's `activeFilters` chips keep their substring semantics — they are typed filters, not a search field (flagged, deliberately untouched); (4) `item['symbols']` bracket access in the new `columnText()` because `StrainRow = ScoredStrain<Record<string, unknown>>` resolves `symbols` through an index signature (TS4111 blocked the build until fixed).
+
+**Open questions for the user:**
+1. Convert the `activeFilters` chips to the same token semantics, or leave them exact-substring?
+2. Cross-field token search for the two PrimeNG tables would need a manual `filteredValue` computed instead of `filterGlobal` — worth it, or is the per-field limit fine?
+
+**Next exact step:** user's visual check — type `"nemo 35"` and `"glm 4.6"` in the providers toolbar, the users table and chat history, and confirm each finds the same rows the sync dialog does.
+
+---
+
 ## 2026-09-15 — ✅ DONE: chat model picker = `p-tiered-menu`, positioned by declarative CSS + dialogs draggable
 
 **Context:** the picker swap landed in the working tree from another agent's session (files frozen at 22:55). This session verified it independently, removed the orphans it left, tuned the submenu rule — committed `184053a` + pushed `main` (9 files, +90/-79).
