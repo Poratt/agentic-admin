@@ -18,6 +18,7 @@ import { IGenetics } from '../../../core/models/genetics.interface';
 import { ITerpene } from '../../../core/models/terpene.interface';
 import { confirmationDialogSettings } from '../../../core/config/confirmation-dialog-settings';
 import { TooltipDirective } from '../../../core/directives/tooltip.directive';
+import { filterBySearch } from '../../../core/utils/text-search';
 import { AuthStore } from '../../../core/store/auth.store';
 import { UserRole } from '../../../core/enums/user-role.enum';
 
@@ -97,29 +98,17 @@ export class StrainHunterSettings implements OnInit, OnDestroy {
     geneticsLoading = computed(() => this.geneticsStore.loading());
     terpeneLoading = computed(() => this.getTerpeneStore().loading());
 
-    filteredGenetics = computed<IGenetics[]>(() => {
-        const q = this.geneticsFilter().toLowerCase();
-        const items = this.geneticsStore.genetics();
-        if (!q) return items;
-        return items.filter(g =>
-            g.name.toLowerCase().includes(q) ||
-            g.origin?.toLowerCase().includes(q) ||
-            g.type?.toLowerCase().includes(q) ||
-            g.parent1?.toLowerCase().includes(q) ||
-            g.parent2?.toLowerCase().includes(q)
-        );
-    });
+    filteredGenetics = computed<IGenetics[]>(() =>
+        filterBySearch(this.geneticsStore.genetics(), this.geneticsFilter(), (g) =>
+            [g.name, g.origin, g.type, g.parent1, g.parent2].filter(Boolean).join(' '),
+        ),
+    );
 
-    filteredTerpenes = computed<ITerpene[]>(() => {
-        const q = this.terpeneFilter().toLowerCase();
-        const items = this.getTerpeneStore().terpenes();
-        if (!q) return items;
-        return items.filter(t =>
-            t.name.toLowerCase().includes(q) ||
-            t.scent?.toLowerCase().includes(q) ||
-            t.effects?.some(e => e.toLowerCase().includes(q))
-        );
-    });
+    filteredTerpenes = computed<ITerpene[]>(() =>
+        filterBySearch(this.getTerpeneStore().terpenes(), this.terpeneFilter(), (t) =>
+            [t.name, t.scent, ...(t.effects ?? [])].filter(Boolean).join(' '),
+        ),
+    );
 
     ngOnInit(): void {
         this.isCompact.set(this.mql.matches);

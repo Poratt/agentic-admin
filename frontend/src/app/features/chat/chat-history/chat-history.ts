@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ChatStore } from '../../../core/store/chat.store';
 import { PageStates } from '../../../core/enums/page-states.enum';
+import { filterBySearch } from '../../../core/utils/text-search';
 
 @Component({
     selector: 'app-chat-history',
@@ -25,10 +26,9 @@ export class ChatHistory implements OnInit {
     searchQuery = signal('');
     pendingDeleteSessionId = signal<number | null>(null);
 
-    filteredSessions = computed(() => {
-        const query = this.searchQuery().toLowerCase();
-        return this.chatStore.sessions().filter((session) => session.title.toLowerCase().includes(query));
-    });
+    filteredSessions = computed(() =>
+        filterBySearch(this.chatStore.sessions(), this.searchQuery(), (session) => session.title),
+    );
 
     hasSearch = computed(() => this.searchQuery().trim().length > 0);
 

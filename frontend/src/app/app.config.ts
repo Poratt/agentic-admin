@@ -11,12 +11,20 @@ import { provideHttpClient, withInterceptors, withXhr } from '@angular/common/ht
 import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { withCredentialsInterceptor } from './core/interceptors/with-credentials.interceptor';
 import { PRIME_NG_PROVIDERS } from './core/config/primeng-define-preset';
+import { FilterService } from 'primeng/api';
+import { registerTokenSearchMatchMode } from './core/config/token-search-filter';
 import { ThemeService } from './core/services/theme.service';
 
 registerLocaleData(localeHe);
 
-export function initializeApp(authService: AuthService, authStore: AuthStore, themeService: ThemeService) {
+export function initializeApp(
+    authService: AuthService,
+    authStore: AuthStore,
+    themeService: ThemeService,
+    filterService: FilterService,
+) {
     return async () => {
+        registerTokenSearchMatchMode(filterService);
         themeService.init();
         const user = await authService.checkSession();
         authStore.user.set(user);
@@ -32,7 +40,7 @@ export const appConfig: ApplicationConfig = {
         {
             provide: APP_INITIALIZER,
             useFactory: initializeApp,
-            deps: [AuthService, AuthStore, ThemeService],
+            deps: [AuthService, AuthStore, ThemeService, FilterService],
             multi: true,
         },
         { provide: LOCALE_ID, useValue: 'he-IL' },

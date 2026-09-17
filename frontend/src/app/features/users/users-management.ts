@@ -10,6 +10,7 @@ import { getUserRoleData } from '../../core/enums/user-role.enum';
 import { BadgeColor } from '../../core/directives/badge-color.directive';
 import { TooltipDirective } from '../../core/directives/tooltip.directive';
 import { User } from '../../core/models/user.interface';
+import { TOKEN_SEARCH_MATCH_MODE } from '../../core/config/token-search-filter';
 
 type UserColumn = {
     field: keyof User;
@@ -61,12 +62,12 @@ export class UsersManagement {
     applyGlobalFilter(event: Event) {
         const value = (event.target as HTMLInputElement).value;
         this.globalFilter.set(value);
-        this.table()?.filterGlobal(value, 'contains');
+        this.table()?.filterGlobal(value, TOKEN_SEARCH_MATCH_MODE);
     }
 
     clearGlobalFilter() {
         this.globalFilter.set('');
-        this.table()?.filterGlobal('', 'contains');
+        this.table()?.filterGlobal('', TOKEN_SEARCH_MATCH_MODE);
     }
 
     toggleRole(userId: number, currentRole: UserRole) {

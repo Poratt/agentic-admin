@@ -38,12 +38,8 @@ import {
     ModelStatsRow,
     modelStatsId,
 } from '../../core/services/llm-provider.service';
-
-// Search normalization: dots/dashes/underscores are noise — "nemo 35" and
-// "nemo 3.5" must both find "nemotron-3.5-...".
-function normalizeSearchToken(value: string): string {
-    return value.toLowerCase().replace(/[.\-_]/g, '');
-}
+import { filterBySearch } from '../../core/utils/text-search';
+import { TOKEN_SEARCH_MATCH_MODE } from '../../core/config/token-search-filter';
 
 export interface LlmModelView extends LlmModel {
     testResults?: any[];
@@ -172,21 +168,12 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     selectedKeys = signal<Set<string>>(new Set());
     syncing = signal(false);
 
-    // Token search: every whitespace-separated token must appear somewhere in
-    // the key/label (case-insensitive, order-free) — "nemo 35" finds
-    // "nvidia/nemotron-3.5-lightning".
     // Token search with normalization: every whitespace-separated token must
     // appear in the normalized key/label (order-free) — "nemo 35", "nemo 3.5"
     // and "nemotron 35" all find "nvidia/nemotron-3.5-lightning-30b-a3b".
-    filteredCatalog = computed(() => {
-        const tokens = this.catalogSearch().toLowerCase().split(/\s+/).filter(Boolean).map(normalizeSearchToken);
-        if (tokens.length === 0) return this.catalog();
-
-        return this.catalog().filter((m) => {
-            const haystack = normalizeSearchToken(`${m.key} ${m.label ?? ''}`);
-            return tokens.every((token) => haystack.includes(token));
-        });
-    });
+    filteredCatalog = computed(() =>
+        filterBySearch(this.catalog(), this.catalogSearch(), (m) => `${m.key} ${m.label ?? ''}`),
+    );
 
     newSelectionCount = computed(
         () => this.catalog().filter((m) => m.status === 'new' && this.selectedKeys().has(m.key)).length,
@@ -420,12 +407,12 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     applyGlobalFilter(event: Event) {
         const value = (event.target as HTMLInputElement).value;
         this.globalFilter.set(value);
-        this.table()?.filterGlobal(value, 'contains');
+        this.table()?.filterGlobal(value, TOKEN_SEARCH_MATCH_MODE);
     }
 
     clearGlobalFilter() {
         this.globalFilter.set('');
-        this.table()?.filterGlobal('', 'contains');
+        this.table()?.filterGlobal('', TOKEN_SEARCH_MATCH_MODE);
     }
 
     toggleShowInactive(value: boolean) {

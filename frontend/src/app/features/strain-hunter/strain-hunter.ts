@@ -29,6 +29,7 @@ import { Tooltip, TooltipCategory } from '../../components/shared/tooltip/toolti
 import { ScoreTooltip } from '../../components/shared/score-tooltip/score-tooltip';
 import { MatchingPreferencesDrawer } from './matching-preferences-drawer/matching-preferences-drawer';
 import { TooltipDirective } from '../../core/directives/tooltip.directive';
+import { matchesSearch } from '../../core/utils/text-search';
 import { AuthStore } from '../../core/store/auth.store';
 import { UserRole } from '../../core/enums/user-role.enum';
 
@@ -290,10 +291,20 @@ export class StrainHunter implements OnInit {
     /** Fixed-position terpene tooltip state — null = hidden */
     readonly terpeneTooltip = signal<TerpeneTooltipPos | null>(null);
 
+    /** Text of one searched column — symbols render as a comma-joined string. */
+    private columnText(item: StrainRow, field: string): string {
+        return (
+            field === 'symbols'
+                ? this.getSymbols(item.symbols)
+                      .map((s) => s.alt)
+                      .join(', ')
+                : this.formatValue(item[field])
+        ).trim();
+    }
+
     items = computed<StrainRow[]>(() => {
         const raw = this.rawItems();
         const filters = this.activeFilters();
-        const query = this.searchQuery().trim().toLowerCase();
         const [priceMin, priceMax] = this.priceRange();
         const [boundsMin, boundsMax] = this.priceBounds();
         const hasPriceFilter = priceMin > boundsMin || priceMax < boundsMax;
@@ -306,19 +317,10 @@ export class StrainHunter implements OnInit {
                 }
             }
 
-            if (query) {
-                const hit = this.searchColumns().some((field) => {
-                    const valueToCompare =
-                        field === 'symbols'
-                            ? this.getSymbols(item.symbols)
-                                  .map((s) => s.alt)
-                                  .join(', ')
-                            : this.formatValue(item[field]);
-                    return valueToCompare.trim().toLowerCase().includes(query);
-                });
-                if (!hit) {
-                    return false;
-                }
+            // Token search across every searched column: all whitespace-separated
+            // tokens must appear somewhere (order-free, dot/dash-insensitive).
+            if (!matchesSearch(this.searchQuery(), ...this.searchColumns().map((field) => this.columnText(item, field)))) {
+                return false;
             }
 
             if (filters.length === 0) return true;

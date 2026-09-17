@@ -7,6 +7,7 @@ import { TerpeneStore } from '../../../core/store/terpene.store';
 import { GeneticsStore } from '../../../core/store/genetics.store';
 import { Tooltip, TooltipCategory } from '../../../components/shared/tooltip/tooltip';
 import { TooltipDirective } from '../../../core/directives/tooltip.directive';
+import { filterBySearch } from '../../../core/utils/text-search';
 
 type PreviewItem = {
     name: string;
@@ -54,10 +55,7 @@ export class MatchingPreferencesDrawer {
     readonly categories = computed<CategoryGroup[]>(() => {
         const items = this.items();
         const geneticsItems = this.collectGenetics(items);
-        const filter = this.geneticsFilter().trim().toLowerCase();
-        const filteredGenetics = filter.length === 0
-            ? geneticsItems
-            : geneticsItems.filter((name) => name.toLowerCase().includes(filter));
+        const filteredGenetics = filterBySearch(geneticsItems, this.geneticsFilter(), (name) => name);
 
         return [
             { category: 'terpene', title: 'טרפנים', items: this.collectTerpenes(items) },
