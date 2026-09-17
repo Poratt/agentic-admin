@@ -731,18 +731,18 @@ describe('LlmProvidersManagement', () => {
             mockProviderService.testAllStatus.mockReturnValue({ subscribe: vi.fn() });
         });
 
-        it('keeps unavailable hidden behind the toggle and counts them', () => {
+        it('excludes unavailable models from groups', () => {
             component.catalog.set([
                 { key: 'a', status: 'new' },
                 { key: 'dead/1', label: 'Dead 1', status: 'unavailable' },
                 { key: 'dead/2', status: 'unavailable' },
             ]);
 
-            expect(component.unavailableCount()).toBe(2);
-            expect(component.unavailableList().length).toBe(0);
-
-            component.toggleShowUnavailable();
-            expect(component.unavailableList().length).toBe(2);
+            const keys = component
+                .catalogGroups()
+                .map((g) => g.items.map((m) => m.key))
+                .flat();
+            expect(keys).toEqual(['a']);
         });
 
         it('deselect only affects new models (existing stay checked/disabled)', () => {

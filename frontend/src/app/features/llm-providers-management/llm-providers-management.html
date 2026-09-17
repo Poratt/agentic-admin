@@ -911,7 +911,7 @@
         <div class="sync-dialog-header">
             <span class="sync-dialog-title">Sync Models · {{ syncProvider()?.label }}</span>
             <span class="sync-dialog-stats">
-                {{ newSelectionCount() }} selected · {{ existingCount() }} existing · {{ unavailableCount() }} unavailable
+                {{ newSelectionCount() }} selected · {{ existingCount() }} existing
             </span>
         </div>
     </ng-template>
@@ -997,29 +997,6 @@
             }
         </div>
 
-        @if (unavailableCount() > 0) {
-            <div class="sync-unavailable-section">
-                <button
-                    type="button"
-                    class="sync-unavailable-toggle"
-                    (click)="toggleShowUnavailable()"
-                    [attr.aria-expanded]="showUnavailable()"
-                >
-                    <i class="ph" [class.ph-caret-down]="showUnavailable()" [class.ph-caret-right]="!showUnavailable()"></i>
-                    Show unavailable ({{ unavailableCount() }})
-                </button>
-                @if (showUnavailable()) {
-                    <div class="sync-model-list unavailable-list">
-                        @for (m of unavailableList(); track m.key) {
-                            <div class="sync-model-row unavailable-row">
-                                <span class="sync-model-key" appTooltip [text]="m.key">{{ shortModelName(m.label || m.key) }}</span>
-                                <span class="sync-tag tag-unavailable">Unavailable</span>
-                            </div>
-                        }
-                    </div>
-                }
-            </div>
-        }
     }
 
     <ng-template #footer>

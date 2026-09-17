@@ -178,14 +178,6 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
 
     existingCount = computed(() => this.catalog().filter((m) => m.status === 'exists').length);
 
-    unavailableCount = computed(() => this.catalog().filter((m) => m.status === 'unavailable').length);
-
-    // Unavailable models are hidden behind a toggle and always render last.
-    unavailableList = computed(() =>
-        this.showUnavailable() ? this.filteredCatalog().filter((m) => m.status === 'unavailable') : [],
-    );
-
-    showUnavailable = signal(false);
     collapsedGroups = signal<Set<string>>(new Set());
 
     // Grouping name, most specific first:
@@ -227,10 +219,6 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
             }
             return next;
         });
-    }
-
-    toggleShowUnavailable() {
-        this.showUnavailable.update((v) => !v);
     }
 
     // Reactive Forms for Provider dialog

@@ -1,5 +1,24 @@
 # Documentation Handoff
 
+## 2026-09-17 — ✅ DONE: removed Show unavailable from sync-models dialog
+
+**Context:** user said the `Show unavailable (N)` toggle in the Sync Models dialog is redundant. Agreed — the dialog's only job is adding `new` models; unavailable entries (local keys missing upstream) have no checkbox and no action.
+
+**Change (frontend only, 4 files):**
+- `llm-providers-management.html` — header stats now `selected · existing` (no `unavailable`); deleted the whole `sync-unavailable-section` block.
+- `llm-providers-management.ts` — removed orphans `unavailableCount`, `unavailableList`, `showUnavailable`, `toggleShowUnavailable`. `catalogGroups` still filters `status !== 'unavailable'`, so dead keys stay out of the groups.
+- `_primeng-overrides.css` — removed orphan rules `.sync-tag`, `.sync-unavailable-section`, `.sync-unavailable-toggle`, `.unavailable-list`, `.unavailable-row .sync-model-key`, `.tag-unavailable` (dialog styles live here per Golden Rule #8).
+- `llm-providers-management.spec.ts` — toggle test replaced with `excludes unavailable models from groups` (keys → `['a']`).
+- Backend untouched — `GET :id/catalog` still returns `unavailable` status; the type keeps `'new' | 'exists' | 'unavailable'`.
+
+**VERIFIED:**
+- `frontend` → `npm test -- --watch=false` → **606/606 passed (59 files), exit 0**.
+- `frontend` → `npm run build` → **exit 0** (only the pre-existing `strain-hunter.css` budget warning, 8.84 kB > 8 kB).
+- Banned-pattern grep on the touched feature dir (`$safeNavigationMigration|*ngIf|*ngFor|*ngSwitch|constructor(`) → clean.
+- No architecture-diagram change (UI removal, no new endpoints/modules/flows).
+
+**Next exact step:** user's visual check of the Sync dialog → commit when user says go.
+
 ## 2026-09-17 — ✅ DONE: token search (order-free, dot/dash-insensitive) in every search field
 
 **Context:** the sync-models dialog already had a better search than the rest of the app (whitespace tokens + normalization — "nemo 35" finds "nemotron-3.5-lightning"). User asked to extract that logic into a shared helper and apply it to every search field. Committed `b6d8f10` + pushed `main` (11 files, +218/-69).

@@ -2,6 +2,14 @@
 
 Last updated: 2026-09-17
 
+## 2026-09-17 — ✅ DONE: removed Show unavailable from sync-models dialog
+
+- **Why:** dialog adds `new` models only; unavailable rows have no checkbox/action → noise + double count (header + toggle showed the same `unavailableCount()`).
+- **Removed:** `sync-unavailable-section` block + header `unavailable` count (HTML); `unavailableCount`/`unavailableList`/`showUnavailable`/`toggleShowUnavailable` (TS); 6 orphan CSS rules incl. `.sync-tag` (global overrides file); toggle spec → `excludes unavailable models from groups`.
+- **Kept:** `catalogGroups` still excludes `status !== 'unavailable'`; backend catalog contract unchanged.
+- **Verified:** frontend **606/606 (59 files), exit 0**; `npm run build` exit 0 (pre-existing `strain-hunter.css` budget warning only). No architecture-diagram change.
+- **Open:** visual check → commit on user go.
+
 ## 2026-09-17 — ✅ DONE: shared token search in every search field
 
 - **Helper:** new `core/utils/text-search.ts` — whitespace tokens, every token must appear (order-free), `.`/`-`/`_` ignored, case-insensitive, empty query ⇒ everything.
