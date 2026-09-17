@@ -13,6 +13,10 @@ import type { LlmProvider, LlmToolCall } from '../llm/types/llm.types';
 
 const MAX_ITERATIONS = 10;
 const MAX_DUPLICATE_TOOL_CALLS = 2;
+// Absolute backstop: total tool executions allowed in one turn, regardless of
+// shape. The tool+args breaker catches true repeats; this catches unbounded
+// fan-out (dozens of distinct-args calls) that would otherwise run to the end.
+const MAX_TOTAL_TOOL_CALLS = 20;
 const PARALLEL_UNSAFE_TOOL_NAMES = new Set([
   'LlmController_testLlm',
   'LlmController_testAll',
@@ -59,6 +63,7 @@ type ToolCallResult = {
 export class AdminAgentService implements OnModuleInit {
   private readonly logger = new Logger(AdminAgentService.name);
   private readonly toolCallCounter: Map<string, number> = new Map<string, number>();
+  private totalToolCalls = 0;
   private readonly contentPolicyRetries: Map<string, number> = new Map<string, number>();
 
   constructor(
@@ -211,6 +216,14 @@ export class AdminAgentService implements OnModuleInit {
         const groups = this.groupToolCallsForExecution(llmResponse.toolCalls);
 
           for (const group of groups) {
+            if (this.overToolBudget(group.length)) {
+              this.logger.warn(
+                `[AgentLoopBreaker] userId=${userId} sessionId=${session.id} — turn exceeded ${MAX_TOTAL_TOOL_CALLS} tool calls, breaking.`,
+              );
+              const budgetMessage = this.budgetExceededMessage();
+              await this.agentSessionService.saveMessage(userId, session.id, 'assistant', budgetMessage);
+              return budgetMessage;
+            }
             for (const call of group) {
               this.recordToolCall(call);
             }
@@ -362,6 +375,16 @@ export class AdminAgentService implements OnModuleInit {
         const groups = this.groupToolCallsForExecution(llmResponse.toolCalls);
 
         for (const group of groups) {
+          if (this.overToolBudget(group.length)) {
+            this.logger.warn(
+              `[AgentLoopBreaker] userId=${userId} sessionId=${session.id} — turn exceeded ${MAX_TOTAL_TOOL_CALLS} tool calls, breaking.`,
+            );
+            const budgetMessage = this.budgetExceededMessage();
+            yield JSON.stringify({ type: 'step', icon: STEP_ICONS.error, message: budgetMessage }) + '\n';
+            yield JSON.stringify({ type: 'token', content: budgetMessage }) + '\n';
+            await this.agentSessionService.saveMessage(userId, session.id, 'assistant', budgetMessage);
+            return;
+          }
           for (const call of group) {
             const args = this.parseToolArguments(call);
             const description = this.agentToolExecutorService.getSemanticActionDescription(call.function.name, args);
@@ -626,6 +649,7 @@ export class AdminAgentService implements OnModuleInit {
 
   private resetToolCallCounter(): void {
     this.toolCallCounter.clear();
+    this.totalToolCalls = 0;
     this.contentPolicyRetries.clear();
   }
 
@@ -657,7 +681,17 @@ export class AdminAgentService implements OnModuleInit {
     const key = this.toolCallKey(call);
     const next = (this.toolCallCounter.get(key) ?? 0) + 1;
     this.toolCallCounter.set(key, next);
+    this.totalToolCalls += 1;
     return next;
+  }
+
+  /** True when executing one more group would exceed the per-turn tool budget. */
+  private overToolBudget(groupSize: number): boolean {
+    return this.totalToolCalls + groupSize > MAX_TOTAL_TOOL_CALLS;
+  }
+
+  private budgetExceededMessage(): string {
+    return `הסוכן הגיע לתקרת ${MAX_TOTAL_TOOL_CALLS} קריאות כלים בתור אחד ונעצר. חלק מהפעולות כבר בוצעו — אפשר לבקש להמשיך מהנקודה שבה נעצר.`;
   }
 
   private findDuplicateToolCall(calls: LlmToolCall[]): LlmToolCall | null {

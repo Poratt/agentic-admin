@@ -238,6 +238,29 @@ describe('AdminAgentService.toolCallLoopBreaker', () => {
     expect(fresh).toBe(1);
   });
 
+  it('trips the per-turn budget after 20 executed calls, even with distinct args', () => {
+    const svc = makeService();
+    (svc as any).resetToolCallCounter();
+
+    for (let id = 1; id <= 20; id++) {
+      (svc as any).recordToolCall(makeToolCall('X_update', { id }));
+    }
+
+    // 20 executed + 1 more pending exceeds the budget of 20.
+    expect((svc as any).overToolBudget(1)).toBe(true);
+    expect((svc as any).overToolBudget(0)).toBe(false);
+  });
+
+  it('resets the per-turn budget between turns', () => {
+    const svc = makeService();
+    (svc as any).resetToolCallCounter();
+
+    (svc as any).recordToolCall(makeToolCall('X_y', { id: 1 }));
+    (svc as any).resetToolCallCounter();
+
+    expect((svc as any).overToolBudget(1)).toBe(false);
+  });
+
   it('builds a Hebrew breaker error message that names the stuck tool and its args', () => {
     const svc = makeService();
     const msg = (svc as any).breakerErrorMessage('WeatherController_getWeather', { city: 'Petah Tikva' }) as string;

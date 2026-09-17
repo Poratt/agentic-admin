@@ -163,18 +163,38 @@ export class AgentToolExecutorService {
   getSemanticActionDescription(functionName: string, args: any): string {
     const endpointMeta = this.swaggerToolsParser.getEndpoint(functionName);
 
+    let base: string;
     if (endpointMeta && endpointMeta.summary) {
-      return endpointMeta.summary;
+      base = endpointMeta.summary;
+    } else {
+      const mcpDescriptions: Record<string, string> = {
+        'get_current_conditions': 'מקבל מזג אוויר נוכחי',
+        'get_forecast': 'מקבל תחזית מזג אוויר',
+        'get_weather_summary': 'מקבל סיכום מזג אוויר מלא',
+        'check_service_status': 'בודק סטטוס שירות',
+      };
+
+      base = mcpDescriptions[functionName] ?? `מפעיל את כלי המערכת: ${functionName}`;
     }
 
-    const mcpDescriptions: Record<string, string> = {
-      'get_current_conditions': 'מקבל מזג אוויר נוכחי',
-      'get_forecast': 'מקבל תחזית מזג אוויר',
-      'get_weather_summary': 'מקבל סיכום מזג אוויר מלא',
-      'check_service_status': 'בודק סטטוס שירות',
-    };
+    const detail = this.identifyingArgDetail(args);
+    return detail ? `${base} (${detail})` : base;
+  }
 
-    return mcpDescriptions[functionName] ?? `מפעיל את כלי המערכת: ${functionName}`;
+  /**
+   * Picks one short identifying argument (id, name, ...) so repeated steps for
+   * different targets don't render as N identical rows in the chat UI.
+   */
+  private identifyingArgDetail(args: any): string | null {
+    if (!args || typeof args !== 'object') return null;
+    for (const key of ['id', 'modelId', 'sessionId', 'name', 'label', 'city', 'query']) {
+      const value = (args as Record<string, unknown>)[key];
+      if (typeof value === 'string' || typeof value === 'number') {
+        const text = String(value).trim();
+        if (text.length > 0 && text.length <= 60) return `${key} ${text}`;
+      }
+    }
+    return null;
   }
 
   private checkActionAllowed(

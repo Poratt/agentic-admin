@@ -203,4 +203,26 @@ describe('internal token cache — re-signs before the JWT expires', () => {
     expect(headers3.Authorization).toBe('Bearer token-B');
     expect(jwtService.sign).toHaveBeenCalledTimes(2);
   });
+
+  describe('getSemanticActionDescription', () => {
+    it('appends the identifying arg so repeated steps are distinguishable', () => {
+      parser.getEndpoint.mockReturnValue({ summary: 'מעדכן מודל' });
+
+      expect(service.getSemanticActionDescription('X_updateModel', { id: 171 })).toBe('מעדכן מודל (id 171)');
+    });
+
+    it('returns the bare summary when no identifying arg exists', () => {
+      parser.getEndpoint.mockReturnValue({ summary: 'מרענן' });
+
+      expect(service.getSemanticActionDescription('X_refresh', {})).toBe('מרענן');
+    });
+
+    it('falls back for unknown tools, still with detail', () => {
+      parser.getEndpoint.mockReturnValue(undefined);
+
+      expect(service.getSemanticActionDescription('Mystery_tool', { city: 'Haifa' })).toBe(
+        'מפעיל את כלי המערכת: Mystery_tool (city Haifa)',
+      );
+    });
+  });
 });
