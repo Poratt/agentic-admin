@@ -57,7 +57,7 @@ export class LlmController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Test all active text models of a provider in the background',
-    summaryHe: 'בודק ברקע את כל המודלים הפעילים של הספק ושומר תוצאות',
+    summaryHe: 'בודק את המודלים הפעילים ושומר את התוצאות',
     toolIcon: 'ph-lightning',
   } as CustomApiOperationOptions)
   @ApiOkResponse({ description: 'Background test run started; results stream into the test history' })
@@ -85,7 +85,7 @@ export class LlmController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Test a single model connectivity and save the result',
-    summaryHe: 'בודק ומאמת את מהירות התגובה והחיבור של מודל ה-AI',
+    summaryHe: 'בודק את החיבור והמהירות של מודל ה-AI',
     toolIcon: 'ph-lightning',
   } as CustomApiOperationOptions)
   async testModel(@Param('id') id: string) {
@@ -107,7 +107,7 @@ export class LlmController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Delete a test result',
-    summaryHe: 'מוחק היסטוריית בדיקת חיבור בודדת של מודל מהארכיון',
+    summaryHe: 'מוחק בדיקת חיבור מההיסטוריה',
     toolIcon: 'ph-trash',
   } as CustomApiOperationOptions)
   async deleteTestResult(@Param('id') id: string) {
@@ -118,7 +118,7 @@ export class LlmController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: "Set the authenticated user's default LLM model",
-    summaryHe: 'קובע את מודל ה-AI המועדף עליך כברירת המחדל של המערכת',
+    summaryHe: 'מגדיר את מודל ה-AI כברירת המחדל',
     toolIcon: 'ph-star',
   } as CustomApiOperationOptions)
   async setDefaultModel(@Body('modelId') modelId: number, @Req() req: RequestWithUser) {
@@ -136,7 +136,7 @@ export class LlmController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: "Get the authenticated user's default LLM model",
-    summaryHe: 'מציג את מודל ה-AI המוגדר כברירת המחדל שלך',
+    summaryHe: 'מציג את מודל ה-AI כברירת המחדל',
     toolIcon: 'ph-star',
   } as CustomApiOperationOptions)
   async getDefaultModel(@Req() req: RequestWithUser) {
@@ -151,7 +151,7 @@ export class LlmController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Generate an image with an Agnes image model',
-    summaryHe: 'יוצר תמונות מרהיבות על בסיס טקסט עם Agnes Image',
+    summaryHe: 'יוצר תמונה מטקסט עם Agnes Image',
     toolIcon: 'ph-palette',
     description:
       'Sends a text prompt (optionally with input images for image-to-image edits) to an Agnes image-generation model and returns a STILL image (URL or Base64 JSON). USE ONLY when the user wants a static image (poster, artwork, illustration, image-to-image edit). DO NOT use for motion / animation / video — for those use LlmController_createVideo. Resolves the provider/model from modelId when provided, otherwise falls back to the first active image-capability model.',
@@ -199,7 +199,7 @@ export class LlmController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Create an asynchronous Agnes video generation task',
-    summaryHe: 'מפיק סרטונים מרהיבים מבוססי טקסט או תמונה עם Agnes Video',
+    summaryHe: 'יוצר סרטון מטקסט או תמונה עם Agnes Video',
     toolIcon: 'ph-video-camera',
     description:
       'Submits a text prompt (optionally with an attached image as starting frame) to an Agnes video model and returns a video task. USE when the user wants a moving video / clip / animation, especially when an attached image should animate (image-to-video, ti2vid). DO NOT use for still images — use LlmController_generateImage. Poll the status with GET /llm/video/:videoId. The HTTP create response is not blocked on generation.',
@@ -247,7 +247,7 @@ export class LlmController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Poll an Agnes video generation task',
-    summaryHe: 'בודק את סטטוס הפקת הסרטון ומוריד אותו כשהוא מוכן',
+    summaryHe: 'בודק את סטטוס הסרטון ומוריד אותו כשהוא מוכן',
     toolIcon: 'ph-hourglass-high',
     description: 'Returns the current status of a video task. Poll until status is "completed" (returns a .mp4 URL) or "failed".',
   } as CustomApiOperationOptions)
@@ -278,7 +278,7 @@ export class LlmController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Continue a generated video from its last frame',
-    summaryHe: 'מאריך וממשיך סרטון קיים מפריים המפתח האחרון שלו',
+    summaryHe: 'מאריך סרטון קיים מהפריים האחרון',
     toolIcon: 'ph-fast-forward',
     description:
       'Downloads a source video (by videoId or videoUrl), extracts its final frame, and submits a new image-to-video task using that frame. Returns the completed continuation video.',
