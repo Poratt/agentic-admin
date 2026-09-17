@@ -22,7 +22,7 @@ export class WebSearchController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Search the web for current information',
-    summaryHe: 'מחפש מידע עדכני באינטרנט לאימות עובדות ומחקר מהיר',
+    summaryHe: 'מחפש מידע עדכני באינטרנט לאימות ומחקר',
     toolIcon: 'ph-magnifying-glass',
     description:
       'Calls the SearXNG instance to perform a real-time web search. Returns structured results with titles, URLs, content snippets, and an optional answer.',

@@ -80,7 +80,7 @@ export class GoogleCalendarController {
     @UseGuards(JwtAuthGuard)
     @ApiOperation({
         summary: 'Get Google OAuth URL',
-        summaryHe: 'מקבל את קישור האישור של Google כדי לחבר את היומן',
+        summaryHe: 'מקבל קישור לאישור חיבור ל-Google',
         toolIcon: 'ph-link',
         description:
             'Returns a URL that the authenticated user must visit to grant the application access to their Google Calendar. After granting consent, Google redirects to /calendar/callback with an authorization code and state.\n\n' +
@@ -123,7 +123,7 @@ export class GoogleCalendarController {
     @Get('callback')
     @ApiOperation({
         summary: 'Handle Google OAuth callback',
-        summaryHe: 'מטפל בהפנייה חזרה מ-Google אחרי אישור הגישה',
+        summaryHe: 'מטפל בחזרה מ-Google לאחר אישור הגישה',
         toolIcon: 'ph-arrow-clockwise',
         description:
             'Handles the OAuth callback from Google. Validates the CSRF state, exchanges the authorization code for tokens, and stores the refresh token server-side, encrypted. Typically called automatically by Google after user consent.\n\n' +
@@ -162,7 +162,7 @@ export class GoogleCalendarController {
     @UseGuards(JwtAuthGuard)
     @ApiOperation({
         summary: 'List upcoming calendar events',
-        summaryHe: 'מציג את האירועים העתידיים ביומן Google',
+        summaryHe: 'מציג את האירועים העתידיים ביומן',
         toolIcon: 'ph-calendar',
         description:
             'Returns upcoming events from the authenticated user\'s primary Google Calendar. ' +
@@ -211,7 +211,7 @@ export class GoogleCalendarController {
     @UseGuards(JwtAuthGuard)
     @ApiOperation({
         summary: 'Create a new calendar event',
-        summaryHe: 'יוצר אירוע חדש ביומן Google',
+        summaryHe: 'יוצר אירוע ביומן',
         toolIcon: 'ph-calendar-plus',
         description:
             'Creates a new event in the authenticated user\'s primary Google Calendar. Requires summary, start time, and end time. Optional fields: description, location. Times should be in ISO 8601 format.',
@@ -266,7 +266,7 @@ export class GoogleCalendarController {
     @UseGuards(JwtAuthGuard)
     @ApiOperation({
         summary: 'Delete a calendar event',
-        summaryHe: 'מוחק אירוע מהיומן Google',
+        summaryHe: 'מוחק אירוע מהיומן',
         toolIcon: 'ph-trash',
         description:
             'Deletes an event from the authenticated user\'s primary Google Calendar by its event ID. Use GET /calendar/events first to retrieve the eventId of the event to delete.',
@@ -305,7 +305,7 @@ export class GoogleCalendarController {
     @UseGuards(JwtAuthGuard)
     @ApiOperation({
         summary: 'Update/reschedule a calendar event',
-        summaryHe: 'מעדכן או מזיז אירוע ביומן Google',
+        summaryHe: 'מעדכן או מזיז אירוע ביומן',
         toolIcon: 'ph-pencil-simple',
         description:
             'Updates an existing event in the authenticated user\'s primary Google Calendar. All fields except eventId are optional — only provided fields are modified. Use GET /calendar/events first to retrieve the eventId.',

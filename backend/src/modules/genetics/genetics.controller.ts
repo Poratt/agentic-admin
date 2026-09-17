@@ -59,7 +59,7 @@ export class GeneticsController {
     @Get()
     @ApiOperation({
         summary: 'List all genetics rows',
-        summaryHe: 'מציג את קטלוג הגנטיקה והזנים המלא במערכת',
+        summaryHe: 'מציג את קטלוג הגנטיקה והזנים',
         toolIcon: 'ph-tree-evergreen',
         description:
             'Returns the full genetics reference catalog ordered alphabetically by Hebrew name. The list is intended to be cached client-side.',
@@ -94,7 +94,7 @@ export class GeneticsController {
     @Get(':name')
     @ApiOperation({
         summary: 'Get a strain by name',
-        summaryHe: 'מציג פרטים מלאים על זן גנטיקה ספציפי לפי שמו',
+        summaryHe: 'מציג פרטים על זן לפי שם',
         toolIcon: 'ph-tree-evergreen',
         description:
             'Returns the genetics row whose `name` column exactly matches the supplied `:name` path parameter. Result is `null` when no record matches — this is not treated as a 404 so the frontend can render a graceful empty state.',
@@ -139,7 +139,7 @@ export class GeneticsController {
     @UseGuards(AdminGuard)
     @ApiOperation({
         summary: 'Create a new genetics record',
-        summaryHe: 'יוצר גנטיקה חדשה בקטלוג המערכת',
+        summaryHe: 'מוסיף זן גנטיקה לקטלוג',
         toolIcon: 'ph-tree-evergreen',
         description:
             'Creates a new genetics entry in the reference catalog. The `name` field must be unique. Returns the created record wrapped in ServiceResultContainer.',
@@ -196,7 +196,7 @@ export class GeneticsController {
     @UseGuards(AdminGuard)
     @ApiOperation({
         summary: 'Update a genetics record by name',
-        summaryHe: 'מעדכן את מאפייני הגנטיקה של זן קיים לפי שמו',
+        summaryHe: 'מעדכן את פרטי הזן',
         toolIcon: 'ph-tree-evergreen',
         description:
             'Updates an existing genetics entry in the reference catalog. All fields are optional — only provided fields are modified. The `name` path parameter identifies the record to update and cannot be changed.',
@@ -243,7 +243,7 @@ export class GeneticsController {
     @UseGuards(AdminGuard)
     @ApiOperation({
         summary: 'Enrich a single genetics record',
-        summaryHe: 'מעשיר זן גנטיקה בודד בפרטים ונתוני מעבדה מבוססי AI',
+        summaryHe: 'מעשיר זן בנתוני AI ומעבדה',
         toolIcon: 'ph-tree-evergreen',
         description:
             'Searches the web for the given strain name, sends context to LLM, and returns enriched description with web results. Does not persist — caller decides whether to save.',
@@ -275,7 +275,7 @@ export class GeneticsController {
     @UseGuards(AdminGuard)
     @ApiOperation({
         summary: 'Enrich all genetics with missing properties (thcRange, terpenes, effects).',
-        summaryHe: 'מפעיל סריקה והעשרה אוטומטית לכל הזנים שחסר להם מידע מבוסס AI',
+        summaryHe: 'סורק ומעשיר זנים שחסר להם מידע',
         toolIcon: 'ph-magic-wand',
     } as CustomApiOperationOptions)
     @ApiOkResponse({ description: 'Bulk enrichment completed.' })
@@ -294,7 +294,7 @@ export class GeneticsController {
     @UseGuards(AdminGuard)
     @ApiOperation({
         summary: 'Delete a genetics strain by name.',
-        summaryHe: 'מוחק זן גנטיקה לצמיתות מקטלוג',
+        summaryHe: 'מוחק זן מהקטלוג',
         toolIcon: 'ph-trash',
     } as CustomApiOperationOptions)
     @ApiParam({

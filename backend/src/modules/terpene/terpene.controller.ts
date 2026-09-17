@@ -74,7 +74,7 @@ export class TerpeneController {
     @Get()
     @ApiOperation({
         summary: 'List all terpenes',
-        summaryHe: 'מציג את קטלוג הטרפנים המלא המוגדר במערכת',
+        summaryHe: 'מציג את קטלוג הטרפנים',
         toolIcon: 'ph-flower-lotus',
         description:
             'Returns the full terpene reference catalog ordered alphabetically by Hebrew name. The list is small (~17 rows) and intended to be cached client-side.',
@@ -109,7 +109,7 @@ export class TerpeneController {
     @Get(':name')
     @ApiOperation({
         summary: 'Get a terpene by name',
-        summaryHe: 'מציג פרטים מלאים על טרפן ספציפי לפי שמו',
+        summaryHe: 'מציג פרטים על טרפן לפי שם',
         toolIcon: 'ph-flower-lotus',
         description:
             'Returns the terpene whose `name` column exactly matches the supplied `:name` path parameter. Result is `null` when no record matches — this is not treated as a 404 so the frontend can render a graceful empty state.',
@@ -160,7 +160,7 @@ export class TerpeneController {
     @UseGuards(AdminGuard)
     @ApiOperation({
         summary: 'Create a new terpene',
-        summaryHe: 'יוצר טרפן חדש בקטלוג המערכת',
+        summaryHe: 'מוסיף טרפן לקטלוג',
         toolIcon: 'ph-flower-lotus',
         description:
             'Creates a new terpene entry in the catalog. The `name` field must be unique — attempting to create a duplicate will return a 409 Conflict. The `color` field must be a valid hex color (e.g., #66BB6A).',
@@ -209,7 +209,7 @@ export class TerpeneController {
     @UseGuards(AdminGuard)
     @ApiOperation({
         summary: 'Update a terpene by name',
-        summaryHe: 'מעדכן את המאפיינים, הריח וההשפעות של טרפן קיים',
+        summaryHe: 'מעדכן את פרטי הטרפן',
         toolIcon: 'ph-flower-lotus',
         description:
             'Updates an existing terpene. Only the provided fields are modified — omitted fields retain their current values. The `name` cannot be changed via this endpoint; use POST /terpenes to create a new record with a different name.',
@@ -257,7 +257,7 @@ export class TerpeneController {
     @UseGuards(AdminGuard)
     @ApiOperation({
         summary: 'Enrich a single terpene',
-        summaryHe: 'מעשיר טרפן בודד בפרטי ארומה והשפעות מבוססי AI',
+        summaryHe: 'מעשיר טרפן בנתוני ארומה והשפעות',
         toolIcon: 'ph-flower-lotus',
         description:
             'Searches the web for the given terpene name, sends context to LLM, and returns enriched description with web results. Does not persist — caller decides whether to save.',
@@ -289,7 +289,7 @@ export class TerpeneController {
     @UseGuards(AdminGuard)
     @ApiOperation({
         summary: 'Enrich all terpenes with missing properties (description, scent, effects).',
-        summaryHe: 'מפעיל סריקה והעשרה אוטומטית לכל הטרפנים שחסר להם מידע מבוסס AI',
+        summaryHe: 'סורק ומעשיר טרפנים שחסר להם מידע',
         toolIcon: 'ph-magic-wand',
     } as CustomApiOperationOptions)
     @ApiOkResponse({ description: 'Bulk enrichment completed.' })
@@ -308,7 +308,7 @@ export class TerpeneController {
     @UseGuards(AdminGuard)
     @ApiOperation({
         summary: 'Delete a terpene by name.',
-        summaryHe: 'מוחק טרפן לצמיתות מקטלוג המערכת',
+        summaryHe: 'מוחק טרפן מהקטלוג',
         toolIcon: 'ph-trash',
     } as CustomApiOperationOptions)
     @ApiParam({

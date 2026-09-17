@@ -30,7 +30,7 @@ export class StrainHunterController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Fetch configured strain hunter strain data',
-    summaryHe: 'סורק, מעדכן ומציג את מלאי הזנים הנוכחי',
+    summaryHe: 'סורק ומעדכן את מלאי הזנים',
     toolIcon: 'ph-compass',
     description:
       'Uses the configured Jane store page scraper or local database cache to load and return normalized strain item data.',
@@ -66,7 +66,7 @@ export class StrainHunterController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Get authenticated user matching preferences',
-    summaryHe: 'שולף את הגדרות ההתאמה האישית השמורות שלך',
+    summaryHe: 'שולף את הגדרות ההתאמה האישית',
     toolIcon: 'ph-sliders',
     description: 'Returns the saved matching preferences (prefs map and weights) for the authenticated user. Returns defaults if no record exists.',
   } as CustomApiOperationOptions)
@@ -101,7 +101,7 @@ export class StrainHunterController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Upsert authenticated user matching preferences',
-    summaryHe: 'שומר או מעדכן את הגדרות ההתאמה האישית שלך',
+    summaryHe: 'שומר או מעדכן את הגדרות ההתאמה האישית',
     toolIcon: 'ph-floppy-disk',
     description: 'Creates or updates the matching preferences for the authenticated user. Only the fields included in the request body will be updated.',
   } as CustomApiOperationOptions)

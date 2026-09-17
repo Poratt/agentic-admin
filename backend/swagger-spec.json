@@ -136,7 +136,7 @@
           }
         },
         "summary": "Refresh access token using refresh token",
-        "summaryHe": "מחדש את טוקן הגישה ברקע כדי להישאר מחובר",
+        "summaryHe": "מחדש את טוקן הגישה כדי להישאר מחובר",
         "tags": [
           "auth"
         ],
@@ -176,7 +176,7 @@
           }
         },
         "summary": "Logout and invalidate session",
-        "summaryHe": "מתנתק מהמערכת ומסיים את סשן העבודה בבטחה",
+        "summaryHe": "מתנתק מהמערכת ומסיים את הסשן",
         "tags": [
           "auth"
         ],
@@ -221,7 +221,7 @@
           }
         ],
         "summary": "Get current authenticated user payload",
-        "summaryHe": "מציג את פרטי הפרופיל המהירים של המשתמש הנוכחי",
+        "summaryHe": "מציג את פרטי הפרופיל של המשתמש הנוכחי",
         "tags": [
           "auth"
         ],
@@ -257,7 +257,7 @@
           }
         ],
         "summary": "List all users",
-        "summaryHe": "מציג את רשימת המשתמשים הפעילים במערכת",
+        "summaryHe": "מציג את המשתמשים הפעילים",
         "tags": [
           "users"
         ],
@@ -293,7 +293,7 @@
           }
         ],
         "summary": "Get current authenticated user payload",
-        "summaryHe": "מציג את פרטי הפרופיל המהירים של המשתמש הנוכחי",
+        "summaryHe": "מציג את פרטי המשתמש הנוכחי",
         "tags": [
           "users"
         ],
@@ -345,7 +345,7 @@
           }
         ],
         "summary": "Get user by id",
-        "summaryHe": "מציג פרטים מלאים על משתמש לפי מזהה ייחודי",
+        "summaryHe": "מציג פרטי משתמש לפי מזהה",
         "tags": [
           "users"
         ],
@@ -406,7 +406,7 @@
           }
         ],
         "summary": "Update user profile fields",
-        "summaryHe": "מעדכן את פרטי הפרופיל האישיים של המשתמש",
+        "summaryHe": "מעדכן את פרטי המשתמש",
         "tags": [
           "users"
         ],
@@ -520,7 +520,7 @@
           }
         ],
         "summary": "Change user role",
-        "summaryHe": "מעדכן את תפקיד והרשאות המשתמש במערכת",
+        "summaryHe": "מעדכן את תפקיד והרשאות המשתמש",
         "tags": [
           "users"
         ],
@@ -566,7 +566,7 @@
           }
         ],
         "summary": "Get chat sessions for the authenticated user",
-        "summaryHe": "מציג את כל שיחות הצ'אט השמורות שלך עם ה-AI",
+        "summaryHe": "מציג את שיחות הצ'אט השמורות",
         "tags": [
           "Admin Agent"
         ],
@@ -594,7 +594,7 @@
           }
         ],
         "summary": "Create a new chat session",
-        "summaryHe": "פותח שיחת צ'אט חדשה ורעננה עם סוכן ה-AI",
+        "summaryHe": "פותח שיחת צ'אט חדשה עם סוכן ה-AI",
         "tags": [
           "Admin Agent"
         ],
@@ -637,7 +637,7 @@
           }
         ],
         "summary": "Get session message history",
-        "summaryHe": "מציג את היסטוריית ההודעות המלאה של שיחת הצ'אט",
+        "summaryHe": "מציג את היסטוריית ההודעות של שיחה",
         "tags": [
           "Admin Agent"
         ],
@@ -688,7 +688,7 @@
           }
         ],
         "summary": "Batch fetch image data for messages",
-        "summaryHe": "שולף ומציג את קבצי המדיה והתמונות של ההודעה",
+        "summaryHe": "שולף ומציג את קבצי המדיה של הודעה",
         "tags": [
           "Admin Agent"
         ],
@@ -769,7 +769,7 @@
           }
         ],
         "summary": "Delete a chat message and later history",
-        "summaryHe": "מוחק הודעת צאט ואת כל היסטוריית השיחה שנכתבה אחריה",
+        "summaryHe": "מוחק הודעה ואת ההודעות שאחריה",
         "tags": [
           "Admin Agent"
         ],
@@ -818,7 +818,7 @@
           }
         ],
         "summary": "Query Admin Agent as a streamed response",
-        "summaryHe": "מתכתב עם סוכן הניהול ומקבל תגובות חיות בסטרמינג",
+        "summaryHe": "מתכתב עם סוכן הניהול בסטרמינג",
         "tags": [
           "Admin Agent"
         ],
@@ -871,7 +871,7 @@
           }
         ],
         "summary": "Confirm or cancel a pending dangerous action",
-        "summaryHe": "מאשר או מבטל פעולה רגישה הממתינה לאישור הניהול שלך",
+        "summaryHe": "מאשר או מבטל פעולה שממתינה לאישור",
         "tags": [
           "Admin Agent"
         ],
@@ -902,7 +902,7 @@
           }
         ],
         "summary": "Test all active text models of a provider in the background",
-        "summaryHe": "בודק ברקע את כל המודלים הפעילים של הספק ושומר תוצאות",
+        "summaryHe": "בודק את המודלים הפעילים ושומר את התוצאות",
         "tags": [
           "llm"
         ],
@@ -964,7 +964,7 @@
           }
         ],
         "summary": "Test a single model connectivity and save the result",
-        "summaryHe": "בודק ומאמת את מהירות התגובה והחיבור של מודל ה-AI",
+        "summaryHe": "בודק את החיבור והמהירות של מודל ה-AI",
         "tags": [
           "llm"
         ],
@@ -995,7 +995,7 @@
           }
         ],
         "summary": "Delete a test result",
-        "summaryHe": "מוחק היסטוריית בדיקת חיבור בודדת של מודל מהארכיון",
+        "summaryHe": "מוחק בדיקת חיבור מההיסטוריה",
         "tags": [
           "llm"
         ],
@@ -1017,7 +1017,7 @@
           }
         ],
         "summary": "Set the authenticated user's default LLM model",
-        "summaryHe": "קובע את מודל ה-AI המועדף עליך כברירת המחדל של המערכת",
+        "summaryHe": "מגדיר את מודל ה-AI כברירת המחדל",
         "tags": [
           "llm"
         ],
@@ -1039,7 +1039,7 @@
           }
         ],
         "summary": "Get the authenticated user's default LLM model",
-        "summaryHe": "מציג את מודל ה-AI המוגדר כברירת המחדל שלך",
+        "summaryHe": "מציג את מודל ה-AI כברירת המחדל",
         "tags": [
           "llm"
         ],
@@ -1098,7 +1098,7 @@
           }
         ],
         "summary": "Generate an image with an Agnes image model",
-        "summaryHe": "יוצר תמונות מרהיבות על בסיס טקסט עם Agnes Image",
+        "summaryHe": "יוצר תמונה מטקסט עם Agnes Image",
         "tags": [
           "llm"
         ],
@@ -1159,7 +1159,7 @@
           }
         ],
         "summary": "Create an asynchronous Agnes video generation task",
-        "summaryHe": "מפיק סרטונים מרהיבים מבוססי טקסט או תמונה עם Agnes Video",
+        "summaryHe": "יוצר סרטון מטקסט או תמונה עם Agnes Video",
         "tags": [
           "llm"
         ],
@@ -1222,7 +1222,7 @@
           }
         ],
         "summary": "Poll an Agnes video generation task",
-        "summaryHe": "בודק את סטטוס הפקת הסרטון ומוריד אותו כשהוא מוכן",
+        "summaryHe": "בודק את סטטוס הסרטון ומוריד אותו כשהוא מוכן",
         "tags": [
           "llm"
         ],
@@ -1279,7 +1279,7 @@
           }
         ],
         "summary": "Continue a generated video from its last frame",
-        "summaryHe": "מאריך וממשיך סרטון קיים מפריים המפתח האחרון שלו",
+        "summaryHe": "מאריך סרטון קיים מהפריים האחרון",
         "tags": [
           "llm"
         ],
@@ -1315,7 +1315,7 @@
           }
         ],
         "summary": "Create new provider",
-        "summaryHe": "רושם ספק מודלים (Provider) חדש במערכת",
+        "summaryHe": "מוסיף ספק מודלים חדש",
         "tags": [
           "LLM Provider"
         ],
@@ -1339,7 +1339,7 @@
           }
         ],
         "summary": "Get all providers",
-        "summaryHe": "מציג את כל ספקי ה-AI והמודלים המוגדרים במערכת",
+        "summaryHe": "מציג את ספקי ה-AI והמודלים",
         "tags": [
           "LLM Provider"
         ],
@@ -1387,7 +1387,7 @@
           }
         ],
         "summary": "Update provider",
-        "summaryHe": "מעדכן את הגדרות החיבור, הכתובת והמפתח של הספק",
+        "summaryHe": "מעדכן את הגדרות הספק",
         "tags": [
           "LLM Provider"
         ],
@@ -1420,7 +1420,7 @@
           }
         ],
         "summary": "Delete provider",
-        "summaryHe": "מוחק ספק לצמיתות יחד עם כל המודלים שלו",
+        "summaryHe": "מוחק ספק ואת המודלים שלו",
         "tags": [
           "LLM Provider"
         ],
@@ -1465,7 +1465,7 @@
           }
         ],
         "summary": "Add model to provider",
-        "summaryHe": "מוסיף מודל חדש תחת ספק ה-LLM שנבחר",
+        "summaryHe": "מוסיף מודל לספק ה-LLM",
         "tags": [
           "LLM Provider"
         ],
@@ -1498,7 +1498,7 @@
           }
         ],
         "summary": "Get models for provider",
-        "summaryHe": "מציג את כל המודלים המשויכים לספק שנבחר",
+        "summaryHe": "מציג את המודלים של הספק",
         "tags": [
           "LLM Provider"
         ],
@@ -1533,7 +1533,7 @@
           }
         ],
         "summary": "Get provider model catalog",
-        "summaryHe": "שולף את קטלוג המודלים החי מהספק וממזג אותו עם המקומי (חדש / קיים / לא זמין)",
+        "summaryHe": "מסנכרן את קטלוג המודלים עם הספק",
         "tags": [
           "LLM Provider"
         ],
@@ -1578,7 +1578,7 @@
           }
         ],
         "summary": "Add selected models from catalog",
-        "summaryHe": "מוסיף מודלים שנבחרו מהקטלוג כשהם כבויים, עם דילוג של קיימים",
+        "summaryHe": "מוסיף מודלים נבחרים מהקטלוג",
         "tags": [
           "LLM Provider"
         ],
@@ -1623,7 +1623,7 @@
           }
         ],
         "summary": "Update model",
-        "summaryHe": "מעדכן את ההגדרות, התפקיד והסטטוס הפעיל של מודל קיים",
+        "summaryHe": "מעדכן הגדרות ומצב של מודל",
         "tags": [
           "LLM Provider"
         ],
@@ -1656,7 +1656,7 @@
           }
         ],
         "summary": "Delete model",
-        "summaryHe": "מכבה או מוחק מודל לצמיתות מהספק שלו",
+        "summaryHe": "מכבה או מוחק מודל מהספק",
         "tags": [
           "LLM Provider"
         ],
@@ -1691,7 +1691,7 @@
           }
         ],
         "summary": "Delete all test results for model",
-        "summaryHe": "מנקה את כל היסטוריית בדיקות החיבור של המודל",
+        "summaryHe": "מנקה את היסטוריית בדיקות החיבור",
         "tags": [
           "LLM Provider"
         ],
@@ -1727,7 +1727,7 @@
           }
         ],
         "summary": "Delete old test results",
-        "summaryHe": "מנקה בדיקות חיבור ישנות מהארכיון על בסיס תקופת שימור",
+        "summaryHe": "מנקה בדיקות חיבור ישנות",
         "tags": [
           "LLM Provider"
         ],
@@ -1773,7 +1773,7 @@
           }
         ],
         "summary": "Get test results",
-        "summaryHe": "מציג את ההיסטוריה המלאה של בדיקות החיבור במערכת",
+        "summaryHe": "מציג את היסטוריית בדיקות החיבור",
         "tags": [
           "LLM Provider"
         ],
@@ -1799,7 +1799,7 @@
           }
         ],
         "summary": "Get model statistics",
-        "summaryHe": "מציג דירוג מודלים: המהיר ביותר, היציב ביותר, וזמני תגובה בפועל",
+        "summaryHe": "מציג דירוג וביצועים של המודלים",
         "tags": [
           "LLM Provider"
         ],
@@ -1825,7 +1825,7 @@
           }
         ],
         "summary": "Get Google OAuth URL",
-        "summaryHe": "מקבל את קישור האישור של Google כדי לחבר את היומן",
+        "summaryHe": "מקבל קישור לאישור חיבור ל-Google",
         "tags": [
           "calendar"
         ],
@@ -1872,7 +1872,7 @@
           }
         ],
         "summary": "Handle Google OAuth callback",
-        "summaryHe": "מטפל בהפנייה חזרה מ-Google אחרי אישור הגישה",
+        "summaryHe": "מטפל בחזרה מ-Google לאחר אישור הגישה",
         "tags": [
           "calendar"
         ],
@@ -1922,7 +1922,7 @@
           }
         ],
         "summary": "List upcoming calendar events",
-        "summaryHe": "מציג את האירועים העתידיים ביומן Google",
+        "summaryHe": "מציג את האירועים העתידיים ביומן",
         "tags": [
           "calendar"
         ],
@@ -1972,7 +1972,7 @@
           }
         ],
         "summary": "Create a new calendar event",
-        "summaryHe": "יוצר אירוע חדש ביומן Google",
+        "summaryHe": "יוצר אירוע ביומן",
         "tags": [
           "calendar"
         ],
@@ -2018,7 +2018,7 @@
           }
         ],
         "summary": "Delete a calendar event",
-        "summaryHe": "מוחק אירוע מהיומן Google",
+        "summaryHe": "מוחק אירוע מהיומן",
         "tags": [
           "calendar"
         ],
@@ -2073,7 +2073,7 @@
           }
         ],
         "summary": "Update/reschedule a calendar event",
-        "summaryHe": "מעדכן או מזיז אירוע ביומן Google",
+        "summaryHe": "מעדכן או מזיז אירוע ביומן",
         "tags": [
           "calendar"
         ],
@@ -2123,7 +2123,7 @@
           }
         ],
         "summary": "Run a safe analytics query",
-        "summaryHe": "מריץ שאילתת אנליטיקה ומקבל נתוני גרף מעובדים",
+        "summaryHe": "מריץ שאילתת אנליטיקה ומחזיר נתוני גרף",
         "tags": [
           "analytics"
         ],
@@ -2174,7 +2174,7 @@
           }
         ],
         "summary": "Get exchange rates for a base currency",
-        "summaryHe": "מציג שערי חליפין מעודכנים על בסיס מטבע נבחר",
+        "summaryHe": "מציג שערי חליפין לפי מטבע",
         "tags": [
           "currency"
         ],
@@ -2244,7 +2244,7 @@
           }
         ],
         "summary": "Convert currency amount",
-        "summaryHe": "ממיר סכומי כסף בין שני מטבעות לפי השער היציג העדכני",
+        "summaryHe": "ממיר סכום בין שני מטבעות לפי השער העדכני",
         "tags": [
           "currency"
         ],
@@ -2273,7 +2273,7 @@
           }
         ],
         "summary": "Get system status and metrics",
-        "summaryHe": "מציג את מצב המערכת הכללי, העומסים ומדדי הפעילות",
+        "summaryHe": "מציג את מצב המערכת ומדדי הפעילות",
         "tags": [
           "system"
         ],
@@ -2325,7 +2325,7 @@
           }
         ],
         "summary": "Fetch configured strain hunter strain data",
-        "summaryHe": "סורק, מעדכן ומציג את מלאי הזנים הנוכחי",
+        "summaryHe": "סורק ומעדכן את מלאי הזנים",
         "tags": [
           "strain-hunter"
         ],
@@ -2380,7 +2380,7 @@
           }
         ],
         "summary": "Get authenticated user matching preferences",
-        "summaryHe": "שולף את הגדרות ההתאמה האישית השמורות שלך",
+        "summaryHe": "שולף את הגדרות ההתאמה האישית",
         "tags": [
           "strain-hunter"
         ],
@@ -2446,7 +2446,7 @@
           }
         ],
         "summary": "Upsert authenticated user matching preferences",
-        "summaryHe": "שומר או מעדכן את הגדרות ההתאמה האישית שלך",
+        "summaryHe": "שומר או מעדכן את הגדרות ההתאמה האישית",
         "tags": [
           "strain-hunter"
         ],
@@ -2491,7 +2491,7 @@
           }
         ],
         "summary": "List all genetics rows",
-        "summaryHe": "מציג את קטלוג הגנטיקה והזנים המלא במערכת",
+        "summaryHe": "מציג את קטלוג הגנטיקה והזנים",
         "tags": [
           "genetics"
         ],
@@ -2559,7 +2559,7 @@
           }
         ],
         "summary": "Create a new genetics record",
-        "summaryHe": "יוצר גנטיקה חדשה בקטלוג המערכת",
+        "summaryHe": "מוסיף זן גנטיקה לקטלוג",
         "tags": [
           "genetics"
         ],
@@ -2615,7 +2615,7 @@
           }
         ],
         "summary": "Get a strain by name",
-        "summaryHe": "מציג פרטים מלאים על זן גנטיקה ספציפי לפי שמו",
+        "summaryHe": "מציג פרטים על זן לפי שם",
         "tags": [
           "genetics"
         ],
@@ -2689,7 +2689,7 @@
           }
         ],
         "summary": "Update a genetics record by name",
-        "summaryHe": "מעדכן את מאפייני הגנטיקה של זן קיים לפי שמו",
+        "summaryHe": "מעדכן את פרטי הזן",
         "tags": [
           "genetics"
         ],
@@ -2726,7 +2726,7 @@
           }
         ],
         "summary": "Delete a genetics strain by name.",
-        "summaryHe": "מוחק זן גנטיקה לצמיתות מקטלוג",
+        "summaryHe": "מוחק זן מהקטלוג",
         "tags": [
           "genetics"
         ],
@@ -2775,7 +2775,7 @@
           }
         ],
         "summary": "Enrich a single genetics record",
-        "summaryHe": "מעשיר זן גנטיקה בודד בפרטים ונתוני מעבדה מבוססי AI",
+        "summaryHe": "מעשיר זן בנתוני AI ומעבדה",
         "tags": [
           "genetics"
         ],
@@ -2803,7 +2803,7 @@
           }
         ],
         "summary": "Enrich all genetics with missing properties (thcRange, terpenes, effects).",
-        "summaryHe": "מפעיל סריקה והעשרה אוטומטית לכל הזנים שחסר להם מידע מבוסס AI",
+        "summaryHe": "סורק ומעשיר זנים שחסר להם מידע",
         "tags": [
           "genetics"
         ],
@@ -2845,7 +2845,7 @@
           }
         ],
         "summary": "Search the web for current information",
-        "summaryHe": "מחפש מידע עדכני באינטרנט לאימות עובדות ומחקר מהיר",
+        "summaryHe": "מחפש מידע עדכני באינטרנט לאימות ומחקר",
         "tags": [
           "web-search"
         ],
@@ -2890,7 +2890,7 @@
           }
         ],
         "summary": "List all terpenes",
-        "summaryHe": "מציג את קטלוג הטרפנים המלא המוגדר במערכת",
+        "summaryHe": "מציג את קטלוג הטרפנים",
         "tags": [
           "terpenes"
         ],
@@ -2959,7 +2959,7 @@
           }
         ],
         "summary": "Create a new terpene",
-        "summaryHe": "יוצר טרפן חדש בקטלוג המערכת",
+        "summaryHe": "מוסיף טרפן לקטלוג",
         "tags": [
           "terpenes"
         ],
@@ -3015,7 +3015,7 @@
           }
         ],
         "summary": "Get a terpene by name",
-        "summaryHe": "מציג פרטים מלאים על טרפן ספציפי לפי שמו",
+        "summaryHe": "מציג פרטים על טרפן לפי שם",
         "tags": [
           "terpenes"
         ],
@@ -3097,7 +3097,7 @@
           }
         ],
         "summary": "Update a terpene by name",
-        "summaryHe": "מעדכן את המאפיינים, הריח וההשפעות של טרפן קיים",
+        "summaryHe": "מעדכן את פרטי הטרפן",
         "tags": [
           "terpenes"
         ],
@@ -3134,7 +3134,7 @@
           }
         ],
         "summary": "Delete a terpene by name.",
-        "summaryHe": "מוחק טרפן לצמיתות מקטלוג המערכת",
+        "summaryHe": "מוחק טרפן מהקטלוג",
         "tags": [
           "terpenes"
         ],
@@ -3183,7 +3183,7 @@
           }
         ],
         "summary": "Enrich a single terpene",
-        "summaryHe": "מעשיר טרפן בודד בפרטי ארומה והשפעות מבוססי AI",
+        "summaryHe": "מעשיר טרפן בנתוני ארומה והשפעות",
         "tags": [
           "terpenes"
         ],
@@ -3211,7 +3211,7 @@
           }
         ],
         "summary": "Enrich all terpenes with missing properties (description, scent, effects).",
-        "summaryHe": "מפעיל סריקה והעשרה אוטומטית לכל הטרפנים שחסר להם מידע מבוסס AI",
+        "summaryHe": "סורק ומעשיר טרפנים שחסר להם מידע",
         "tags": [
           "terpenes"
         ],
@@ -3238,7 +3238,7 @@
           }
         },
         "summary": "Generate startup ideas",
-        "summaryHe": "מגבש ומחולל רעיונות סטארטאפ חדשניים ופורצי דרך",
+        "summaryHe": "מגבש ומחולל רעיונות סטארטאפ חדשניים",
         "tags": [
           "ideas"
         ],
@@ -3298,7 +3298,7 @@
           }
         },
         "summary": "Generate business ideas with real-time progress (SSE)",
-        "summaryHe": "מחולל רעיונות עסקיים מעולים עם חיווי התקדמות חי בסטרמינג",
+        "summaryHe": "מחולל רעיונות עסקיים עם חיווי התקדמות חי",
         "tags": [
           "ideas"
         ],
@@ -3562,7 +3562,7 @@
           }
         ],
         "summary": "Get database storage usage by table",
-        "summaryHe": "מציג את השימוש באחסון ומספר השורות של כל טבלה ב-DB",
+        "summaryHe": "מציג את השימוש באחסון ומספר השורות בטבלאות",
         "tags": [
           "database-monitor"
         ],
