@@ -1585,6 +1585,68 @@
         "toolIcon": "ph-download-simple"
       }
     },
+    "/llm-provider/models/detect-metadata": {
+      "post": {
+        "description": "Looks up context window, max output and $/1M-token pricing for a model key in the public OpenRouter catalog. Read-only, best-effort: an unmatched key returns result:null. The dialog fills the form and the admin persists via update — a manual admin action, not an LLM tool.",
+        "operationId": "LlmProviderController_detectModelMetadata",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectModelMetadataDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Detected metadata (or result:null when unmatched)"
+          },
+          "401": {
+            "description": "JWT token missing or invalid"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detect model metadata from OpenRouter",
+        "summaryHe": "מגלה נתוני מודל (קונטקסט/מחיר) מ-OpenRouter",
+        "tags": [
+          "LLM Provider"
+        ],
+        "toolIcon": "ph-sparkle"
+      }
+    },
+    "/llm-provider/models/free-variants": {
+      "get": {
+        "description": "Bare names of OpenRouter catalog entries that ship a ':free' variant. Lets the management table hint 'free variant exists' on models configured with the bare paid key. Read-only; served from the 24h catalog cache.",
+        "operationId": "LlmProviderController_getFreeVariantKeys",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Bare names with an upstream :free variant"
+          },
+          "401": {
+            "description": "JWT token missing or invalid"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List model bare names with a :free variant upstream",
+        "summaryHe": "רשימת שמות מודלים שיש להם וריאנט חינמי ב-OpenRouter",
+        "tags": [
+          "LLM Provider"
+        ],
+        "toolIcon": "ph-info"
+      }
+    },
     "/llm-provider/models/{id}": {
       "patch": {
         "description": "Updates an existing LLM model configuration.",
@@ -4395,6 +4457,36 @@
               "image",
               "video"
             ]
+          },
+          "contextLength": {
+            "type": "number",
+            "description": "Context window length in tokens (enriched via OpenRouter or manual)",
+            "example": 131072
+          },
+          "maxOutputTokens": {
+            "type": "number",
+            "description": "Maximum output tokens",
+            "example": 131072
+          },
+          "promptPricePerM": {
+            "type": "number",
+            "description": "Prompt price per 1M tokens (USD)",
+            "example": 0.14
+          },
+          "completionPricePerM": {
+            "type": "number",
+            "description": "Completion price per 1M tokens (USD)",
+            "example": 0.28
+          },
+          "freeTier": {
+            "type": "boolean",
+            "description": "Free tier flag — when true, prices are treated as zero",
+            "default": false
+          },
+          "metadataSource": {
+            "type": "string",
+            "description": "Metadata provenance, e.g. openrouter:t1 (T1 Exact) / openrouter:t2 (T2 Bare)",
+            "example": "openrouter:t1"
           }
         },
         "required": [
@@ -4419,6 +4511,24 @@
         },
         "required": [
           "keys"
+        ]
+      },
+      "DetectModelMetadataDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Model key to look up in the public OpenRouter catalog",
+            "example": "deepseek/deepseek-v4-flash"
+          },
+          "providerKey": {
+            "type": "string",
+            "description": "Provider key — used as a vendor hint to disambiguate bare-name matches (e.g. xkiro)",
+            "example": "xkiro"
+          }
+        },
+        "required": [
+          "key"
         ]
       },
       "UpdateLlmModelDto": {
@@ -4453,6 +4563,36 @@
               "image",
               "video"
             ]
+          },
+          "contextLength": {
+            "type": "number",
+            "description": "Context window length in tokens (enriched via OpenRouter or manual)",
+            "example": 131072
+          },
+          "maxOutputTokens": {
+            "type": "number",
+            "description": "Maximum output tokens",
+            "example": 131072
+          },
+          "promptPricePerM": {
+            "type": "number",
+            "description": "Prompt price per 1M tokens (USD)",
+            "example": 0.14
+          },
+          "completionPricePerM": {
+            "type": "number",
+            "description": "Completion price per 1M tokens (USD)",
+            "example": 0.28
+          },
+          "freeTier": {
+            "type": "boolean",
+            "description": "Free tier flag — when true, prices are treated as zero",
+            "default": false
+          },
+          "metadataSource": {
+            "type": "string",
+            "description": "Metadata provenance, e.g. openrouter:t1 (T1 Exact) / openrouter:t2 (T2 Bare)",
+            "example": "openrouter:t1"
           }
         }
       },
