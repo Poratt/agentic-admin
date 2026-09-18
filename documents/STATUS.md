@@ -11,7 +11,7 @@ Last updated: 2026-09-18
 - **Frontend:** `iconForCapability` + null-safe `capabilityLabel`; Test button icon/tooltip keyed on capability; inline history shows `SKIPPED` (warning) + capability chip; `testAllModels` counts ALL active models; `llm-test-results` chat block renders skipped branch + capability chip. CSS `.status-text.warn` + `.capability-chip`.
 - **Verified:** backend full suite at commit gate **562 passed / 3 pre-existing suites failed** (terpene, ideas-tasks, telegram-notify; no new failures); target frontend files 94/94 + 9/9; `nest build` + `ng build` exit 0. **Live smoke test (user):** Agnes Image 2.0/2.1 Flash → SUCCESS (~11s, `OK`); Agnes Video V2.0 → SKIPPED `No safe video ping for provider`. graphify updated (5157 nodes / 8586 edges).
 - **RAM incident (2026-09-18):** Golden Rule #9 (both AGENTS.md + `~/.claude/CLAUDE.md` + repo CLAUDE.md), backend `jest.maxWorkers: 2`.
-- **Committed + pushed** on `feat/test-model-capabilities-and-stats`: `741d55f` chore(tests) + `c44f737` feat(llm-providers). **Remaining:** merge to `main` (PR).
+- **Committed + pushed** on `feat/test-model-capabilities-and-stats`: `741d55f` chore(tests) + `c44f737` feat(llm-providers). **Plan moved to `documents/features/done/` (contracted) on 2026-09-18.** **Remaining:** merge to `main` (PR).
 
 ---
 
