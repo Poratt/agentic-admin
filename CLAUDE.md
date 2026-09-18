@@ -180,6 +180,7 @@ Before using `str_replace` on any file:
 4. Enums always start from `1`, never `0`
 5. Prettier runs automatically via Hook — do not run manually
 6. `tsconfig.app.json` include must be `src/**/*.ts` — never `src/**/*.d.ts`
+7. **Tests/builds always run in non-watch / CI mode, with workers capped** (incident 2026-09-18): when running tests or builds, always ensure they run in non-watch / CI mode (e.g., use `vitest run`, `jest --watchAll=false --runInBand`, etc.) and do not leave background processes hanging. The backend jest config caps `maxWorkers` at `2` — but for AGENT runs prefer `jest --watchAll=false --runInBand` (one serial Node process; even two ts-jest workers compile TypeScript per-file in memory and can eat GBs). Never run one jest build while another is running, never override the cap upward, never fork suites in the background, and kill orphaned node workers before re-running.
 
 ## Session Management (MANDATORY)
 
