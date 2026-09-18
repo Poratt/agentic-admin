@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { LlmService } from '../llm/llm.service';
 import { AgentSessionService, trimHistoryForLlm } from './services/agent-session.service';
 import { AgentToolExecutorService } from './services/agent-tool-executor.service';
+import { ToolTierFilterService } from './services/tool-tier-filter.service';
 import { ChatSession } from './entities/chat-session.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { SYSTEM_CONTEXT, buildSystemContext } from './constants/system-context.constant';
@@ -71,19 +72,27 @@ export class AdminAgentService implements OnModuleInit {
     private readonly swaggerToolsParser: SwaggerToolsParser,
     private readonly agentSessionService: AgentSessionService,
     private readonly agentToolExecutorService: AgentToolExecutorService,
+    private readonly toolTierFilterService: ToolTierFilterService,
     private readonly renderSpecService: RenderSpecService,
     private readonly mcpBridgeService: McpBridgeService,
     private readonly googleCalendarService: GoogleCalendarService,
   ) { }
 
-  private getTools(): LlmToolSchema[] {
+  private getTools(prompt?: string): LlmToolSchema[] {
     const swaggerTools = this.swaggerToolsParser.getTools();
+    // Keyword tier filter runs on the USER prompt only. When prompt is absent
+    // (startup logger) or not confident, the full set is returned unchanged —
+    // the safety net never exposes FEWER tools than the pre-filter behavior.
+    const selectedTools = prompt
+      ? this.toolTierFilterService.filterToolsForPrompt(prompt, swaggerTools)
+      : swaggerTools;
     const mcpEnabled = (process.env.MCP_ENABLED ?? 'false') === 'true';
     if (!mcpEnabled) {
-      return swaggerTools;
+      return selectedTools;
     }
     const mcpTools = this.mcpBridgeService.getTools();
-    return mcpTools.length > 0 ? [...swaggerTools, ...mcpTools] : swaggerTools;
+    // MCP tools join AFTER the filter and are never filtered themselves.
+    return mcpTools.length > 0 ? [...selectedTools, ...mcpTools] : selectedTools;
   }
 
   onModuleInit(): void {
@@ -159,7 +168,7 @@ export class AdminAgentService implements OnModuleInit {
     }
     await this.agentSessionService.saveMessage(userId, session.id, 'user', prompt, { imageUrl: image });
 
-    const tools = this.getTools();
+    const tools = this.getTools(prompt);
     const dynamicSystemContext = this.getDynamicSystemContext(userId, provider, model);
     const collectedRenderBlocks: Array<{ component: string; data: Record<string, unknown> }> = [];
     let history = await this.agentSessionService.loadHistory(session.id, userId);
@@ -310,7 +319,7 @@ export class AdminAgentService implements OnModuleInit {
     }
     await this.agentSessionService.saveMessage(userId, session.id, 'user', prompt, { imageUrl: image });
 
-    const tools = this.getTools();
+    const tools = this.getTools(prompt);
     const dynamicSystemContext = this.getDynamicSystemContext(userId, provider, model);
     const collectedRenderBlocks: Array<{ component: string; data: Record<string, unknown> }> = [];
     let history = await this.agentSessionService.loadHistory(session.id, userId);

@@ -13,6 +13,7 @@ import { ChatMessage } from './entities/chat-message.entity';
 import { ChatSession } from './entities/chat-session.entity';
 import { AgentActionAuditLog } from './entities/agent-action-audit-log.entity';
 import { SwaggerToolsParser } from './services/swagger-tools.parser';
+import { ToolTierFilterService } from './services/tool-tier-filter.service';
 import { AgentSessionService } from './services/agent-session.service';
 import { AgentToolExecutorService } from './services/agent-tool-executor.service';
 import { AgentAuditService } from './services/agent-audit.service';
@@ -34,6 +35,7 @@ import { RenderSpecService } from './render-spec/render-spec.service';
     SwaggerToolsParser,
     AgentSessionService,
     AgentToolExecutorService,
+    ToolTierFilterService,
     AgentAuditService,
     RenderSpecService,
   ],

@@ -13,6 +13,12 @@ interface LlmToolFunctionSchema {
 export interface LlmToolSchema {
   type: 'function';
   source?: 'swagger' | 'mcp';
+  /**
+   * Swagger @ApiTags of the underlying endpoint (e.g. 'strain-hunter').
+   * Populated for swagger tools; MCP tools have no tags.
+   * Read by ToolTierFilterService to pick domain groups per prompt.
+   */
+  tags?: string[];
   function?: LlmToolFunctionSchema;
 }
 
@@ -394,6 +400,7 @@ export class SwaggerToolsParser {
           tools.push({
             type: 'function',
             source: 'swagger',
+            tags: Array.isArray(op.tags) ? op.tags : [],
             function: {
               name: op.operationId,
               description: [op.summaryHe || op.summary, op.description].filter(Boolean).join('\n'),
