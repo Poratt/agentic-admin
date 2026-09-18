@@ -4,6 +4,7 @@ import { LlmService } from '../llm/llm.service';
 import { AgentSessionService } from './services/agent-session.service';
 import { AgentToolExecutorService } from './services/agent-tool-executor.service';
 import { SwaggerToolsParser } from './services/swagger-tools.parser';
+import { ToolTierFilterService } from './services/tool-tier-filter.service';
 import { RenderSpecService } from './render-spec/render-spec.service';
 import { McpBridgeService } from '../mcp-bridge/mcp-bridge.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
@@ -15,6 +16,7 @@ function makeService(): AdminAgentService {
     {} as SwaggerToolsParser,
     {} as AgentSessionService,
     {} as AgentToolExecutorService,
+    {} as ToolTierFilterService,
     new RenderSpecService(),
     { getTools: () => [], hasTool: () => false } as unknown as McpBridgeService,
     {} as GoogleCalendarService,
@@ -283,6 +285,7 @@ describe('AdminAgentService.toolCallLoopBreaker', () => {
       {} as SwaggerToolsParser,
       { saveMessage } as unknown as AgentSessionService,
       {} as AgentToolExecutorService,
+      {} as ToolTierFilterService,
       new RenderSpecService(),
       { getTools: () => [], hasTool: () => false } as unknown as McpBridgeService,
       {} as GoogleCalendarService,
@@ -330,6 +333,7 @@ describe('AdminAgentService.toolCallLoopBreaker', () => {
       {} as SwaggerToolsParser,
       { saveMessage } as unknown as AgentSessionService,
       {} as AgentToolExecutorService,
+      {} as ToolTierFilterService,
       new RenderSpecService(),
       { getTools: () => [], hasTool: () => false } as unknown as McpBridgeService,
       {} as GoogleCalendarService,
@@ -356,6 +360,7 @@ describe('AdminAgentService.toolCallLoopBreaker', () => {
       {} as SwaggerToolsParser,
       { saveMessage } as unknown as AgentSessionService,
       {} as AgentToolExecutorService,
+      {} as ToolTierFilterService,
       new RenderSpecService(),
       { getTools: () => [], hasTool: () => false } as unknown as McpBridgeService,
       {} as GoogleCalendarService,

@@ -148,3 +148,45 @@ describe('SwaggerToolsParser — H4 SSRF/URL injection: path params are encoded'
     expect(queryParams).toEqual({});
   });
 });
+
+/**
+ * Tool Tier Filtering — Phase 1: op.tags captured end-to-end.
+ *
+ * The parser reads the real swagger-spec.json, so this proves the @ApiTags
+ * array survives the load → clean → cache pipeline and lands on each tool.
+ * Exact casing matters: 'LLM Provider' is capitalized differently from the
+ * other kebab-case tags and must round-trip verbatim (ToolTierFilterService
+ * matches tags by exact string).
+ */
+describe('SwaggerToolsParser — Phase 1: op.tags captured on each tool', () => {
+  let parser: SwaggerToolsParser;
+  let toolByName: Map<string, ReturnType<SwaggerToolsParser['getTools']>[number]>;
+
+  beforeAll(() => {
+    parser = new SwaggerToolsParser(new Reflector() as any);
+    toolByName = new Map(parser.getTools().map((t) => [t.function?.name ?? '', t]));
+  });
+
+  it('every exposed swagger tool carries a non-empty tags array', () => {
+    const tools = parser.getTools();
+    expect(tools.length).toBeGreaterThan(0);
+    for (const tool of tools) {
+      expect(Array.isArray(tool.tags)).toBe(true);
+      expect(tool.tags!.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('kebab-case tags round-trip verbatim (users)', () => {
+    expect(toolByName.get('UsersController_delete')?.tags).toEqual(['users']);
+  });
+
+  it('capitalized tag "LLM Provider" round-trips with exact casing', () => {
+    expect(toolByName.get('LlmProviderController_cleanupTestResults')?.tags).toEqual(['LLM Provider']);
+  });
+
+  it('domain tags map to their controllers (strain-hunter)', () => {
+    expect(toolByName.get('StrainHunterController_fetchData')?.tags).toEqual(['strain-hunter']);
+    expect(toolByName.get('GeneticsController_findAll')?.tags).toEqual(['genetics']);
+    expect(toolByName.get('LlmController_generateImage')?.tags).toEqual(['llm']);
+  });
+});
