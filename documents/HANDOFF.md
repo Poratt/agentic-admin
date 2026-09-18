@@ -20,7 +20,7 @@
 - `npm run build -w backend` → **exit 0**.
 - No `swagger-spec.json` regen needed (tags were already there; we just read them).
 
-**Next exact step:** user restarts :3000 (or wraps up), then live-verify on the running backend — logs should show `kept {32-51}/75 (matched: strain-hunter, genetics, terpenes)` for a strain prompt, `kept 15-20/75` for an llm/users prompt, `75/75` for `היי`. Commit (`chore`+`feat`+docs as usual) on user go, then `graphify update .` + move plan to `done/`.
+**Next exact step:** ~~user restarts :3000 (or wraps up), then live-verify on the running backend~~ **SMOKE TEST PASSED (user-verified 2026-09-18)** — logs: startup `LOADED 75 TOOLS` (no regression); `תאר לי את הזן Gorilla Glue` → `Tier filter: kept 30/75 tools (matched: strain-hunter, genetics, terpenes)`; `היי` → `Tier filter: kept 75/75 tools (fallback: prompt too short)` — exact prediction. **COMMITTED + PUSHED on `feat/static-tool-tier-filtering`**: `92a9e4e` feat + `628db12` test + `43c6391` docs(feature). Plan contracted + moved to `done/` (`static-tool-tier-filtering.md`). `graphify update .` → 5112 nodes / 8558 edges / 350 communities. **FEATURE MERGED TO `main` 2026-09-18 (ff `e28fe8c..43c6391`, pushed; backend left running on the same commit — schema-identical, no entity change).** Feature closed.
 
 ---
 

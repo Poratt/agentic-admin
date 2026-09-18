@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-18
 
-## 2026-09-18 — ✅ DONE (Phases 0-3, on branch): static tool tier filtering
+## 2026-09-18 — ✅ DONE + MERGED to `main`: static tool tier filtering
 
 - **Why:** ~75 tools injected into every LLM call waste tokens and confuse weak models. Keyword/regex domain selection on the USER prompt cuts confident prompts to 14-51 tools; anything unsure falls back to the full 75 (zero lost capability).
 - **Locked decisions (user):** separate `ToolTierFilterService` · min prompt 8 chars · zero-match → full set · constants file for future tags (no DB) · MCP always-on · debug-level logs per call.
@@ -11,7 +11,8 @@ Last updated: 2026-09-18
 - **Phase 2:** NEW `constants/tool-domain-groups.ts` (7 groups, `ALWAYS_TAGS`, `MIN_PROMPT_LENGTH_FOR_HEURISTIC=8`, `MIN_KEYWORD_HITS_TO_TRUST=1`) + NEW `services/tool-tier-filter.service.ts`. ⚠️ Fixed plan bug: Hebrew `\b` never matches (letters aren't `\w`) → Hebrew keywords are bare substrings (false-positive keeps MORE tools = safe direction). +7 spec.
 - **Phase 3:** `getTools(prompt?)` — filter on user prompt only; MCP joins after the filter (always-on); debug log `kept N/M (matched: …)`. Registered in module; 4 constructor sites updated.
 - **Verified:** targeted 42/42; full backend `--runInBand` **573 passed / 4 failed (3 pre-existing suites)** — zero new; `npm run build -w backend` exit 0.
-- **Next (user):** restart :3000 → live logs (`kept 51/75 matched strain…`, `75/75` on `היי`) → commit (chore+feat+docs) → move plan to `done/` → graphify.
+- **Live smoke (user-verified logs):** startup `LOADED 75 TOOLS`; `תאר לי את הזן Gorilla Glue` → `kept 30/75 (matched: strain-hunter, genetics, terpenes)`; `היי` → `kept 75/75 (fallback: prompt too short)`. Exact predictions.
+- **Committed + pushed + MERGED to `main`** (ff `e28fe8c..43c6391`, 2026-09-18): `92a9e4e` feat + `628db12` test + `43c6391` docs(feature, plan → `done/`). `graphify update .` → 5112 nodes / 8558 edges. **Feature closed.**
 
 ---
 
