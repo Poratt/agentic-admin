@@ -2,7 +2,7 @@ import { Component, computed, input, ChangeDetectionStrategy } from '@angular/co
 import { CommonModule } from '@angular/common';
 
 export interface LlmTestResultsRenderData {
-    results?: { model?: string; provider?: string; status?: string; latencyMs?: number }[];
+    results?: { model?: string; provider?: string; status?: string; latencyMs?: number; capability?: string }[];
     summary?: { total?: number; active?: number; failed?: number };
 }
 
@@ -32,5 +32,13 @@ export class LlmTestResultsComponent {
 
     isModelFailed(status?: string): boolean {
         return status?.toLowerCase() === 'failed';
+    }
+
+    isModelSkipped(status?: string): boolean {
+        return status?.toLowerCase() === 'skipped';
+    }
+
+    capabilityLabel(capability?: string): string {
+        return capability ?? '';
     }
 }

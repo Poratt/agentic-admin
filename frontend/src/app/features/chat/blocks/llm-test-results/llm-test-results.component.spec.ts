@@ -73,4 +73,18 @@ describe('LlmTestResultsComponent', () => {
         const el = fixture.nativeElement as HTMLElement;
         expect(el.querySelector('.empty-state')).toBeTruthy();
     });
+
+    it('renders a skipped result with its capability chip', () => {
+        fixture.componentRef.setInput('data', {
+            results: [
+                { model: 'agnes-video-v2.0', provider: 'Agnes', status: 'skipped', latencyMs: 42, capability: 'video' },
+            ],
+        });
+        fixture.detectChanges();
+        const el = fixture.nativeElement as HTMLElement;
+
+        expect(el.querySelector('.status-icon.skipped')).toBeTruthy();
+        expect(el.textContent).toContain('Skipped');
+        expect(el.querySelector('.capability-chip')?.textContent).toContain('video');
+    });
 });

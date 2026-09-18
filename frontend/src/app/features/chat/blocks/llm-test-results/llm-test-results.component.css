@@ -83,6 +83,22 @@
             color: var(--color-text-primary);
             font-family: var(--font-code);
         }
+
+        .header-chips {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+    }
+
+    .capability-chip {
+        font-size: var(--font-size-xxs);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-text-muted);
+        background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-text-muted) 26%, transparent);
+        border-radius: var(--radius-md);
+        padding: 0 var(--space-2);
     }
 
     .model-status {
@@ -101,6 +117,10 @@
                 color: var(--color-danger);
             }
 
+            &.skipped {
+                color: var(--color-warning);
+            }
+
             &.unknown {
                 color: var(--color-text-muted);
             }
@@ -116,6 +136,10 @@
 
             &.failed {
                 color: var(--color-danger);
+            }
+
+            &.skipped {
+                color: var(--color-warning);
             }
 
             &.unknown {

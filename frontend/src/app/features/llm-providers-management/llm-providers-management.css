@@ -184,6 +184,22 @@
         &.err {
             color: var(--color-danger);
         }
+
+        &.warn {
+            color: var(--color-warning);
+        }
+    }
+
+    .capability-chip {
+        font-size: var(--font-size-xs);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-text-muted);
+        background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-text-muted) 26%, transparent);
+        border-radius: var(--radius-md);
+        padding: 0 var(--space-2);
+        margin-inline-start: var(--space-2);
+        vertical-align: middle;
     }
 
     /* .clickable lives in the global table overrides — it is shared with the

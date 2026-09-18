@@ -671,6 +671,34 @@ describe('LlmProvidersManagement', () => {
             );
         });
 
+        it('testAllModels runs for a provider whose active models are image/video (capability-aware)', () => {
+            mockProviderService.testAllModels.mockClear();
+            mockProviderService.testAllModels.mockReturnValue({ subscribe: (h: any) => h.next({ result: { tested: 2 } }) });
+
+            const provider = { id: 14, models: [{ active: true, capability: 'image' }, { active: true, capability: 'video' }] } as any;
+            component.testAllModels(provider);
+
+            expect(mockProviderService.testAllModels).toHaveBeenCalledWith(14);
+            expect(mockMessageService.add).toHaveBeenCalledWith(
+                expect.objectContaining({ summary: 'Test Run Started', detail: 'Testing 2 models in the background — results appear as they finish.' }),
+            );
+            component.testingAllProviderIds.set(new Set()); // stop the background poll chain
+        });
+
+        it('iconForCapability returns the row-level test icon that matches the model capability', () => {
+            expect(component.iconForCapability('text')).toBe('ph ph-lightning');
+            expect(component.iconForCapability('image')).toBe('ph ph-image');
+            expect(component.iconForCapability('video')).toBe('ph ph-play');
+            expect(component.iconForCapability('embedding')).toBe('ph ph-lightning');
+            expect(component.iconForCapability(undefined)).toBe('ph ph-lightning');
+        });
+
+        it('capabilityLabel is display-safe for old / missing capability rows', () => {
+            expect(component.capabilityLabel('image')).toBe('image');
+            expect(component.capabilityLabel(null)).toBe('');
+            expect(component.capabilityLabel(undefined)).toBe('');
+        });
+
         it('runs model tests in parallel: a second test must not clear the first', () => {
             const handlers: any[] = [];
             mockProviderService.testModel.mockClear();

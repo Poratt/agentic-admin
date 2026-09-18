@@ -1,5 +1,42 @@
 # Documentation Handoff
 
+## 2026-09-18 — 🔨 IN PROGRESS: test-model capabilities + statistics parity (Phases 0-3 done)
+
+**Context (user request):** the "Test" button on a model row only validated text answers, and test traffic was invisible to real-usage stats. The feature makes "Test" capability-aware (text/image/video) and unifies test traffic with the real-usage statistics on a single `llm_call_stats` data plane. Working branch: `feat/test-model-capabilities-and-stats`.
+
+**Phase 0 findings that changed the plan (user-approved 2026-09-18):**
+- Capability list is `text | image | video` ONLY — `function_calling`/`embedding`/`audio` branches dropped as dead code; the switch's `default` (persisted `error` row + HTTP 400 `No test implemented for capability: X`) is the safety net.
+- **Video → `skipped`** (not a real ping): Agnes bills on first 200 OK and no safe dry-run/cancel is verified yet — records `skipped` + `No safe video ping for provider`, returns `success:true, available:false`, never calls the provider.
+- `recordCallStat` originally short-circuited `caller === 'health'` → `llm_call_stats` holds only real traffic → `is_test DEFAULT FALSE` = zero backfill debt.
+
+**Backend changes:**
+- `llm.types.ts` — `LlmRequest.isTest?: boolean` (`caller` becomes provenance-only).
+- `llm-call-stat.entity.ts` — new `is_test` boolean column (default false).
+- `llm-model-test-results.entity.ts` — status enum gains `'skipped'`; new nullable `capability` column.
+- `llm-health.service.ts` — `testLlm` refactored to a capability switch (`testTextModel` / `testImageModel` / video→skipped / default→400); `testProviderModels`(test-all) no longer text-only; `getModelCheckTargets` capability filter removed; image ping mirrors the stats plumbing via public `recordCallStat(…, isTest: true)`.
+- `llm-client.service.ts` — `recordCallStat` is public with `isTest`; the `health` early-return is gone.
+- `llm-provider.service.ts` — `saveCallStat` accepts `isTest`; `saveTestResult` accepts + persists `capability`; `getModelStats` now reads BOTH Ping and Real from `llm_call_stats` via `getCallStatAggregates(isTest)` — `llm_model_test_results` is an audit log only; `HEALTH_CALLER` const deleted.
+- Swagger text updated (stats endpoint + model-test endpoint).
+
+**Frontend changes:**
+- `llm-providers-management.ts` — `iconForCapability` (text=lightning / image=image / video=play) + `capabilityLabel` (null-safe); `testAllModels` guard now counts ALL active models (not text-only).
+- `llm-providers-management.html` — Test button icon/tooltip per capability; inline test-history shows `SKIPPED` (warning color) + a neutral capability chip per result.
+- `llm-test-results` chat block — skipped branch (warning icon + "Skipped") + capability chip in the card header; `RenderData` gains `capability?`.
+- CSS — `.status-text.warn` + `.capability-chip` (management page + chat block), all `var(--token)`.
+
+**VERIFIED:**
+- Backend: LLM module suites **142/142** (`--runInBand`); targeted health+provider 41/41; `nest build` exit 0. Backend `lint` is broken at the config level (ESLint 9 flat config missing `@typescript-eslint` plugin) — pre-existing.
+- Frontend: management **94/94** + llm-test-results **9/9** (targeted `ng test --watch false`); `ng build` exit 0 (pre-existing `strain-hunter.css` budget warning only).
+- **RAM incident (2026-09-18):** a full backend jest with default workers + killed-run orphans pegged the machine (strain-hunter alone took 775s). Fixes now in place: golden rule #9 (both AGENTS.md + `~/.claude/CLAUDE.md`) — non-watch/CI mode, prefer `--runInBand` for agent runs, never fork suites in the background, kill orphans; `backend/package.json` jest config now caps `maxWorkers: 2`.
+
+**Decisions made:** Options A (stats parity via `is_test`), server-side `capability` on test results, video→`skipped`, no dead-code capability branches.
+
+**Open questions for the user:**
+1. ~~Full backend suite re-run (previous run was dropped mid-flight by the restart) — the LLM module (the blast radius) is already 142/142; want the whole 45-min suite or accept the module-level run for the gate?~~ **RESOLVED 2026-09-18 — module-level gate accepted; the full suite runs at commit time (Phase 4).**
+2. `@swc/jest` vs `ts-jest` (the user flagged swc as a RAM/time win) — swap in a follow-up or leave it documented?
+
+**Next exact step:** ~~update `documents/LOG.md` (Option A + video-skip decisions) → restart :3000 so `synchronize` adds `is_test` + `capability` → smoke-test a text + image + video Test click → `graphify update .` → commit on user go (Phase 4).~~ **Smoke test PASSED (user-verified, 2026-09-18):** Agnes Image 2.0 Flash + 2.1 Flash → SUCCESS (10.8s / 11.3s, log `OK`); Agnes Video V2.0 → SKIPPED with `No safe video ping for provider`. `graphify update .` ran (5157 nodes / 8586 edges / 351 communities). **Remaining:** full backend suite at commit → commit + push on user go.
+
 ## 2026-09-18 — ✅ DONE: Tool-call Reliability metric in the Real statistics
 
 **Context (user request):** free-tier and heavily-quantized (4-bit) models tend to "break" JSON or emit tool calls as plain text once the context grows. The ask: a metric that measures the syntactic soundness of tool output, so the gateway behaves like LiteLLM/Portkey. Implemented as a new `Real · tools` column in the per-model statistics.

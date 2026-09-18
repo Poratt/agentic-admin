@@ -15,7 +15,12 @@
                 <div class="model-card">
                     <div class="model-header">
                         <span class="item-name">{{ result.model }}</span>
-                        <span class="badge badge-admin">{{ result.provider }}</span>
+                        <div class="header-chips">
+                            <span class="badge badge-admin">{{ result.provider }}</span>
+                            @if (result.capability) {
+                                <span class="capability-chip">{{ capabilityLabel(result.capability) }}</span>
+                            }
+                        </div>
                     </div>
                     <div class="model-status">
                         @if (isModelActive(result.status)) {
@@ -24,6 +29,9 @@
                         } @else if (isModelFailed(result.status)) {
                             <span class="ph ph-warning-circle status-icon failed"></span>
                             <span class="status-text failed">Failed</span>
+                        } @else if (isModelSkipped(result.status)) {
+                            <span class="ph ph-prohibit status-icon skipped"></span>
+                            <span class="status-text skipped">Skipped</span>
                         } @else {
                             <span class="ph ph-warning-circle status-icon unknown"></span>
                             <span class="status-text unknown">{{ result.status || 'Unknown' }}</span>

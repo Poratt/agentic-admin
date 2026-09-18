@@ -581,14 +581,20 @@
                                                                 [disabled]="testingModelIds().has(model.id)"
                                                                 aria-label="Run test"
                                                                 appTooltip
-                                                                [text]="testingModelIds().has(model.id) ? 'Testing...' : 'Test model'"
+                                                                [text]="
+                                                                    testingModelIds().has(model.id)
+                                                                        ? 'Testing...'
+                                                                        : capabilityLabel(model.capability)
+                                                                            ? 'Test ' + capabilityLabel(model.capability) + ' model'
+                                                                            : 'Test model'
+                                                                "
                                                                 (click)="testModel(model.id)"
                                                             >
                                                                 <i
                                                                     [class]="
                                                                         testingModelIds().has(model.id)
                                                                             ? 'ph ph-spinner-gap ph-spin'
-                                                                            : 'ph ph-lightning'
+                                                                            : iconForCapability(model.capability)
                                                                     "
                                                                 ></i>
                                                             </button>
@@ -688,10 +694,14 @@
                                                                                 <span
                                                                                     class="status-text"
                                                                                     [class.ok]="result.status === 'success'"
-                                                                                    [class.err]="result.status !== 'success'"
+                                                                                    [class.err]="result.status !== 'success' && result.status !== 'skipped'"
+                                                                                    [class.warn]="result.status === 'skipped'"
                                                                                 >
-                                                                                    {{ result.status === 'success' ? 'SUCCESS' : 'ERROR' }}
+                                                                                    {{ result.status === 'success' ? 'SUCCESS' : result.status === 'skipped' ? 'SKIPPED' : 'ERROR' }}
                                                                                 </span>
+                                                                                @if (result.capability) {
+                                                                                    <span class="capability-chip">{{ capabilityLabel(result.capability) }}</span>
+                                                                                }
                                                                             </td>
                                                                             <td
                                                                                 [class.log-ok]="result.status === 'success'"

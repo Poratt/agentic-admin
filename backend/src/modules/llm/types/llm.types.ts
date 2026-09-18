@@ -98,9 +98,16 @@ export interface LlmRequest {
   /**
    * Which surface is making the call, recorded in `llm_call_stats` so the statistics view can
    * separate real work from connectivity pings. Defaults to `'app'`; the health-check service
-   * passes `'health'`, which is excluded from the real-usage statistics.
+   * passes `'health'`. Kept for provenance — the new `isTest` flag is what the statistics query
+   * actually filters on.
    */
   caller?: string;
+  /**
+   * True when this call is a connectivity ping (manual Test / Test All / nightly cron), recorded
+   * as `is_test` on `llm_call_stats` so the statistics view can serve the "Ping" half of the
+   * Statistics tab from the same table as real usage. Defaults to `false`.
+   */
+  isTest?: boolean;
 }
 
 export type LlmRuntimeSelection = {

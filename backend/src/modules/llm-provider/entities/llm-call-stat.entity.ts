@@ -1,8 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 /**
- * One real (non-health-check) LLM call, recorded so the statistics view can rank models by
- * actual work rather than by a one-line connectivity ping.
+ * One LLM call, recorded so the statistics view can rank models by measured work. Real usage and
+ * connectivity pings share this single table — `isTest` separates the two halves of the
+ * Statistics tab (the "Ping" half reads `is_test = true`, the "Real" half `is_test = false`).
  *
  * Deliberately stores the provider/model **keys** and not a foreign key to `llm_models`:
  *
@@ -40,12 +41,15 @@ export class LlmCallStatEntity {
   toolCallReliability!: number | null;
 
   /**
-   * Which surface made the call. `'health'` marks the manual connectivity pings, which are
-   * excluded from the real-usage statistics so they cannot be counted twice — they are already
-   * recorded in `llm_model_test_results`.
+   * Which surface made the call — pure provenance. `'health'` marks the connectivity pings; the
+   * statistics split is driven by `is_test`, not by this value, so the two stay independent.
    */
   @Column({ default: 'app' })
   caller!: string;
+
+  /** True when the call is a connectivity ping (manual Test / Test All / nightly cron), excluded from the real-usage statistics. */
+  @Column({ name: 'is_test', type: 'boolean', default: false, comment: 'True for connectivity pings; the Real half of the statistics reads is_test = false' })
+  isTest!: boolean;
 
   @Column({ type: 'text', nullable: true })
   errorMessage!: string | null;

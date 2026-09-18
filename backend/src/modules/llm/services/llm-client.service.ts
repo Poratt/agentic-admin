@@ -37,7 +37,7 @@ export class LlmClientService {
   ) {}
 
   async generateResponse(llmRequest: LlmRequest): Promise<LlmResponse> {
-    const { prompt, systemContext, messageHistory, providerOverride, modelOverride, tools, image, maxTokens, userId, caller } =
+    const { prompt, systemContext, messageHistory, providerOverride, modelOverride, tools, image, maxTokens, userId, caller, isTest } =
       llmRequest;
 
     // Resolve effective provider/model: explicit override → user default → legacy env
@@ -116,7 +116,7 @@ export class LlmClientService {
       }, 'generateResponse');
     } catch (error) {
       this.autoMarkIfModelMissing(dbProvider.id, activeModel, error);
-      this.recordCallStat(dbProvider.key, activeModel, Date.now() - start, callStatusFromError(error), caller, error, null);
+      this.recordCallStat(dbProvider.key, activeModel, Date.now() - start, callStatusFromError(error), caller, error, null, Boolean(isTest));
       throw error;
     }
     this.logger.log(`LLM response took ${((Date.now() - start) / 1000).toFixed(1)}s`);
@@ -129,6 +129,7 @@ export class LlmClientService {
       caller,
       null,
       computeToolCallReliability(tools, completion.toolCalls),
+      Boolean(isTest),
     );
 
     const { content, toolCalls, finishReason } = completion;
@@ -225,7 +226,13 @@ export class LlmClientService {
    * `latencyMs` spans the whole call including the internal retries, which is the number a user
    * actually waits for.
    */
-  private recordCallStat(
+  /**
+   * Appends one call-stat row, fire-and-forget (single insert, no lookups). Connectivity pings
+   * used to be dropped here (`caller === 'health'`), hiding test traffic from the statistics
+   * view; they are now recorded with `isTest: true` so the Statistics tab serves both halves
+   * ("Ping" and "Real") from this one table via the `is_test` flag.
+   */
+  recordCallStat(
     providerKey: string,
     modelKey: string,
     latencyMs: number,
@@ -233,16 +240,14 @@ export class LlmClientService {
     caller: string | undefined,
     error: unknown,
     toolCallReliability: number | null,
+    isTest: boolean,
   ): void {
     const resolvedCaller = caller ?? 'app';
-    if (resolvedCaller === 'health') {
-      return;
-    }
 
     const errorMessage = error instanceof Error ? error.message.slice(0, MAX_STORED_ERROR_LENGTH) : null;
 
     void this.dbProviderService
-      .saveCallStat({ providerKey, modelKey, latencyMs, status, caller: resolvedCaller, errorMessage, toolCallReliability })
+      .saveCallStat({ providerKey, modelKey, latencyMs, status, caller: resolvedCaller, errorMessage, toolCallReliability, isTest })
       .catch((writeError: unknown) => {
         this.logger.debug(`Failed to record LLM call stat: ${writeError instanceof Error ? writeError.message : 'unknown'}`);
       });

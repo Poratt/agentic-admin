@@ -239,7 +239,7 @@ export class LlmProviderController {
     summaryHe: 'מציג דירוג וביצועים של המודלים',
     toolIcon: 'ph-chart-bar',
     description:
-      'Per-model usage statistics. Connectivity pings and real calls are reported separately, aggregated in SQL so the response size does not grow with call volume.',
+      'Per-model usage statistics. Connectivity pings (is_test = true) and real calls (is_test = false) are reported separately, both aggregated from llm_call_stats in SQL so the response size does not grow with call volume.',
   } as CustomApiOperationOptions)
   @ApiOkResponse({ description: 'Model statistics retrieved' })
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })

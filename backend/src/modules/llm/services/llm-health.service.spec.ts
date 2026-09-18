@@ -7,6 +7,8 @@ import { LlmProviderService } from '../../llm-provider/llm-provider.service';
 function makeClientService(): LlmClientService {
   return {
     generateResponse: jest.fn(),
+    generateImage: jest.fn(),
+    recordCallStat: jest.fn(),
   } as unknown as LlmClientService;
 }
 
@@ -63,6 +65,7 @@ describe('LlmHealthService', () => {
         providerOverride: 'openrouter',
         modelOverride: 'gpt-4o',
         caller: 'health',
+        isTest: true,
       });
       expect(result.success).toBe(true);
       expect(result.result.available).toBe(true);
@@ -110,15 +113,95 @@ describe('LlmHealthService', () => {
       expect(result.success).toBe(false);
     });
 
-    it('throws BadRequestException for non-text model', async () => {
+    it('tests an image model through generateImage and records the stat as a test ping', async () => {
+      const client = makeClientService();
       const dbProviderService = makeDbProviderService();
-      (dbProviderService.findModelByKey as jest.Mock).mockResolvedValue({
-        id: 1,
-        capability: 'image',
+      (client.generateImage as jest.Mock).mockResolvedValue({ url: 'https://example.com/pixel.png', size: '1024x1024' });
+      (dbProviderService.findModelByKey as jest.Mock).mockResolvedValue({ id: 1, capability: 'image' });
+      (dbProviderService.saveTestResult as jest.Mock).mockResolvedValue({});
+
+      const service = makeHealthService({ client, dbProviderService });
+      const result = await service.testLlm('agnes-ai', 'agnes-image-2.1-flash', 'Hello', 'ctx');
+
+      expect(client.generateImage).toHaveBeenCalledWith({
+        provider: 'agnes-ai',
+        model: 'agnes-image-2.1-flash',
+        prompt: 'Single red pixel.',
+        size: '1024x1024',
       });
+      expect(client.recordCallStat).toHaveBeenCalledWith(
+        'agnes-ai',
+        'agnes-image-2.1-flash',
+        expect.any(Number),
+        'success',
+        'health',
+        null,
+        null,
+        true,
+      );
+      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(1, expect.any(Number), 'success', null, 'image');
+      expect(result.success).toBe(true);
+      expect(result.result.available).toBe(true);
+    });
+
+    it('records an image model test failure', async () => {
+      const client = makeClientService();
+      const dbProviderService = makeDbProviderService();
+      (client.generateImage as jest.Mock).mockRejectedValue(new Error('image API down'));
+      (dbProviderService.findModelByKey as jest.Mock).mockResolvedValue({ id: 1, capability: 'image' });
+      (dbProviderService.saveTestResult as jest.Mock).mockResolvedValue({});
+
+      const service = makeHealthService({ client, dbProviderService });
+      const result = await service.testLlm('agnes-ai', 'agnes-image-2.1-flash', 'Hello', 'ctx');
+
+      expect(client.recordCallStat).toHaveBeenCalledWith(
+        'agnes-ai',
+        'agnes-image-2.1-flash',
+        expect.any(Number),
+        'error',
+        'health',
+        expect.any(Error),
+        null,
+        true,
+      );
+      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(1, expect.any(Number), 'error', 'image API down', 'image');
+      expect(result.success).toBe(false);
+      expect(result.result.available).toBe(false);
+    });
+
+    it('skips video models without hitting the provider — no safe cheap ping yet', async () => {
+      const client = makeClientService();
+      const dbProviderService = makeDbProviderService();
+      (dbProviderService.findModelByKey as jest.Mock).mockResolvedValue({ id: 3, capability: 'video' });
+      (dbProviderService.saveTestResult as jest.Mock).mockResolvedValue({});
+
+      const service = makeHealthService({ client, dbProviderService });
+      const result = await service.testLlm('agnes-ai', 'agnes-video-v2.0', 'Hello', 'ctx');
+
+      expect(client.generateResponse).not.toHaveBeenCalled();
+      expect(client.generateImage).not.toHaveBeenCalled();
+      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(3, expect.any(Number), 'skipped', expect.stringContaining('No safe video'), 'video');
+      expect(result.success).toBe(true);
+      expect(result.result.available).toBe(false);
+    });
+
+    it('rejects an unimplemented capability with a 400 and still records the error', async () => {
+      const dbProviderService = makeDbProviderService();
+      (dbProviderService.findModelByKey as jest.Mock).mockResolvedValue({ id: 9, capability: 'embedding' });
+      (dbProviderService.saveTestResult as jest.Mock).mockResolvedValue({});
 
       const service = makeHealthService({ dbProviderService });
-      await expect(service.testLlm('openrouter', 'image-model', 'Hello', 'ctx')).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.testLlm('openrouter', 'some-embedding-model', 'Hello', 'ctx')).rejects.toThrow(
+        'No test implemented for capability: embedding',
+      );
+
+      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(
+        9,
+        expect.any(Number),
+        'error',
+        'No test implemented for capability: embedding',
+        'embedding',
+      );
     });
 
     it('saves test result to DB', async () => {
@@ -131,7 +214,7 @@ describe('LlmHealthService', () => {
       const service = makeHealthService({ client, dbProviderService });
       await service.testLlm('openrouter', 'gpt-4o', 'Hello', 'ctx');
 
-      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(42, expect.any(Number), 'success', null);
+      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(42, expect.any(Number), 'success', null, 'text');
     });
 
     it('saves by model id when provided — duplicate keys across providers must not misroute the result', async () => {
@@ -147,7 +230,7 @@ describe('LlmHealthService', () => {
       await service.testLlm('openrouter', 'openai/gpt-oss-20b', 'Hello', 'ctx', 42);
 
       expect(dbProviderService.findModelById).toHaveBeenCalledWith(42);
-      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(42, expect.any(Number), 'success', null);
+      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(42, expect.any(Number), 'success', null, 'text');
     });
 
     it('saves the error result and throws BadRequest on daily-quota exhaustion', async () => {
@@ -161,7 +244,7 @@ describe('LlmHealthService', () => {
 
       await expect(service.testLlm('openrouter', 'gpt-4o', 'Hello', 'ctx', 42)).rejects.toThrow(BadRequestException);
       // the failed attempt is still recorded before the throw
-      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(42, expect.any(Number), 'error', expect.stringContaining('free-models-per-day'));
+      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(42, expect.any(Number), 'error', expect.stringContaining('free-models-per-day'), 'text');
     });
   });
 
@@ -218,7 +301,8 @@ describe('LlmHealthService', () => {
       expect(result.result).toHaveLength(0);
     });
 
-    it('skips non-text capability models', async () => {
+    it('tests image models and safely skips video models inside a test-all run', async () => {
+      const client = makeClientService();
       const providerConfig = makeProviderConfigService();
       const dbProviderService = makeDbProviderService();
 
@@ -229,18 +313,31 @@ describe('LlmHealthService', () => {
             key: 'openrouter',
             active: true,
             models: [
-              { key: 'gpt-4o', active: true, capability: 'text' },
-              { key: 'dall-e', active: true, capability: 'image' },
+              { id: 1, key: 'gpt-4o', active: true, capability: 'text' },
+              { id: 2, key: 'dall-e', active: true, capability: 'image' },
+              { id: 3, key: 'video-model', active: true, capability: 'video' },
             ],
           },
         ],
       });
 
-      const service = makeHealthService({ providerConfig, dbProviderService });
+      (dbProviderService.findModelById as jest.Mock).mockImplementation((id: number) =>
+        Promise.resolve({ id, capability: id === 1 ? 'text' : id === 2 ? 'image' : 'video' }),
+      );
+      (dbProviderService.findModelByKey as jest.Mock).mockResolvedValue(null);
+      (client.generateResponse as jest.Mock).mockResolvedValue({ content: 'OK' });
+      (client.generateImage as jest.Mock).mockResolvedValue({ url: 'https://example.com/pixel.png' });
+      (dbProviderService.saveTestResult as jest.Mock).mockResolvedValue({});
+
+      const service = makeHealthService({ client, providerConfig, dbProviderService });
       const result = await service.testAllModels();
 
-      expect(result.result).toHaveLength(1);
-      expect(result.result![0].name).toBe('gpt-4o');
+      expect(client.generateImage).toHaveBeenCalled();
+      expect(result.result).toHaveLength(3);
+      expect(result.result![0].available).toBe(true);
+      expect(result.result![1].available).toBe(true);
+      expect(result.result![2].available).toBe(false);
+      expect(dbProviderService.saveTestResult).toHaveBeenCalledWith(3, expect.any(Number), 'skipped', expect.any(String), 'video');
     });
 
     it('handles empty provider list', async () => {

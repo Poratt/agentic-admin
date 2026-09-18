@@ -17,9 +17,6 @@ import { ModelStats, ModelStatsRow, ModelUsageStats } from './types/model-stats.
 /** Runs a model needs before it can be ranked — one run is noise, not a measurement. */
 const MIN_RANKING_SAMPLE = 3;
 
-/** `caller` value used by the connectivity tests; excluded so those calls are not counted twice. */
-const HEALTH_CALLER = 'health';
-
 /** Composite row id — lets the leaderboard point at a row instead of duplicating it. */
 function modelStatsId(providerKey: string, modelKey: string): string {
   return `${providerKey}::${modelKey}`;
@@ -46,6 +43,13 @@ type RawAggregate = {
   avgMs: string | number | null;
   minMs: string | number | null;
   toolCallReliability?: string | number | null;
+};
+
+/** A {@link RawAggregate} plus the keys and timestamps needed to place it on the stats board. */
+type LlmCallStatAggregate = RawAggregate & {
+  providerKey: string;
+  modelKey: string;
+  lastCallAt: Date | string;
 };
 
 /**
@@ -229,9 +233,11 @@ export class LlmProviderService {
   /**
    * Per-model usage statistics for the statistics view: connectivity pings beside real work.
    *
-   * Both sides are aggregated **in SQL**. The neighbouring `findProviders` loads every test result
-   * of every model, which is tolerable for a handful of manual pings but would not survive
-   * `llm_call_stats` — a table that grows by one row per LLM call.
+   * Both sides are aggregated **in SQL from the same table**. Connectivity pings are recorded in
+   * `llm_call_stats` with `is_test = true`; real calls with `is_test = false` — so the two halves
+   * can never drift (a ping and a real call were once spread across two tables that could disagree
+   * if one insert failed). `llm_model_test_results` remains a per-row audit log for the test
+   * history page only.
    *
    * Only successful runs contribute to the latency figures, because a failed call's duration
    * measures the failure (frequently a timeout) rather than the model. Failures are still counted
@@ -240,34 +246,12 @@ export class LlmProviderService {
   async getModelStats(): Promise<ServiceResultContainer<ModelStats>> {
     const [providersResult, pingRows, realRows] = await Promise.all([
       this.findProviders(),
-      this.testResultRepo
-        .createQueryBuilder('result')
-        .select('result.model_id', 'modelId')
-        .addSelect('COUNT(*)', 'runs')
-        .addSelect(`SUM(CASE WHEN result.status = 'success' THEN 1 ELSE 0 END)`, 'successes')
-        .addSelect(`AVG(CASE WHEN result.status = 'success' THEN result.responseTimeMs END)`, 'avgMs')
-        .addSelect(`MIN(CASE WHEN result.status = 'success' THEN result.responseTimeMs END)`, 'minMs')
-        .groupBy('result.model_id')
-        .getRawMany<RawAggregate & { modelId: number }>(),
-      this.callStatRepo
-        .createQueryBuilder('stat')
-        .select('stat.provider_key', 'providerKey')
-        .addSelect('stat.model_key', 'modelKey')
-        .addSelect('COUNT(*)', 'runs')
-        .addSelect(`SUM(CASE WHEN stat.status = 'success' THEN 1 ELSE 0 END)`, 'successes')
-        .addSelect(`AVG(CASE WHEN stat.status = 'success' THEN stat.latencyMs END)`, 'avgMs')
-        .addSelect(`MIN(CASE WHEN stat.status = 'success' THEN stat.latencyMs END)`, 'minMs')
-        .addSelect(`AVG(CASE WHEN stat.toolCallReliability IS NOT NULL THEN stat.toolCallReliability END)`, 'toolCallReliability')
-        .addSelect('MAX(stat.createdAt)', 'lastCallAt')
-        .where('stat.caller <> :healthCaller', { healthCaller: HEALTH_CALLER })
-        .groupBy('stat.provider_key')
-        .addGroupBy('stat.model_key')
-        .getRawMany<RawAggregate & { providerKey: string; modelKey: string; lastCallAt: Date | string }>(),
+      this.getCallStatAggregates(true),
+      this.getCallStatAggregates(false),
     ]);
 
     // Rows are keyed by the configured models first, in the provider order the UI already shows.
     const rowsById = new Map<string, ModelStatsRow>();
-    const rowIdByModelId = new Map<number, string>();
 
     for (const provider of providersResult.result ?? []) {
       for (const model of provider.models ?? []) {
@@ -283,39 +267,42 @@ export class LlmProviderService {
           lastCallAt: null,
           rankingBasis: null,
         });
-        rowIdByModelId.set(model.id, id);
       }
     }
 
-    for (const ping of pingRows) {
-      const row = rowsById.get(rowIdByModelId.get(Number(ping.modelId)) ?? '');
-      if (row) {
-        row.ping = toUsageStats(ping);
+    // A call can outlive the model row it belonged to — a deleted or renamed model keeps its
+    // history rather than taking it to the grave, so an unknown key still gets a row.
+    const attach = (source: 'ping' | 'real', aggregates: LlmCallStatAggregate[]) => {
+      for (const raw of aggregates) {
+        const id = modelStatsId(raw.providerKey, raw.modelKey);
+        let row = rowsById.get(id);
+        if (!row) {
+          row = {
+            id,
+            providerKey: raw.providerKey,
+            modelKey: raw.modelKey,
+            label: null,
+            active: false,
+            ping: null,
+            real: null,
+            lastCallAt: null,
+            rankingBasis: null,
+          };
+          rowsById.set(id, row);
+        }
+        if (source === 'ping') {
+          row.ping = toUsageStats(raw);
+        } else {
+          row.real = toUsageStats(raw);
+          if (raw.lastCallAt) {
+            row.lastCallAt = new Date(raw.lastCallAt);
+          }
+        }
       }
-    }
+    };
 
-    for (const real of realRows) {
-      const id = modelStatsId(real.providerKey, real.modelKey);
-      // A call can outlive the model row it belonged to — a deleted or renamed model keeps its
-      // history rather than taking it to the grave, so an unknown key still gets a row.
-      let row = rowsById.get(id);
-      if (!row) {
-        row = {
-          id,
-          providerKey: real.providerKey,
-          modelKey: real.modelKey,
-          label: null,
-          active: false,
-          ping: null,
-          real: null,
-          lastCallAt: null,
-          rankingBasis: null,
-        };
-        rowsById.set(id, row);
-      }
-      row.real = toUsageStats(real);
-      row.lastCallAt = real.lastCallAt ? new Date(real.lastCallAt) : null;
-    }
+    attach('ping', pingRows);
+    attach('real', realRows);
 
     const rows = [...rowsById.values()];
     for (const row of rows) {
@@ -363,6 +350,29 @@ export class LlmProviderService {
       .leftJoinAndSelect('provider.models', 'models')
       .where('provider.key = :key', { key })
       .getOne();
+  }
+
+  /**
+   * One `llm_call_stats` aggregate row as the statistics tab consumes it. This is the only shape
+   * both halves read from — see {@link getModelStats} for why the split lives here instead.
+   */
+  private getCallStatAggregates(
+    isTest: boolean,
+  ): Promise<Array<RawAggregate & { providerKey: string; modelKey: string; lastCallAt: Date | string }>> {
+    return this.callStatRepo
+      .createQueryBuilder('stat')
+      .select('stat.provider_key', 'providerKey')
+      .addSelect('stat.model_key', 'modelKey')
+      .addSelect('COUNT(*)', 'runs')
+      .addSelect(`SUM(CASE WHEN stat.status = 'success' THEN 1 ELSE 0 END)`, 'successes')
+      .addSelect(`AVG(CASE WHEN stat.status = 'success' THEN stat.latencyMs END)`, 'avgMs')
+      .addSelect(`MIN(CASE WHEN stat.status = 'success' THEN stat.latencyMs END)`, 'minMs')
+      .addSelect(`AVG(CASE WHEN stat.toolCallReliability IS NOT NULL THEN stat.toolCallReliability END)`, 'toolCallReliability')
+      .addSelect('MAX(stat.createdAt)', 'lastCallAt')
+      .where('stat.isTest = :isTest', { isTest })
+      .groupBy('stat.provider_key')
+      .addGroupBy('stat.model_key')
+      .getRawMany<RawAggregate & { providerKey: string; modelKey: string; lastCallAt: Date | string }>();
   }
 
   /**
@@ -586,21 +596,24 @@ export class LlmProviderService {
   async saveTestResult(
     modelId: number,
     responseTimeMs: number,
-    status: 'success' | 'error' | 'timeout',
+    status: 'success' | 'error' | 'timeout' | 'skipped',
     errorMessage: string | null,
+    capability?: string | null,
   ): Promise<LlmModelTestResultEntity> {
     const testResult = this.testResultRepo.create({
       modelId,
       responseTimeMs,
       status,
       errorMessage,
+      capability: capability ?? null,
     });
     return this.testResultRepo.save(testResult);
   }
 
   /**
-   * Appends one real-call record. Called fire-and-forget from `LlmClientService`, so it stays
-   * cheap: a single insert and no lookups.
+   * Appends one call-stat record. Called fire-and-forget from `LlmClientService`, so it stays
+   * cheap: a single insert and no lookups. `isTest` marks connectivity pings; the statistics
+   * query reads `is_test = false` for "real usage".
    */
   async saveCallStat(stat: {
     providerKey: string;
@@ -610,6 +623,7 @@ export class LlmProviderService {
     caller: string;
     errorMessage: string | null;
     toolCallReliability: number | null;
+    isTest: boolean;
   }): Promise<LlmCallStatEntity> {
     return this.callStatRepo.save(this.callStatRepo.create(stat));
   }

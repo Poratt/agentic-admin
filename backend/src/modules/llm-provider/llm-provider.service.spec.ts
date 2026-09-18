@@ -313,12 +313,20 @@ describe('LlmProviderService.syncProviderModels', () => {
 
 describe('LlmProviderService.getModelStats', () => {
   /** Fluent stand-in for a TypeORM query builder: every chain method returns itself. */
-  function makeQueryBuilder(rows: unknown[]) {
+  function makeStatsBuilder(rows: { ping: unknown[]; real: unknown[] }) {
     const builder: Record<string, jest.Mock> = {};
-    for (const method of ['select', 'addSelect', 'where', 'groupBy', 'addGroupBy']) {
+    for (const method of ['select', 'addSelect', 'groupBy', 'addGroupBy']) {
       builder[method] = jest.fn(() => builder);
     }
-    builder.getRawMany = jest.fn().mockResolvedValue(rows);
+
+    // The WHERE clause decides which half of the data the builder hands back — the production
+    // code reads BOTH ping and real from llm_call_stats, filtered on is_test.
+    let isTest: unknown;
+    builder.where = jest.fn((_column: string, params: { isTest?: unknown }) => {
+      isTest = params.isTest;
+      return builder;
+    });
+    builder.getRawMany = jest.fn(async () => (isTest ? rows.ping : rows.real));
     return builder;
   }
 
@@ -336,8 +344,8 @@ describe('LlmProviderService.getModelStats', () => {
   ];
 
   const pingRows = [
-    { modelId: 1, runs: '5', successes: '5', avgMs: '300', minMs: '200' },
-    { modelId: 2, runs: '5', successes: '2', avgMs: '4000', minMs: '3000' },
+    { providerKey: 'openrouter', modelKey: 'fast-model', runs: '5', successes: '5', avgMs: '300', minMs: '200', lastCallAt: '2026-09-13T08:00:00.000Z' },
+    { providerKey: 'openrouter', modelKey: 'slow-model', runs: '5', successes: '2', avgMs: '4000', minMs: '3000', lastCallAt: '2026-09-13T09:00:00.000Z' },
   ];
 
   const realRows = [
@@ -348,14 +356,29 @@ describe('LlmProviderService.getModelStats', () => {
 
   function makeStatsService(ping: unknown[] = pingRows, real: unknown[] = realRows, providerRows: unknown[] = providers): LlmProviderService {
     const providerRepo = { find: jest.fn().mockResolvedValue(providerRows) };
+    // Both halves now come out of llm_call_stats — the test-result repo is no longer a stats source.
+    const callStatRepo = { createQueryBuilder: jest.fn(() => makeStatsBuilder({ ping, real })) };
     return new LlmProviderService(
       providerRepo as any,
       {} as any,
-      { createQueryBuilder: jest.fn(() => makeQueryBuilder(ping)) } as any,
-      { createQueryBuilder: jest.fn(() => makeQueryBuilder(real)) } as any,
+      {} as any,
+      callStatRepo as any,
       {} as any,
     );
   }
+
+  it('reads both halves from llm_call_stats, split solely on is_test', async () => {
+    const callStatRepo = { createQueryBuilder: jest.fn(() => makeStatsBuilder({ ping: pingRows, real: realRows })) };
+    const testResultRepo = { createQueryBuilder: jest.fn(() => ({ getRawMany: jest.fn() })) };
+    const service = new LlmProviderService({ find: jest.fn().mockResolvedValue(providers) } as any, {} as any, testResultRepo as any, callStatRepo as any, {} as any);
+
+    const res = await service.getModelStats();
+
+    expect(res.result!.rows.length).toBe(4);
+    // Both aggregates come from the SAME table — llm_model_test_results plays no part any more.
+    expect(callStatRepo.createQueryBuilder).toHaveBeenCalledTimes(2);
+    expect(testResultRepo.createQueryBuilder).not.toHaveBeenCalled();
+  });
 
   it('merges ping and real figures onto the configured models and normalises driver strings', async () => {
     const res = await makeStatsService().getModelStats();

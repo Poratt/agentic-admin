@@ -1782,7 +1782,7 @@
     },
     "/llm-provider/stats": {
       "get": {
-        "description": "Per-model usage statistics. Connectivity pings and real calls are reported separately, aggregated in SQL so the response size does not grow with call volume.",
+        "description": "Per-model usage statistics. Connectivity pings (is_test = true) and real calls (is_test = false) are reported separately, both aggregated from llm_call_stats in SQL so the response size does not grow with call volume.",
         "operationId": "LlmProviderController_findModelStats",
         "parameters": [],
         "responses": {

@@ -16,11 +16,14 @@ export class LlmModelTestResultEntity {
     @Column({ type: 'int', comment: 'Response time in milliseconds' })
     responseTimeMs!: number;
 
-    @Column({ type: 'enum', enum: ['success', 'error', 'timeout'] })
-    status!: 'success' | 'error' | 'timeout';
+    @Column({ type: 'enum', enum: ['success', 'error', 'timeout', 'skipped'] })
+    status!: 'success' | 'error' | 'timeout' | 'skipped';
 
     @Column({ type: 'text', nullable: true })
     errorMessage!: string | null;
+
+    @Column({ type: 'varchar', length: 50, nullable: true, comment: 'Capability under test at the time of the ping (text/image/video); null for pre-2026-09-18 rows' })
+    capability!: string | null;
 
     @CreateDateColumn()
     createdAt!: Date;

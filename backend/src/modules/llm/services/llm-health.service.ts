@@ -23,11 +23,11 @@ export class LlmHealthService {
   ) {}
 
   /**
-   * Tests every active text model of ONE provider sequentially and saves each
-   * result (testLlm persists per model). Paced for OpenRouter free-tier limits
-   * (~3.5s between free-model calls). The controller kicks this off WITHOUT
-   * awaiting — results stream into llm_model_test_results as models complete,
-   * and the guard rejects a second concurrent run for the same provider.
+   * Tests every active model of ONE provider sequentially (per capability — text, image, or a
+   * safe 'skipped' for video) and saves each result (testLlm persists per model). Paced for
+   * OpenRouter free-tier limits (~3.5s between free-model calls). The controller kicks this off
+   * WITHOUT awaiting — results stream into llm_model_test_results as models complete, and the
+   * guard rejects a second concurrent run for the same provider.
    */
   async testProviderModels(providerId: number): Promise<ServiceResultContainer<{ tested: number }>> {
     if (this.providerTestRuns.has(providerId)) {
@@ -38,9 +38,9 @@ export class LlmHealthService {
     const provider = (providersResult.result ?? []).find((p) => p.id === providerId);
     if (!provider) throw new NotFoundException(`Provider with ID ${providerId} not found`);
 
-    const models = (provider.models ?? []).filter((m) => m.active && (!m.capability || m.capability === 'text'));
+    const models = (provider.models ?? []).filter((m) => m.active);
     if (models.length === 0) {
-      return { success: true, message: 'No active text models to test', result: { tested: 0 } };
+      return { success: true, message: 'No active models to test', result: { tested: 0 } };
     }
 
     this.providerTestRuns.add(providerId);
@@ -87,47 +87,61 @@ export class LlmHealthService {
   ): Promise<ServiceResultContainer<{ provider: LlmProvider; model: string; available: boolean }>> {
     const runtimeSelection = this.providerConfig.getRuntimeSelection(provider, model);
 
-    // Resolve the DB row once for both the capability gate and result persistence.
+    // Resolve the DB row once for both the capability dispatch and result persistence.
     // When the caller knows the model id (UI "test now"), resolve by it — model
     // keys are only unique per provider, so a key-only lookup can hit the wrong
     // provider's row and save the result to a different model.
     const dbModel = modelId ? await this.dbProviderService.findModelById(modelId) : await this.dbProviderService.findModelByKey(model);
-    if (dbModel && dbModel.capability && dbModel.capability !== 'text') {
-      throw new BadRequestException(`Model ${model} (${dbModel.capability}) does not support text chat testing`);
-    }
+    const capability = dbModel?.capability ?? 'text';
 
     const startTime = performance.now();
 
-    let status: 'success' | 'error' | 'timeout' = 'success';
+    let status: 'success' | 'error' | 'timeout' | 'skipped' = 'success';
     let errorMessage: string | null = null;
     let available = false;
+    let rejection: BadRequestException | null = null;
 
     try {
-      const response = await this.client.generateResponse({
-        prompt: prompt || 'Hello',
-        systemContext: systemContext || 'You are a helpful assistant.',
-        providerOverride: provider,
-        modelOverride: model,
-        // Marks this as a connectivity ping so it is not counted again in the real-usage
-        // statistics — it is already persisted to llm_model_test_results below.
-        caller: 'health',
-      });
+      switch (capability) {
+        case 'text':
+          available = await this.testTextModel(provider, model, prompt, systemContext);
+          break;
+        case 'image':
+          ({ available, status, errorMessage } = await this.testImageModel(provider, model));
+          break;
+        case 'video':
+          // A video render starts billing on the first 200 OK, and no safe cancel / dry-run path is
+          // verified for the catalog's only video provider (Agnes) yet — a video test is
+          // deliberately recorded as 'skipped' rather than run, so one "Test" click can never
+          // rack up a render charge.
+          status = 'skipped';
+          errorMessage = 'No safe video ping for provider';
+          break;
+        default:
+          throw new BadRequestException(`No test implemented for capability: ${capability}`);
+      }
 
-      available = Boolean(response.content || response.toolCalls?.length);
-
-      if (!available) {
+      if (available === false && status === 'success') {
         status = 'error';
         errorMessage = 'Model returned empty response';
       }
     } catch (error: unknown) {
-      available = false;
-      errorMessage = error instanceof Error ? error.message : 'Unknown connection error';
-
-      // Detect Timeout errors by the error content
-      if (errorMessage.toLowerCase().includes('timeout') || errorMessage.toLowerCase().includes('aborted')) {
-        status = 'timeout';
-      } else {
+      if (error instanceof BadRequestException) {
+        // A capability with no implemented test (or a rejected call) is a config fault — the
+        // failure is persisted below and re-thrown so the controller answers 400.
+        rejection = error;
         status = 'error';
+        errorMessage = error.message;
+      } else {
+        available = false;
+        errorMessage = error instanceof Error ? error.message : 'Unknown connection error';
+
+        // Detect Timeout errors by the error content
+        if (errorMessage.toLowerCase().includes('timeout') || errorMessage.toLowerCase().includes('aborted')) {
+          status = 'timeout';
+        } else {
+          status = 'error';
+        }
       }
     }
 
@@ -137,7 +151,7 @@ export class LlmHealthService {
     // 🚀 Save the result to the DB 🚀
     try {
       if (dbModel) {
-        await this.dbProviderService.saveTestResult(dbModel.id, responseTimeMs, status, errorMessage);
+        await this.dbProviderService.saveTestResult(dbModel.id, responseTimeMs, status, errorMessage, capability);
       }
     } catch (dbError) {
       console.error('Failed to save LLM test result to database:', dbError);
@@ -149,15 +163,88 @@ export class LlmHealthService {
       throw new BadRequestException('OpenRouter daily free-model quota exhausted — add credits or wait for the daily reset');
     }
 
+    // Rethrow after the persisted 'error' row above: a 400 tells the UI the model cannot be
+    // tested at all, which is different from the model being broken.
+    if (rejection) {
+      throw rejection;
+    }
+
+    const isSkipped = status === 'skipped';
     return {
-      success: status === 'success',
-      message: status === 'success' ? 'LLM check completed successfully.' : `LLM check failed: ${errorMessage}`,
+      success: status === 'success' || isSkipped,
+      message: isSkipped
+        ? errorMessage ?? 'Test skipped'
+        : status === 'success'
+          ? 'LLM check completed successfully.'
+          : `LLM check failed: ${errorMessage}`,
       result: {
         provider: runtimeSelection.provider,
         model: runtimeSelection.model,
         available,
       },
     };
+  }
+
+  /** Text ping — the original connectivity check. `generateResponse` records its own stats row. */
+  private async testTextModel(provider: LlmProvider, model: string, prompt: string, systemContext: string): Promise<boolean> {
+    const response = await this.client.generateResponse({
+      prompt: prompt || 'Hello',
+      systemContext: systemContext || 'You are a helpful assistant.',
+      providerOverride: provider,
+      modelOverride: model,
+      // Marks this as a connectivity ping — generateResponse records it to llm_call_stats with
+      // isTest=true (excluded from the real-usage statistics), keeping the Ping half of the
+      // Statistics tab on the same data plane as real usage.
+      caller: 'health',
+      isTest: true,
+    });
+
+    return Boolean(response.content || response.toolCalls?.length);
+  }
+
+  /**
+   * Image ping — a single minimal generation through the client's own image path, asserted on a
+   * non-empty url/base64 result. Unlike generateResponse, the image path records no stats of its
+   * own, so the ping mirrors the plumbing here (isTest=true).
+   */
+  private async testImageModel(
+    provider: LlmProvider,
+    model: string,
+  ): Promise<{ available: boolean; status: 'success' | 'error' | 'timeout'; errorMessage: string | null }> {
+    const startTime = performance.now();
+    let status: 'success' | 'error' | 'timeout' = 'success';
+    let errorMessage: string | null = null;
+    let available = false;
+
+    try {
+      const image = await this.client.generateImage({ provider, model, prompt: 'Single red pixel.', size: '1024x1024' });
+      available = Boolean(image.url || image.b64Json);
+      if (!available) {
+        throw new Error('Image generation returned no data');
+      }
+    } catch (error: unknown) {
+      available = false;
+      errorMessage = error instanceof Error ? error.message : 'Unknown connection error';
+
+      if (errorMessage.toLowerCase().includes('timeout') || errorMessage.toLowerCase().includes('aborted')) {
+        status = 'timeout';
+      } else {
+        status = 'error';
+      }
+    }
+
+    this.client.recordCallStat(
+      provider,
+      model,
+      Math.round(performance.now() - startTime),
+      status,
+      'health',
+      errorMessage ? new Error(errorMessage) : null,
+      null, // image pings never request tools — reliability has nothing to measure
+      true, // isTest — connectivity ping, excluded from the real-usage statistics
+    );
+
+    return { available, status, errorMessage };
   }
 
   /**
@@ -242,9 +329,6 @@ export class LlmHealthService {
 
         for (const model of provider.models || []) {
           if (!model.active) continue;
-
-          // Only text models participate in the chat-style connectivity health check.
-          if (model.capability && model.capability !== 'text') continue;
 
           models.push({
             id: model.id,

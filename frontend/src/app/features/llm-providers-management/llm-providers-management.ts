@@ -622,17 +622,35 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
         });
     }
 
+    /** Row-level test button icon, keyed on the capability the ping will exercise. */
+    iconForCapability(capability?: string): string {
+        switch (capability) {
+            case 'image':
+                return 'ph ph-image';
+            case 'video':
+                return 'ph ph-play';
+            case 'text':
+            default:
+                return 'ph ph-lightning';
+        }
+    }
+
+    /** Short, display-safe label for a test-result capability (history rows may be old / null). */
+    capabilityLabel(capability?: string | null): string {
+        return capability ?? '';
+    }
+
     testAllModels(provider: LlmProviderView) {
         // Guard the double-click window, and only for this provider — a run already
         // in flight elsewhere must not block starting one here.
         if (this.testingAllProviderIds().has(provider.id)) return;
 
-        const activeTextModels = (provider.models ?? []).filter((m) => m.active && m.capability === 'text').length;
-        if (activeTextModels === 0) {
+        const activeModels = (provider.models ?? []).filter((m) => m.active).length;
+        if (activeModels === 0) {
             this.messageService.add({
                 severity: 'info',
                 summary: 'Nothing to test',
-                detail: 'No active text models for this provider.',
+                detail: 'No active models for this provider.',
             });
             return;
         }
@@ -643,7 +661,7 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
                 this.messageService.add({
                     severity: 'info',
                     summary: 'Test Run Started',
-                    detail: `Testing ${res.result?.tested ?? activeTextModels} models in the background — results appear as they finish.`,
+                    detail: `Testing ${res.result?.tested ?? activeModels} models in the background — results appear as they finish.`,
                 });
                 this.pollTestResults(provider.id);
             },
