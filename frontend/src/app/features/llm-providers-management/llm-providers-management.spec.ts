@@ -58,6 +58,8 @@ describe('LlmProvidersManagement', () => {
         testAllStatus: vi.fn(),
         getCatalog: vi.fn(),
         syncModels: vi.fn(),
+        detectModelMetadata: vi.fn(),
+        getFreeVariantKeys: vi.fn(() => ({ subscribe: vi.fn(), pipe: () => ({ subscribe: vi.fn() }) })),
     };
 
     const mockConfirmService = {
@@ -1316,6 +1318,256 @@ describe('LlmProvidersManagement', () => {
             component.globalFilter.set('zzz-no-such-thing');
 
             expect(component.filteredStatsRows()).toEqual([]);
+        });
+    });
+
+    describe('✨ Auto-Detect (model metadata enrichment)', () => {
+        it('warns when the key is empty instead of calling the endpoint', () => {
+            component.detectModelMetadata();
+
+            expect(mockProviderService.detectModelMetadata).not.toHaveBeenCalled();
+            expect(mockMessageService.add).toHaveBeenCalledWith(
+                expect.objectContaining({ severity: 'warn' }),
+            );
+        });
+
+        it('fills the specs fields from the detected metadata', () => {
+            let handler: { next: (res: any) => void; error: (err: any) => void };
+            mockProviderService.detectModelMetadata.mockReturnValue({
+                subscribe: (h: any) => (handler = h),
+            });
+
+            component.openAddModelDialog(12);
+            component.modelForm.patchValue({ key: 'deepseek/deepseek-v4-flash' });
+            component.detectModelMetadata();
+
+            handler!.next({
+                success: true,
+                message: 'Enriched via OpenRouter (T1 Exact)',
+                result: {
+                    key: 'deepseek/deepseek-v4-flash',
+                    contextLength: 1048576,
+                    maxOutputTokens: 384000,
+                    promptPricePerM: 0.04984,
+                    completionPricePerM: 0.04984,
+                    freeTier: false,
+                    tier: 't1',
+                    metadataSource: 'openrouter:t1',
+                },
+            });
+
+            expect(mockProviderService.detectModelMetadata).toHaveBeenCalledWith('deepseek/deepseek-v4-flash', undefined);
+            expect(component.modelForm.get('contextLength')?.value).toBe(1048576);
+            expect(component.modelForm.get('maxOutputTokens')?.value).toBe(384000);
+            expect(component.modelForm.get('promptPricePerM')?.value).toBe(0.04984);
+            expect(component.modelForm.get('freeTier')?.value).toBe(false);
+            expect(component.modelForm.get('promptPricePerM')?.disabled).toBe(false);
+            expect(component.detectingMetadata()).toBe(false);
+            expect(mockMessageService.add).toHaveBeenCalledWith(
+                expect.objectContaining({ severity: 'success', summary: 'Enriched' }),
+            );
+        });
+
+        it('toasts info and keeps the form untouched when the key matches nothing', () => {
+            let handler: { next: (res: any) => void; error: (err: any) => void };
+            mockProviderService.detectModelMetadata.mockReturnValue({
+                subscribe: (h: any) => (handler = h),
+            });
+
+            component.openAddModelDialog(12);
+            component.modelForm.patchValue({ key: 'agnes-2.0-flash', promptPricePerM: 5 });
+            component.detectModelMetadata();
+
+            handler!.next({ success: false, message: 'no data', result: null });
+
+            expect(component.modelForm.get('promptPricePerM')?.value).toBe(5);
+            expect(mockMessageService.add).toHaveBeenCalledWith(
+                expect.objectContaining({ severity: 'info' }),
+            );
+        });
+
+        it('sends the provider key as the disambiguation hint when editing', () => {
+            let handler: { next: (res: any) => void; error: (err: any) => void };
+            mockProviderService.detectModelMetadata.mockReturnValue({
+                subscribe: (h: any) => (handler = h),
+            });
+            mockProviderStore.providers.mockReturnValue([
+                { id: 12, key: 'xkiro', label: 'Xkiro', active: true, models: [] },
+            ]);
+            // llmProviders() caches on first read (the store mock is a plain fn, not a signal),
+            // so the fixture has to be rebuilt on top of the mock — same pattern as the view tests.
+            fixture.destroy();
+            fixture = TestBed.createComponent(LlmProvidersManagement);
+            component = fixture.componentInstance;
+            fixture.detectChanges();
+
+            component.openEditModelDialog(12, {
+                id: 3,
+                key: 'minimax/minimax-m3:free',
+                label: 'MiniMax M3',
+                active: true,
+                sortOrder: 0,
+                capability: 'text',
+                providerId: 12,
+                createdAt: '',
+                updatedAt: '',
+            });
+            component.detectModelMetadata();
+
+            expect(mockProviderService.detectModelMetadata).toHaveBeenCalledWith('minimax/minimax-m3:free', 'xkiro');
+
+            mockProviderStore.providers.mockReturnValue([]);
+        });
+
+        it('toasts on a failed lookup and clears the spinner', () => {
+            let handler: { next: (res: any) => void; error: (err: any) => void };
+            mockProviderService.detectModelMetadata.mockReturnValue({
+                subscribe: (h: any) => (handler = h),
+            });
+
+            component.openAddModelDialog(12);
+            component.modelForm.patchValue({ key: 'deepseek/deepseek-v4-flash' });
+            component.detectModelMetadata();
+
+            handler!.error({ error: { message: 'OpenRouter down' } });
+
+            expect(component.detectingMetadata()).toBe(false);
+            expect(mockMessageService.add).toHaveBeenCalledWith(
+                expect.objectContaining({ severity: 'error', summary: 'Detect failed' }),
+            );
+        });
+    });
+
+    describe('onFreeTierChange', () => {
+        it('locks the prices at 0 and disables the inputs when the free tier is checked', () => {
+            component.openAddModelDialog(12);
+            component.modelForm.patchValue({ promptPricePerM: 0.14, completionPricePerM: 0.28 });
+
+            // The checkbox CVA writes freeTier itself; the handler owns only the price side effects.
+            component.modelForm.get('freeTier')?.setValue(true);
+            component.onFreeTierChange(true);
+
+            expect(component.modelForm.get('freeTier')?.value).toBe(true);
+            expect(component.modelForm.get('promptPricePerM')?.value).toBe(0);
+            expect(component.modelForm.get('completionPricePerM')?.value).toBe(0);
+            expect(component.modelForm.get('promptPricePerM')?.disabled).toBe(true);
+            // getRawValue keeps disabled controls, so the 0s still reach the backend.
+            expect(component.modelForm.getRawValue().promptPricePerM).toBe(0);
+        });
+
+        it('unlocks the price inputs when unchecked', () => {
+            component.openAddModelDialog(12);
+            component.modelForm.patchValue({ promptPricePerM: 0.14 });
+
+            component.onFreeTierChange(false);
+
+            expect(component.modelForm.get('promptPricePerM')?.value).toBe(0.14);
+            expect(component.modelForm.get('promptPricePerM')?.disabled).toBe(false);
+        });
+
+        it('zeroes the prices when the checkbox is ticked in the rendered dialog', () => {
+            // Guards the checkbox wiring: (ngModelChange) + a handler that setValue()s the same
+            // control recurses through PrimeNG's writeValue until the stack overflows, so the
+            // dialog has to render and the box has to be toggled through the DOM to prove the
+            // loop is gone.
+            component.openAddModelDialog(12);
+            component.modelForm.patchValue({ promptPricePerM: 0.14, completionPricePerM: 0.28 });
+            fixture.detectChanges();
+
+            const checkbox = document.querySelector('#model-free-tier') as HTMLInputElement;
+            expect(checkbox).not.toBeNull();
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+            fixture.detectChanges();
+
+            expect(component.modelForm.get('freeTier')?.value).toBe(true);
+            expect(component.modelForm.get('promptPricePerM')?.value).toBe(0);
+            expect(component.modelForm.get('completionPricePerM')?.value).toBe(0);
+        });
+    });
+
+    describe('model dialog specs fields', () => {
+        it('openEditModelDialog patches the enriched fields onto the form', () => {
+            component.openEditModelDialog(12, {
+                id: 3,
+                key: 'z-ai/glm-5.2',
+                label: 'GLM 5.2',
+                active: true,
+                sortOrder: 0,
+                capability: 'text',
+                providerId: 12,
+                createdAt: '',
+                updatedAt: '',
+                contextLength: 1310720,
+                maxOutputTokens: 943717,
+                promptPricePerM: 1.4,
+                completionPricePerM: 1.4,
+                freeTier: false,
+                metadataSource: 'openrouter:t2',
+            });
+
+            expect(component.modelForm.get('contextLength')?.value).toBe(1310720);
+            expect(component.modelForm.get('maxOutputTokens')?.value).toBe(943717);
+            expect(component.modelForm.get('promptPricePerM')?.value).toBe(1.4);
+            expect(component.modelForm.get('freeTier')?.value).toBe(false);
+        });
+
+        it('openAddModelDialog resets the specs to empty defaults', () => {
+            component.openAddModelDialog(12);
+
+            expect(component.modelForm.get('contextLength')?.value).toBeNull();
+            expect(component.modelForm.get('promptPricePerM')?.value).toBeNull();
+            expect(component.modelForm.get('freeTier')?.value).toBe(false);
+        });
+
+        it('openEditModelDialog keeps the price inputs locked when the model is already free', () => {
+            component.openEditModelDialog(12, {
+                id: 3,
+                key: 'qwen/qwen3-coder:free',
+                label: 'Qwen3 Coder Free',
+                active: true,
+                sortOrder: 0,
+                capability: 'text',
+                providerId: 12,
+                createdAt: '',
+                updatedAt: '',
+                contextLength: 131072,
+                maxOutputTokens: 8192,
+                promptPricePerM: 0,
+                completionPricePerM: 0,
+                freeTier: true,
+                metadataSource: 'openrouter:t1',
+            });
+
+            expect(component.modelForm.get('freeTier')?.value).toBe(true);
+            expect(component.modelForm.get('promptPricePerM')?.disabled).toBe(true);
+
+            // A fresh model afterwards must start editable again.
+            component.openAddModelDialog(12);
+            expect(component.modelForm.get('promptPricePerM')?.disabled).toBe(false);
+        });
+
+        it('saveModel carries the specs fields into the store payload', () => {
+            component.openAddModelDialog(12);
+            component.modelForm.patchValue({
+                key: 'deepseek/deepseek-v4-flash',
+                label: 'DeepSeek V4 Flash',
+                contextLength: 1048576,
+                promptPricePerM: 0.04984,
+                freeTier: false,
+            });
+            mockProviderService.detectModelMetadata.mockClear();
+
+            component.saveModel();
+
+            expect(mockProviderStore.createModel).toHaveBeenCalledWith(
+                12,
+                expect.objectContaining({
+                    contextLength: 1048576,
+                    promptPricePerM: 0.04984,
+                    freeTier: false,
+                }),
+            );
         });
     });
 });

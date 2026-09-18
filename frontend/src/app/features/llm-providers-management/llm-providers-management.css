@@ -23,6 +23,25 @@
         width: 140px;
     }
 
+    .col-specs {
+        width: 90px;
+    }
+
+    /* "free" hint: a :free variant exists upstream for this bare (paid) key. */
+    .free-variant-hint {
+        display: inline-flex;
+        margin-left: var(--space-4);
+        padding: 0 var(--space-4);
+        border-radius: var(--radius-pill);
+        font-size: 9.5px;
+        font-family: var(--font-code);
+        color: var(--color-success);
+        background: color-mix(in srgb, var(--color-success) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
+        line-height: 1.6;
+        cursor: help;
+    }
+
     .col-actions {
         width: 64px;
     }

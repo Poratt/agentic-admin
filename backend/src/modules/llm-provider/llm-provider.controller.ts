@@ -15,12 +15,14 @@ import { UpdateLlmProviderDto } from './dto/update-llm-provider.dto';
 import { CreateLlmModelDto } from './dto/create-llm-model.dto';
 import { UpdateLlmModelDto } from './dto/update-llm-model.dto';
 import { SyncModelsDto } from './dto/sync-models.dto';
+import { DetectModelMetadataDto } from './dto/detect-model-metadata.dto';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { AdminGuard } from '../../core/guards/admin.guard';
 import { ServiceResultContainer } from '../../core/models/service-result-container.model';
 import { LlmProviderEntity } from './entities/llm-provider.entity';
 import { LlmModelEntity } from './entities/llm-model.entity';
 import { ModelStats } from './types/model-stats.types';
+import { ModelMetadata } from './services/model-metadata-catalog.service';
 import { RequiresConfirmation } from '../../core/decorators/requires-confirmation.decorator';
 import { CustomApiOperationOptions } from '../../core/types/custom-api-operation-options.type';
 
@@ -137,6 +139,36 @@ export class LlmProviderController {
   @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
   async syncModels(@Param('id') id: string, @Body() dto: SyncModelsDto): Promise<ServiceResultContainer<{ added: number; skipped: number }>> {
     return this.service.syncProviderModels(+id, dto.keys);
+  }
+
+  @Post('models/detect-metadata')
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: 'Detect model metadata from OpenRouter',
+    summaryHe: 'מגלה נתוני מודל (קונטקסט/מחיר) מ-OpenRouter',
+    toolIcon: 'ph-sparkle',
+    description:
+      "Looks up context window, max output and $/1M-token pricing for a model key in the public OpenRouter catalog. Read-only, best-effort: an unmatched key returns result:null. The dialog fills the form and the admin persists via update — a manual admin action, not an LLM tool.",
+  } as CustomApiOperationOptions)
+  @ApiOkResponse({ description: 'Detected metadata (or result:null when unmatched)' })
+  @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
+  async detectModelMetadata(@Body() dto: DetectModelMetadataDto): Promise<ServiceResultContainer<ModelMetadata | null>> {
+    return this.service.detectModelMetadata(dto.key, dto.providerKey);
+  }
+
+  @Get('models/free-variants')
+  @UseGuards(AdminGuard)
+  @ApiOperation({
+    summary: 'List model bare names with a :free variant upstream',
+    summaryHe: 'רשימת שמות מודלים שיש להם וריאנט חינמי ב-OpenRouter',
+    toolIcon: 'ph-info',
+    description:
+      "Bare names of OpenRouter catalog entries that ship a ':free' variant. Lets the management table hint 'free variant exists' on models configured with the bare paid key. Read-only; served from the 24h catalog cache.",
+  } as CustomApiOperationOptions)
+  @ApiOkResponse({ description: 'Bare names with an upstream :free variant' })
+  @ApiUnauthorizedResponse({ description: 'JWT token missing or invalid' })
+  async getFreeVariantKeys(): Promise<ServiceResultContainer<{ bareNames: string[] }>> {
+    return this.service.getFreeVariantKeys();
   }
 
   @Patch('models/:id')

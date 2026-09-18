@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 
@@ -13,6 +13,7 @@ import { LlmModelTestResultEntity } from './entities/llm-model-test-results.enti
 import { LlmCallStatEntity } from './entities/llm-call-stat.entity';
 import { UserLlmDefaultEntity } from './entities/user-llm-default.entity';
 import { ModelStats, ModelStatsRow, ModelUsageStats } from './types/model-stats.types';
+import { ModelMetadataCatalogService, ModelMetadata } from './services/model-metadata-catalog.service';
 
 /** Runs a model needs before it can be ranked — one run is noise, not a measurement. */
 const MIN_RANKING_SAMPLE = 3;
@@ -87,6 +88,12 @@ export class LlmProviderService {
     private readonly callStatRepo: Repository<LlmCallStatEntity>,
     @InjectRepository(UserLlmDefaultEntity)
     private readonly userDefaultRepo: Repository<UserLlmDefaultEntity>,
+    /**
+     * Best-effort OpenRouter metadata enrichment. Optional so plain unit constructions
+     * (and a registry misconfiguration) degrade to "no enrichment" instead of throwing.
+     */
+    @Optional()
+    private readonly metadataCatalog?: ModelMetadataCatalogService,
   ) {}
 
   /**
@@ -537,6 +544,26 @@ export class LlmProviderService {
       // label drops cosmetic variant prefixes (e.g. OpenRouter '~') — the key keeps them for the API.
       .map((key) => this.modelRepo.create({ key, label: key.replace(/^~/, ''), capability: 'text', sortOrder: 0, active: false, providerId }));
 
+    // Inline metadata enrichment (locked decision): the sync dialog is the main entry for
+    // new models, so its new rows are enriched in the same request — one catalog fetch, applied
+    // before the single save. Best-effort: a failed catalog yields plain rows, never an error.
+    if (this.metadataCatalog && toAdd.length > 0) {
+      const detected = await this.metadataCatalog.detectMany(
+        toAdd.map((m) => m.key),
+        provider.key,
+      );
+      for (const model of toAdd) {
+        const meta = detected.get(model.key);
+        if (!meta) continue;
+        model.contextLength = meta.contextLength;
+        model.maxOutputTokens = meta.maxOutputTokens;
+        model.promptPricePerM = meta.promptPricePerM;
+        model.completionPricePerM = meta.completionPricePerM;
+        model.freeTier = meta.freeTier;
+        model.metadataSource = meta.metadataSource;
+      }
+    }
+
     if (toAdd.length > 0) {
       await this.modelRepo.save(toAdd);
     }
@@ -547,6 +574,39 @@ export class LlmProviderService {
       message: `Added ${added} models (${uniqueKeys.length - added} skipped)`,
       result: { added, skipped: uniqueKeys.length - added },
     };
+  }
+
+  /**
+   * Looks up context/max-output/pricing for one model key in the OpenRouter catalog
+   * (Edit Model dialog "✨ Auto-Detect"). Read-only — the caller persists via update.
+   * Best-effort: an unmatched key returns result:null, never an error.
+   */
+  async detectModelMetadata(key: string, providerKey?: string): Promise<ServiceResultContainer<ModelMetadata | null>> {
+    if (!this.metadataCatalog) {
+      return { success: false, message: 'Metadata catalog service unavailable', result: null };
+    }
+    const meta = await this.metadataCatalog.detect(key, providerKey);
+    if (!meta) {
+      return { success: false, message: 'לא נמצאו נתוני OpenRouter עבור מפתח זה — מילוי ידני בלבד', result: null };
+    }
+    return {
+      success: true,
+      message: `Enriched via OpenRouter (${meta.tier === 't1' ? 'T1 Exact' : 'T2 Bare'})`,
+      result: meta,
+    };
+  }
+
+  /**
+   * Bare model names that have a `:free` variant in the public OpenRouter catalog.
+   * Read-only hint for the management table; best-effort — an unavailable catalog
+   * yields an empty list, never an error.
+   */
+  async getFreeVariantKeys(): Promise<ServiceResultContainer<{ bareNames: string[] }>> {
+    if (!this.metadataCatalog) {
+      return { success: false, message: 'Metadata catalog service unavailable', result: { bareNames: [] } };
+    }
+    const bareNames = await this.metadataCatalog.getFreeVariantBareNames();
+    return { success: true, message: `Loaded ${bareNames.length} free-variant names`, result: { bareNames } };
   }
 
   async createModel(providerId: number, dto: CreateLlmModelDto): Promise<ServiceResultContainer<LlmModelEntity>> {

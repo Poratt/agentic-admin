@@ -408,6 +408,15 @@
                                                     <th pSortableColumn="label">
                                                         <div class="sortable-column-header">Model <p-sort-icon field="label" /></div>
                                                     </th>
+                                                    <th class="col-specs" pSortableColumn="contextLength">
+                                                        <div class="sortable-column-header">Context <p-sort-icon field="contextLength" /></div>
+                                                    </th>
+                                                    <th class="col-specs" pSortableColumn="promptPricePerM">
+                                                        <div class="sortable-column-header">Price <p-sort-icon field="promptPricePerM" /></div>
+                                                    </th>
+                                                    <th class="col-specs" pSortableColumn="maxOutputTokens">
+                                                        <div class="sortable-column-header">Max Out <p-sort-icon field="maxOutputTokens" /></div>
+                                                    </th>
                                                     <th class="col-perf" pSortableColumn="performanceScore">
                                                         <div class="sortable-column-header">
                                                             Performance <p-sort-icon field="performanceScore" />
@@ -546,6 +555,19 @@
                                                             </div>
                                                         </div>
                                                     </td>
+                                                    <td class="col-specs">{{ formatContext(model.contextLength) }}</td>
+                                                    <td class="col-specs">
+                                                        <span [class.free]="priceCell(model) === 'Free'">{{ priceCell(model) }}</span>
+                                                        @if (hasFreeVariant(model)) {
+                                                            <span
+                                                                class="free-variant-hint"
+                                                                appTooltip
+                                                                [text]="'A :free variant of this model exists upstream — switch the key to use it'"
+                                                                >free</span
+                                                            >
+                                                        }
+                                                    </td>
+                                                    <td class="col-specs">{{ formatContext(model.maxOutputTokens) }}</td>
                                                     <td class="col-perf">
                                                         @if (model.hasTests) {
                                                             <div class="metric-cell">
@@ -651,7 +673,7 @@
 
                                                 @if (model.hasTests && isModelExpanded(model.id)) {
                                                     <tr class="nested-panel-row">
-                                                        <td colspan="6" class="nested-panel-cell">
+                                                        <td colspan="9" class="nested-panel-cell">
                                                             <table class="data-table compact">
                                                                 <thead>
                                                                     <tr>
@@ -740,7 +762,7 @@
 
                                             <ng-template #emptymessage>
                                                 <tr>
-                                                    <td colspan="6" class="empty-cell">
+                                                    <td colspan="9" class="empty-cell">
                                                         <div class="empty-state roomy">
                                                             <span class="ph ph-cube-simple"></span>
                                                             <p>No models yet.</p>
@@ -868,7 +890,21 @@
     <form [formGroup]="modelForm" class="dialog-form">
         <div class="form-field">
             <label for="model-key">Key <span class="required">*</span></label>
-            <input id="model-key" pInputText type="text" formControlName="key" placeholder="e.g. gpt-4o" />
+            <div class="key-field-with-detect">
+                <input id="model-key" pInputText type="text" formControlName="key" placeholder="e.g. gpt-4o" />
+                <button
+                    type="button"
+                    class="transparent-btn sm detect-btn"
+                    [class.detecting]="detectingMetadata()"
+                    [disabled]="detectingMetadata()"
+                    appTooltip
+                    [text]="'Fill context & pricing from the public OpenRouter catalog'"
+                    (click)="detectModelMetadata()"
+                >
+                    <i [class]="detectingMetadata() ? 'ph ph-spinner-gap ph-spin' : 'ph ph-sparkle'"></i>
+                    <span>Auto-Detect</span>
+                </button>
+            </div>
             @if (modelForm.get('key')?.invalid && (modelForm.get('key')?.dirty || modelForm.get('key')?.touched)) {
                 @if (modelForm.get('key')?.errors?.['required']) {
                     <span class="error-text">Key is required.</span>
@@ -906,6 +942,89 @@
                 }
             </div>
             <span class="field-hint">What this model is used for (text chat, image, or video generation).</span>
+        </div>
+
+        <!-- Specs & Pricing — filled by ✨ Auto-Detect, always manually editable/overridable -->
+        <div class="specs-card">
+            <div class="specs-card-title">Model Specifications</div>
+
+            <div class="specs-grid">
+                <div class="form-field">
+                    <label for="model-context">Context Window</label>
+                    <div class="input-with-badge">
+                        <input
+                            id="model-context"
+                            pInputText
+                            type="number"
+                            formControlName="contextLength"
+                            placeholder="131072"
+                            min="0"
+                        />
+                        @if (modelForm.get('contextLength')?.value) {
+                            <span class="spec-badge">{{ formatContext(modelForm.get('contextLength')?.value) }}</span>
+                        }
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label for="model-max-output">Max Output</label>
+                    <div class="input-with-badge">
+                        <input
+                            id="model-max-output"
+                            pInputText
+                            type="number"
+                            formControlName="maxOutputTokens"
+                            placeholder="8192"
+                            min="0"
+                        />
+                        @if (modelForm.get('maxOutputTokens')?.value) {
+                            <span class="spec-badge">{{ formatContext(modelForm.get('maxOutputTokens')?.value) }}</span>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="pricing-header">
+                <span class="pricing-title">
+                    Pricing
+                    <span class="pricing-unit">per 1M tokens</span>
+                </span>
+                <span class="free-tier-toggle">
+                    <p-checkbox
+                        [binary]="true"
+                        formControlName="freeTier"
+                        inputId="model-free-tier"
+                        (onChange)="onFreeTierChange($event.checked)"
+                    />
+                    <label for="model-free-tier">Free Tier</label>
+                </span>
+            </div>
+
+            <div class="specs-grid" [class.prices-free]="modelForm.get('freeTier')?.value">
+                <div class="form-field">
+                    <label for="model-prompt-price">Prompt ($)</label>
+                    <input
+                        id="model-prompt-price"
+                        pInputText
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        formControlName="promptPricePerM"
+                        placeholder="0.14"
+                    />
+                </div>
+                <div class="form-field">
+                    <label for="model-completion-price">Completion ($)</label>
+                    <input
+                        id="model-completion-price"
+                        pInputText
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        formControlName="completionPricePerM"
+                        placeholder="0.28"
+                    />
+                </div>
+            </div>
         </div>
 
         <div class="form-field form-field-switch">

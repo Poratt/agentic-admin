@@ -114,7 +114,17 @@
                             <span>{{ selectedModel()?.label ?? 'בחר מודל' }}</span>
                             <span class="ph ph-caret-down"></span>
                         </button>
-                        <p-tiered-menu #menu [model]="modelMenuItems()" [popup]="true" styleClass="chat-model-menu ltr" />
+                        <p-tiered-menu #menu [model]="modelMenuItems()" [popup]="true" styleClass="chat-model-menu ltr">
+                            <ng-template pTemplate="item" let-item>
+                                <span class="model-menu-item">
+                                    <i [class]="item.icon"></i>
+                                    <span class="model-menu-label">{{ item.label }}</span>
+                                    @if (item.hint) {
+                                        <span class="model-menu-hint">{{ item.hint }}</span>
+                                    }
+                                </span>
+                            </ng-template>
+                        </p-tiered-menu>
 
                         <button
                             [type]="loading() ? 'button' : 'submit'"

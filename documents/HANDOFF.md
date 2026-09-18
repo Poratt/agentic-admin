@@ -1,5 +1,57 @@
 # Documentation Handoff
 
+## 2026-09-18 — ✅ DONE (uncommitted on `feat/model-metadata-enrichment`): Model Metadata Enrichment + Edit-Model dialog redesign
+
+**Context (user request):** `llm_models` had no context/pricing data — admins couldn't see whether a model fits a big document, and cost was invisible. The feature fills `context_length`, `max_output_tokens`, `prompt_price_per_m`, `completion_price_per_m` (+ `free_tier`) from the public OpenRouter catalog — **inline at Sync (the 95% entry path), inline at Seeds, and a `✨ Auto-Detect` button in Edit Model**. Never blocks writes; never invents pricing (unknown → NULL).
+
+**Empirical matching (live catalog, 445 models, 2026-09-18):** **63/82 = 77% hit, 0 ambiguity** — T1 exact 34 · T2 single-bare 22 · T2 steered 7; the 19 misses are 6 legit custom keys + 13 niche/renamed → honest NULL. Three real-payload corrections adopted: strip trailing `[-:]free`, build the bare-name index from each entry's own `id` only (never `alias_target.slug` — inflates ambiguity 2-3×), and `:free`-steering. `~` verified 18/18 **prefix** (auto-latest redirect), zero infix → `split('~')[0]` rejected.
+
+**Backend (10 files, +2 new):**
+- NEW `services/model-metadata-catalog.service.ts` — fetch + 24h cache + negative cache, `normalizeKey`, two-tier matcher, `metadataFromEntry`; never throws. Spec 20/20.
+- `llm-model.entity.ts` — 6 new columns (`context_length`, `max_output_tokens`, two `double` prices, `free_tier` default false, `metadata_source` varchar(32)).
+- `llm-provider.service.ts` — `syncProviderModels` enriches before the single save; `detectModelMetadata(key, providerKey?)` for the button.
+- `llm-provider.controller.ts` — `POST models/detect-metadata` (AdminGuard + swagger); `HIDDEN_FROM_LLM` += the new route (diagnostic noise for the agent).
+- `create-llm-model.dto.ts` + NEW `detect-model-metadata.dto.ts`; `llm-provider.module.ts` registers the service; `seeds/llm-providers.seed.ts` enriches seeded models (idempotent — the seed's own spec stayed at 447 lines).
+
+**Frontend (6 files, +2 new):**
+- NEW `core/utils/model-format.ts` — `formatContext` (131072 → 128K), `formatPricePerM`, `hasModelSpecs`, `modelSpecsChips`, `modelPickerHint`. Full spec.
+- `core/services/llm-provider.service.ts` — `LlmModel` +6 fields, `ModelMetadata` interface, `detectModelMetadata()`.
+- `llm-providers-management.*` — Auto-Detect button beside Key, specs card (redesigned — below), table micro-badges, `onFreeTierChange`.
+- `chat/chat.*` + `_primeng-overrides.css` — model picker items carry a `128K · Free` / `64K · $0.14/M` hint.
+
+**Edit-Model dialog redesign (user request, same session):** the first version was a long vertical form with a broken `Specs & Pricingper 1M tokens` label. Restructured into the compact card the user specified — one token-tinted bordered `specs-card`, `MODEL SPECIFICATIONS` mini-title, two 2-col grids, **Free Tier checkbox moved into the pricing header**, prices `disable()` + dim when free (reactive idiom, `getRawValue()` still carries the 0s). Both context inputs show a `128K`/`8K` badge.
+
+**⚠️ Bug found through the redesign — checkbox recursion:** `(ngModelChange)` on a `p-checkbox` that also has `formControlName`, with a handler that `setValue()`s the same control, recurses via PrimeNG's `writeValue` until `RangeError: Maximum call stack size exceeded`. It never failed a test — it surfaced as **25 unhandled RangeErrors** that vitest only warns about (a naive run looks "green"). **Baseline proved both were mine:** my changes stashed → 614/614, zero unhandled errors. Fixed by switching to `(onChange)` (verified in PrimeNG source: the native input's `(change)` → `handleChange` → `onChange.emit`; `writeValue` never emits it). Correlation measured: **0 vs 37 errors**. A DOM regression test now renders the dialog and toggles `#model-free-tier` through a real `change` event.
+
+**⚠️ Bug found in the second review pass — dialog CSS was silently dead (Golden Rule #8):** the user reported the redesign "didn't take", and every one of the original 5 visual complaints traced to the same root cause — the `.specs-card` / `.key-field-with-detect` / `.detect-btn` / `.input-with-badge` rules were written in **`llm-providers-management.css` (component-emulated)**, but `p-dialog` projects its content to `<body>` (PrimeNG v22 `contentChild('content')` + `$appendTo() !== 'self'`), so emulated `[_ngcontent]` scoping never matches the projected nodes. The classes that *did* work in the dialog (`.form-field`, `.dialog-form`, `.toggle-group`) are all in the global `_forms.css` / `_buttons.css` — that was the tell. **Fix:** moved all four blocks into the existing `.p-dialog { … }` section of `_primeng-overrides.css`, next to the sync-models dialog styles (which were already there for exactly this reason), and sized `.free-tier-toggle .p-checkbox` to 16px to match the sync checkboxes. **Verified in compiled output:** `styles-*.css` now contains `.specs-card {`, `.key-field-with-detect {`, `.pricing-header {`, `.free-tier-toggle {` as **unscoped global selectors** (no `[_ngcontent]`) — before the move they were scoped and never matched.
+
+**VERIFIED (gate):**
+- Frontend `npm test -- --watch=false` → **639/639 (60 files), zero unhandled errors**; `npm run build` exit 0 (only the pre-existing `strain-hunter.css` budget warning).
+- Backend llm-provider module **75/75**; full `npx jest --watchAll=false --runInBand` → **595/599**, the 4 failures reproduced identically on `main` (stash + checkout + rerun) = pre-existing; `npm run build -w backend` exit 0.
+- Route smoke: `POST /llm-provider/models/detect-metadata` → **401** = registered + guarded.
+- Baseline dump taken before the schema change: `C:\tmp\db-baselines\my_app-pre-metadata-enrichment-2026-09-18-1855.sql`. Backend was restarted by the user → `synchronize` added the 6 columns.
+
+**Decisions made:** inline enrichment at sync (no queue/cron); catalog cache 24h + negative cache, never throws; unknown → NULL not 0; prices per-1M; seeds enriched through the same service; the live OpenRouter smoke skipped (matcher covered by spec against the real payload).
+
+### Follow-up (same session): auto-enrich unenriched models on Test / Test All
+
+User request: clicking `test model` or `Test All` on an unenriched model must enrich it automatically. Implemented in `llm-providers-management.ts` as fire-and-forget enrichment alongside the ping — never blocking it (a blocking `.finally(...)` variant was tried first and reverted: it broke 5 sync-expecting specs and meant 60 serial HTTP calls before a 30-model run could even start).
+
+- `ensureModelMetadata(modelId)` — returns `true` only when specs were detected AND persisted NOW (pre-existing specs or a catalog miss return `false`, so callers never reload for nothing).
+- `testModel` — enriches in parallel; one `llmProviderStore.reload()` when the enrichment landed (the ping's own reload also happens anyway).
+- `testAllModels` — run starts immediately; `ensureProviderModelsMetadata` enriches all missing models in PARALLEL (one cached catalog fetch server-side) and reloads the store once when any of them got enriched.
+
+- Specs column split into 3 sortable columns (Context / Price / Max Out) on `contextLength` / `promptPricePerM` / `maxOutputTokens`; `modelSpecsChips` deleted (single consumer), new `priceCell()` in model-format.ts (Free flag or both-0 → `Free`, else prompt price, else `—`).
+- colspan fix: models table 6→9 columns (Specs split) left `nested-panel-row` + empty-cell at `colspan="6"` → merged panel covered 6/9 of the width (user saw it "shifted left"). Both bumped to `colspan="9"`.
+- Stats freshness: stats were loaded once in `ngOnInit` → new tests invisible without refresh. `setActiveTab('stats')` now calls `loadModelStats()` on every tab entry.
+- Free-variant hint (user request): bare-paid keys with an upstream `:free` sibling show a green `free` chip in Price column. Backend: `freeVariantBareNames()` pure fn + `getFreeVariantBareNames()` + `GET models/free-variants` (AdminGuard, hidden from the agent via HIDDEN_FROM_LLM); frontend: `getFreeVariantKeys()` loaded once in ngOnInit, `freeVariantBareNames` signal + `hasFreeVariant(model)` (bare name match, only for paid models).
+
+VERIFIED (final): frontend `npm test -- --watch=false` → **639/639 (60 files), exit 0**; `npm run build` exit 0. Backend llm-provider module **48/48** (`--runInBand`, catalog spec +2 for `freeVariantBareNames`); `npm run build -w backend` exit 0. Swagger spec regenerates on next backend start (new GET route). Restart :3000 → route + chips live.
+
+**Next exact step:** `graphify update .` → check `architecture-diagram.md` (new service + a new external data source = OpenRouter public catalog — likely needs a line) → commit on user go (feat + test + docs split, plan already moved to `done/`). The 6 DB columns are live; a `Sync` on any provider fills its models' specs.
+
+---
+
 ## 2026-09-18 — ✅ DONE: static tool tier filtering — keyword domain groups (Phases 0-3)
 
 **Context (user request):** the chat agent injects ~75 tools into every LLM call, wasting tokens and confusing weak models. The feature picks a small set of domain groups from the USER prompt via in-process keyword regex; when confidence is low it falls back to the full set. Working branch: `feat/static-tool-tier-filtering` (from `main`).

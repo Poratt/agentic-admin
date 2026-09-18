@@ -535,6 +535,138 @@ li.p-select-option {
   .exists-row {
     color: var(--color-text-muted);
   }
+
+  /* ── Provider model dialog — specs & pricing ───────────────────────────── */
+  /* Same reason as the sync dialog above: this content is projected to <body>,
+     outside the component host, so component-emulated styles never reach it. */
+
+  .key-field-with-detect {
+    display: flex;
+    gap: var(--space-4);
+    align-items: stretch;
+
+    input {
+      flex-grow: 1;
+      min-width: 0;
+    }
+  }
+
+  .detect-btn {
+    flex-shrink: 0;
+    align-self: flex-end;
+    color: var(--color-primary);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+
+    &:not(:disabled):hover {
+      background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+    }
+
+    &.detecting {
+      opacity: 0.7;
+    }
+  }
+
+  .input-with-badge {
+    position: relative;
+
+    .spec-badge {
+      position: absolute;
+      inset-inline-end: var(--space-4);
+      top: 50%;
+      transform: translateY(-50%);
+      font-family: var(--font-code);
+      font-size: 10.5px;
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+      padding: 1px var(--space-4);
+      border-radius: var(--radius-pill);
+      pointer-events: none;
+    }
+  }
+
+  /* One compact card: two 2-col grids, the Free Tier toggle in the pricing
+     header, prices dimmed while free. */
+  .specs-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    margin-top: var(--space-5);
+    padding: var(--space-6);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-surface-elevated) 50%, transparent);
+
+    .specs-card-title {
+      font-size: var(--font-size-xxs);
+      font-weight: var(--font-weight-semibold);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-muted);
+    }
+
+    .specs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-5);
+
+      /* Free tier locks the prices at 0 — show the fields as read-only. */
+      &.prices-free {
+
+        .form-field,
+        input {
+          opacity: 0.45;
+        }
+      }
+    }
+
+    .pricing-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-5);
+      padding-top: var(--space-5);
+      border-top: 1px solid var(--color-border);
+
+      .pricing-title {
+        font-size: var(--font-size-xs);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-text-primary);
+
+        .pricing-unit {
+          margin-inline-start: var(--space-3);
+          font-size: var(--font-size-xxs);
+          font-weight: var(--font-weight-normal);
+          color: var(--color-text-muted);
+        }
+      }
+    }
+
+    .free-tier-toggle {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+
+      .p-checkbox {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+
+        .p-checkbox-box {
+          width: 16px;
+          height: 16px;
+        }
+      }
+
+      label {
+        font-size: var(--font-size-xs);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-success);
+        cursor: pointer;
+      }
+    }
+  }
 }
 
 /* ── Toasts ──────────────────────────────────────────────────────────────── */
@@ -658,6 +790,35 @@ li.p-select-option {
     max-height: 400px;
     overflow: auto;
   }
+
+  /* Chat model menu: the row carries a context/cost hint (`128K · Free`) next to the name,
+     so the whole row spreads and the hint reads as muted secondary text. */
+  &.chat-model-menu .model-menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    overflow: hidden;
+
+    .model-menu-label {
+      flex-grow: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .model-menu-hint {
+      flex-shrink: 0;
+      font-family: var(--font-code);
+      font-size: 10px;
+      font-weight: var(--font-weight-medium);
+      color: var(--color-text-tertiary);
+      background: color-mix(in srgb, var(--color-surface-3) 70%, transparent);
+      padding: 1px var(--space-4);
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--color-border);
+    }
+  }
 }
 
 
@@ -744,7 +905,7 @@ li.p-select-option {
      `.data-table th` (0,1,1) — the declarations below would silently lose on
      every `p-table`. One extra element step puts them at (0,1,3) and makes the
      pattern behave the same on a native table and on a `p-table`. */
-  thead tr > th {
+  thead tr>th {
     text-align: left;
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-medium);
@@ -752,7 +913,7 @@ li.p-select-option {
     border-bottom: 1px solid var(--color-border-strong);
   }
 
-  tbody tr > td {
+  tbody tr>td {
     font-size: var(--font-size-sm);
     border-bottom: 1px solid var(--color-border);
   }
@@ -765,12 +926,10 @@ li.p-select-option {
      global `.p-datatable .p-datatable-thead > tr > th { padding-block }`
      override at (0,2,2). */
   &.spacious {
-    thead tr > th {
-      padding: var(--space-4) var(--space-8);
-    }
 
-    tbody tr > td {
-      padding: var(--space-6) var(--space-8);
+    thead tr>th,
+    tbody tr>td {
+      padding: var(--space-2) var(--space-12);
     }
   }
 
@@ -782,12 +941,12 @@ li.p-select-option {
     border: none;
     border-radius: 0;
 
-    thead tr > th,
-    tbody tr > td {
+    thead tr>th,
+    tbody tr>td {
       padding: var(--space-1) var(--space-2);
     }
 
-    tbody tr:last-child > td {
+    tbody tr:last-child>td {
       border-bottom: none;
     }
 

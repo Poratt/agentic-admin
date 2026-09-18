@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import { LlmModelEntity } from '../entities/llm-model.entity';
 import { LlmProviderEntity } from '../entities/llm-provider.entity';
+import { ModelMetadataCatalogService } from '../services/model-metadata-catalog.service';
 
 const OMNIRoute_MODELS = [{ value: 'auto/best-free', label: 'Default', capability: 'text' as const }];
 
@@ -235,6 +236,34 @@ export async function seedLlmProviders(dataSource: DataSource): Promise<void> {
       console.log('[Seed] NVIDIA NIM provider and models created.');
     } else {
       console.log('[Seed] NVIDIA NIM provider already exists.');
+    }
+
+    // Seeded models get the same best-effort metadata enrichment as the sync dialog —
+    // one OpenRouter catalog fetch per provider. Absent data (custom/agnes models) stays NULL.
+    const seeded = await providerRepo.find({ relations: ['models'] });
+    if (seeded.length > 0) {
+      const metadataCatalog = new ModelMetadataCatalogService();
+      let enriched = 0;
+      for (const provider of seeded) {
+        const models = provider.models ?? [];
+        const detected = await metadataCatalog.detectMany(
+          models.map((m) => m.key),
+          provider.key,
+        );
+        for (const model of models) {
+          const meta = detected.get(model.key);
+          if (!meta) continue;
+          model.contextLength = meta.contextLength;
+          model.maxOutputTokens = meta.maxOutputTokens;
+          model.promptPricePerM = meta.promptPricePerM;
+          model.completionPricePerM = meta.completionPricePerM;
+          model.freeTier = meta.freeTier;
+          model.metadataSource = meta.metadataSource;
+          await modelRepo.save(model);
+          enriched += 1;
+        }
+      }
+      console.log(`[Seed] Metadata enrichment finished: ${enriched} models enriched from OpenRouter.`);
     }
   } catch (error) {
     console.error('[Seed] Error seeding LLM providers:', error);

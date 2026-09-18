@@ -6,13 +6,14 @@ import {
     signal,
     OnInit,
     OnDestroy,
+    DestroyRef,
     effect,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
+import { toSignal, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { firstValueFrom, map } from 'rxjs';
 
 import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
@@ -39,6 +40,7 @@ import {
     modelStatsId,
 } from '../../core/services/llm-provider.service';
 import { filterBySearch, matchesSearch } from '../../core/utils/text-search';
+import { formatContext, modelPickerHint, priceCell, hasModelSpecs } from '../../core/utils/model-format';
 
 export interface LlmModelView extends LlmModel {
     testResults?: any[];
@@ -85,6 +87,7 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     protected llmProviderStore = inject(LlmProviderStore);
     protected confirmService = inject(ConfirmationService);
     protected messageService = inject(MessageService);
+    private destroyRef = inject(DestroyRef);
     protected readonly PageStates = PageStates;
     globalFilter = signal('');
     // Deactivated providers are hidden by default; admins can reveal them to re-activate.
@@ -95,6 +98,14 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
         // The statistics feed both the tab and the leaderboard badges on the model rows, so they are
         // fetched up front. One aggregated query — the backend does not ship the call history.
         this.llmProviderStore.loadModelStats();
+        // Bare names with an upstream :free variant — one small cached fetch, best-effort.
+        this.llmProviderService
+            .getFreeVariantKeys()
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+                next: (res) => this.freeVariantBareNames.set(new Set(res.result?.bareNames ?? [])),
+                error: () => this.freeVariantBareNames.set(new Set()),
+            });
     }
 
     ngOnDestroy(): void {
@@ -128,6 +139,9 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     setActiveTab(value: string | number | undefined) {
         if (typeof value !== 'string') return;
         if (value !== 'providers' && value !== 'stats') return;
+        // Fresh stats on every visit to the tab — tests run on the providers tab must be
+        // reflected without a manual page refresh (the initial load only covers ngOnInit).
+        if (value === 'stats') this.llmProviderStore.loadModelStats();
         // Imperative, single-funnel write: the click updates the signal AND the URL together.
         this.activeTab.set(value);
         void this.router.navigate([], {
@@ -154,6 +168,9 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     // Dialog visibility — bound via [(visible)] so must be signals
     providerDialogVisible = signal(false);
     modelDialogVisible = signal(false);
+
+    // ✨ Auto-Detect in flight (Edit Model) — drives the button spinner.
+    detectingMetadata = signal(false);
 
     // ── Sync models dialog ───────────────────────────────────────────
     syncDialogVisible = signal(false);
@@ -236,6 +253,11 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
         label: ['', [Validators.required]],
         capability: ['text', [Validators.required]],
         active: [true],
+        contextLength: [null],
+        maxOutputTokens: [null],
+        promptPricePerM: [null],
+        completionPricePerM: [null],
+        freeTier: [false],
     });
 
     readonly capabilityOptions: ReadonlyArray<{ label: string; value: 'text' | 'image' | 'video' }> = [
@@ -583,6 +605,12 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
         if (this.testingModelIds().has(modelId)) return;
 
         this.testingModelIds.update((ids) => new Set(ids).add(modelId));
+        // Best-effort metadata enrichment, in parallel with the ping: a model with no specs
+        // gets detected, persisted, and the store reloaded so the row shows context/pricing.
+        // Fire-and-forget by design — a catalog failure must never delay the actual ping.
+        void this.ensureModelMetadata(modelId).then((enriched) => {
+            if (enriched) this.llmProviderStore.reload();
+        });
         this.llmProviderService.testModel(modelId).subscribe({
             next: (res) => {
                 this.clearModelTesting(modelId);
@@ -611,6 +639,45 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
                 this.llmProviderStore.reload();
             },
         });
+    }
+
+    /**
+     * Detects and persists metadata for a model that has none (no context/pricing on the row).
+     * Best-effort by design: catalog failures or unmatched keys are ignored silently — the
+     * caller's real work (a test) must never be blocked by an enrichment hiccup.
+     * @returns true only when specs were detected and persisted NOW (callers reload).
+     */
+    private async ensureModelMetadata(modelId: number): Promise<boolean> {
+        const model = this.findModelById(modelId);
+        if (!model || hasModelSpecs(model)) return false;
+
+        const provider = this.llmProviders().find((p) => p.id === model.providerId);
+        const detected = await firstValueFrom(
+            this.llmProviderService.detectModelMetadata(model.key, provider?.key),
+        ).catch(() => null);
+        const meta = detected?.result;
+        if (!meta) return false;
+
+        await firstValueFrom(
+            this.llmProviderService.updateModel(modelId, {
+                contextLength: meta.contextLength,
+                maxOutputTokens: meta.maxOutputTokens,
+                promptPricePerM: meta.promptPricePerM,
+                completionPricePerM: meta.completionPricePerM,
+                freeTier: meta.freeTier,
+                metadataSource: meta.metadataSource ?? undefined,
+            }),
+        ).catch(() => null);
+        return true;
+    }
+
+    /** Locates a model row across every provider's sub-table. */
+    private findModelById(modelId: number): LlmModelView | undefined {
+        for (const provider of this.llmProviders()) {
+            const model = (provider.models ?? []).find((m) => m.id === modelId);
+            if (model) return model;
+        }
+        return undefined;
     }
 
     /** Drops only the finished model, so a parallel test keeps its own spinner. */
@@ -656,6 +723,11 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
         }
 
         this.testingAllProviderIds.update((ids) => new Set(ids).add(provider.id));
+        // Enrich unenriched models in PARALLEL with the run — fire-and-forget: the run must
+        // start immediately (30 unenriched models must not mean 60 serial HTTP calls first);
+        // the batch enrichment reloads the store once when it lands. Best-effort: a catalog
+        // miss just leaves the row as-is.
+        void this.ensureProviderModelsMetadata(provider);
         this.llmProviderService.testAllModels(provider.id).subscribe({
             next: (res) => {
                 this.messageService.add({
@@ -674,6 +746,19 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
                 });
             },
         });
+    }
+
+    /**
+     * Enriches every model of one provider that still lacks specs, all in parallel. The
+     * catalog service serves the whole batch from a single cached fetch, so this costs one
+     * network round-trip regardless of provider size. Never blocks the test run; reloads
+     * the store exactly once when any model got enriched.
+     */
+    private async ensureProviderModelsMetadata(provider: LlmProviderView): Promise<void> {
+        const missing = (provider.models ?? []).filter((m) => !hasModelSpecs(m));
+        if (missing.length === 0) return;
+        const results = await Promise.all(missing.map((m) => this.ensureModelMetadata(m.id)));
+        if (results.some(Boolean)) this.llmProviderStore.reload();
     }
 
     // Reloads periodically while the backend reports the run in flight; stops
@@ -813,7 +898,19 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     // ── Model dialog ─────────────────────────────────────────────────
 
     openAddModelDialog(providerId: number) {
-        this.modelForm.reset({ key: '', label: '', capability: 'text', active: true });
+        this.modelForm.reset({
+            key: '',
+            label: '',
+            capability: 'text',
+            active: true,
+            contextLength: null,
+            maxOutputTokens: null,
+            promptPricePerM: null,
+            completionPricePerM: null,
+            freeTier: false,
+        });
+        // reset() keeps the disabled state from the previous edit — a fresh model has free prices editable.
+        this.setPriceFieldsEditable(true);
         this.editingModelProviderId.set(providerId);
         this.editingModelId.set(null);
         this.modelDialogVisible.set(true);
@@ -954,10 +1051,77 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
             label: model.label,
             capability: model.capability,
             active: model.active,
+            contextLength: model.contextLength ?? null,
+            maxOutputTokens: model.maxOutputTokens ?? null,
+            promptPricePerM: model.promptPricePerM ?? null,
+            completionPricePerM: model.completionPricePerM ?? null,
+            freeTier: model.freeTier ?? false,
         });
+        // patchValue doesn't fire the checkbox handler — carry the locked state over manually.
+        this.setPriceFieldsEditable(!(model.freeTier ?? false));
         this.editingModelProviderId.set(providerId);
         this.editingModelId.set(model.id);
         this.modelDialogVisible.set(true);
+    }
+
+    /**
+     * ✨ Auto-Detect — looks the model key up in the public OpenRouter catalog and fills the
+     * Specs & Pricing fields. The fields stay editable afterwards: a provider that prices a
+     * model differently can override, and the save persists exactly what the form holds.
+     */
+    detectModelMetadata() {
+        const key = this.modelForm.get('key')?.value;
+        if (!key) {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Key required',
+                detail: 'Enter a model key before detecting metadata.',
+            });
+            return;
+        }
+        if (this.detectingMetadata()) return;
+
+        this.detectingMetadata.set(true);
+        const providerId = this.editingModelProviderId();
+        const providerKey =
+            providerId !== null ? this.llmProviders().find((p) => p.id === providerId)?.key : undefined;
+
+        this.llmProviderService.detectModelMetadata(key, providerKey).subscribe({
+            next: (res) => {
+                this.detectingMetadata.set(false);
+                if (!res?.result) {
+                    this.messageService.add({
+                        severity: 'info',
+                        summary: 'No data found',
+                        detail: res?.message || 'לא נמצאו נתוני OpenRouter עבור מפתח זה — מילוי ידני בלבד.',
+                    });
+                    return;
+                }
+                const meta = res.result;
+                this.modelForm.patchValue({
+                    contextLength: meta.contextLength,
+                    maxOutputTokens: meta.maxOutputTokens,
+                    promptPricePerM: meta.promptPricePerM,
+                    completionPricePerM: meta.completionPricePerM,
+                    freeTier: meta.freeTier,
+                });
+                // A detected free variant locks the price inputs just like the checkbox does.
+                this.setPriceFieldsEditable(!meta.freeTier);
+                this.messageService.add({
+                    severity: 'success',
+                    summary: 'Enriched',
+                    detail: res.message || 'Metadata filled from OpenRouter.',
+                });
+            },
+            error: (err) => {
+                this.detectingMetadata.set(false);
+                this.messageService.add({
+                    severity: 'error',
+                    summary: 'Detect failed',
+                    detail: err?.error?.message || 'Unknown error',
+                });
+            },
+        });
     }
 
     closeModelDialog() {
@@ -965,6 +1129,46 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
         this.modelForm.reset();
         this.editingModelProviderId.set(null);
         this.editingModelId.set(null);
+    }
+
+    /**
+     * Free Tier checkbox — checking it locks the prices at 0 (the catalog's free variants price
+     * at 0) and disables the inputs; unchecking makes them editable again. The save reads
+     * getRawValue(), so the disabled 0s still reach the backend.
+     */
+    onFreeTierChange(checked: boolean): void {
+        if (checked) {
+            this.modelForm.get('promptPricePerM')?.setValue(0);
+            this.modelForm.get('completionPricePerM')?.setValue(0);
+        }
+        this.setPriceFieldsEditable(!checked);
+    }
+
+    /** Reflects the free-tier state onto the price inputs' disabled state. */
+    private setPriceFieldsEditable(editable: boolean): void {
+        const priceControls = ['promptPricePerM', 'completionPricePerM'] as const;
+        priceControls.forEach((name) => {
+            const control = this.modelForm.get(name);
+            if (editable) control?.enable();
+            else control?.disable();
+        });
+    }
+
+    // Format helpers exposed to the template (table cells + dialog badges).
+    formatContext = formatContext;
+    priceCell = priceCell;
+    hasModelSpecs = hasModelSpecs;
+
+    /** Bare model names that have a `:free` variant upstream — drives the "free variant exists" hint. */
+    freeVariantBareNames = signal<Set<string>>(new Set());
+
+    /** True for a bare (paid) key whose upstream `:free` sibling exists; the key itself is not free. */
+    hasFreeVariant(model: LlmModelView): boolean {
+        return (
+            !model.freeTier &&
+            (model.promptPricePerM != null || model.completionPricePerM != null) &&
+            this.freeVariantBareNames().has((model.key.split('/').pop() ?? model.key).replace(/[-:]free$/i, ''))
+        );
     }
 
     saveModel() {

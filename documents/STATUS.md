@@ -2,6 +2,21 @@
 
 Last updated: 2026-09-18
 
+## 2026-09-18 — ✅ DONE (uncommitted on `feat/model-metadata-enrichment`): Model Metadata Enrichment + dialog redesign
+
+- **Why:** `llm_models` had no context/pricing — admins couldn't tell if a model fits a big document or what it costs. Auto-detect fills the 4 specs + `free_tier` from the public OpenRouter catalog at the 95% entry path (Sync), at Seeds, and via a `✨ Auto-Detect` button in Edit Model. Never blocks writes; unknown → NULL, never an invented price.
+- **Empirical (live 445-model catalog):** 63/82 = 77% hit, 0 ambiguity. Adopted: strip trailing `[-:]free`; bare-name index from each entry's own `id` only; `:free`-steering; `~` is 18/18 prefix → `split('~')[0]` rejected.
+- **Backend:** NEW `model-metadata-catalog.service.ts` (fetch + 24h cache + negative cache, never throws; 20/20 spec) · entity +6 columns · sync enriches inline before save · `POST models/detect-metadata` (AdminGuard, hidden from the agent) · seeds enriched idempotently.
+- **Frontend:** NEW `model-format.ts` utils + spec · service `detectModelMetadata` · Edit-Model dialog redesigned per user spec (compact `specs-card`, 2-col grids, Free Tier toggle in the pricing header, prices disable+dim when free, `128K`/`8K` badges) · table micro-badges · chat picker `128K · Free` hint.
+- **⚠️ Bug found + fixed:** `(ngModelChange)` + `formControlName` + a handler that `setValue()`s the same control recurses through PrimeNG `writeValue` → 25 silent unhandled `RangeError`s (tests still passed; vitest only warns). Switched to `(onChange)` — 0 vs 37 errors measured. DOM regression test added. Baseline stash proved it was not pre-existing (614/614, zero warnings).
+- **⚠️ Second bug (Golden Rule #8):** the whole redesign silently did not render — the dialog CSS was written in the component file, but `p-dialog` projects content to `<body>` so emulated `[_ngcontent]` scoping never matched it. Every original visual complaint (glued label, vertical stacking, floating checkbox, stray detect button) was this one root cause. Moved `.specs-card` / `.key-field-with-detect` / `.detect-btn` / `.input-with-badge` into the `.p-dialog { … }` block of `_primeng-overrides.css`. Proven in compiled `styles-*.css`: the selectors are now unscoped global rules.
+- **Verified:** frontend **639/639 (60 files), zero unhandled errors** + `ng build` exit 0; backend **75/75** module + full suite **595/599** (4 = 3 pre-existing suites, reproduced on `main`) + `nest build` exit 0; route 401 = registered. Baseline dump before schema change: `C:\tmp\db-baselines\my_app-pre-metadata-enrichment-2026-09-18-1855.sql`.
+- **Follow-up (same session):** Test / Test All now auto-enrich unenriched models — fire-and-forget, never blocking the ping; store reloads once when enrichment lands. 639/639 green after unblocking `testAllModels` (blocking `.finally` variant reverted).
+- **Follow-ups (same session):** (1) Specs column split into 3 sortable columns (Context/Price/Max Out) — `modelSpecsChips` deleted, `priceCell()` added; `colspan` 6→9 fix for the nested test-history panel. (2) Stats tab refetches on every entry (`setActiveTab`) — new tests visible without refresh. (3) Free-variant hint: green `free` chip on bare-paid keys with an upstream `:free` sibling — new `GET models/free-variants` (AdminGuard, hidden from the agent) + `hasFreeVariant()`. FE 639/639 + build 0; BE llm-provider 48/48 + build 0. Restart :3000 → live.
+- **Open:** `graphify update .` + `architecture-diagram.md` (new service + OpenRouter as a new external data source) before commit; live sync smoke skipped by user decision (spec covers the matcher against the real payload).
+
+---
+
 ## 2026-09-18 — ✅ DONE + MERGED to `main`: static tool tier filtering
 
 - **Why:** ~75 tools injected into every LLM call waste tokens and confuse weak models. Keyword/regex domain selection on the USER prompt cuts confident prompts to 14-51 tools; anything unsure falls back to the full 75 (zero lost capability).

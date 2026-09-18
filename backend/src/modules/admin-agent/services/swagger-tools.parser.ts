@@ -66,6 +66,10 @@ export class SwaggerToolsParser {
     'LlmProviderController_deleteProvider',
     // Bulk model add — additive but noisy; the sync dialog is the admin's tool, not the agent's.
     'LlmProviderController_syncModels',
+    // Model metadata detection — a manual dialog action that needs a human to confirm before saving.
+    'LlmProviderController_detectModelMetadata',
+    // Catalog-hint list for the management table — read-only UI decoration, agent noise.
+    'LlmProviderController_getFreeVariantKeys',
     // Minutes-long background test runs — the admin UI's job, not the agent's.
     'LlmController_testProviderModels',
   ]);

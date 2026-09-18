@@ -26,6 +26,7 @@ import { MenuItem } from 'primeng/api';
 import { LlmProviderStore } from '../../../core/store/llm-provider.store';
 import { ChatService } from '../../../core/services/chat.service';
 import { LlmProviderService } from '../../../core/services/llm-provider.service';
+import { modelPickerHint } from '../../../core/utils/model-format';
 
 @Component({
     selector: 'app-chat',
@@ -125,6 +126,9 @@ export class Chat implements OnInit, OnDestroy {
             items: provider.items.map((model) => ({
                 label: model.label,
                 icon: defaultId === model.id ? 'ph ph-star ph-fill' : 'ph ph-star',
+                // Context + cost hint (`128K · Free` / `64K · $0.14/M`) — rendered by the
+                // item template below, so the user knows a model's limits before sending.
+                hint: modelPickerHint(model),
                 command: () => {
                     this.chatForm?.patchValue({ model: model.id });
                     this.llmProviderStore.setDefaultModel(model.id);

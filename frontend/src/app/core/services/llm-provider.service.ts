@@ -15,6 +15,30 @@ export interface LlmModel {
     createdAt: string;
     updatedAt: string;
     testResults?: any[];
+    /** Context window in tokens (enriched via OpenRouter or manual). Null when unknown. */
+    contextLength?: number | null;
+    /** Max output tokens. Null when unknown. */
+    maxOutputTokens?: number | null;
+    /** Prompt price per 1M tokens (USD). Null when unknown. */
+    promptPricePerM?: number | null;
+    /** Completion price per 1M tokens (USD). Null when unknown. */
+    completionPricePerM?: number | null;
+    /** Free tier flag — when true, prices are treated as zero. */
+    freeTier?: boolean;
+    /** Enrichment provenance, e.g. openrouter:t1 (T1 Exact) / openrouter:t2 (T2 Bare). */
+    metadataSource?: string | null;
+}
+
+/** Best-effort metadata for one model key, from the public OpenRouter catalog. */
+export interface ModelMetadata {
+    key: string;
+    contextLength: number | null;
+    maxOutputTokens: number | null;
+    promptPricePerM: number | null;
+    completionPricePerM: number | null;
+    freeTier: boolean;
+    tier: 't1' | 't2' | null;
+    metadataSource: string | null;
 }
 
 export interface LlmProvider {
@@ -131,6 +155,26 @@ export class LlmProviderService {
 
     updateModel(modelId: number, model: Partial<LlmModel>): Observable<ServiceResultContainer<LlmModel>> {
         return this.http.patch<ServiceResultContainer<LlmModel>>(`${this.base}/models/${modelId}`, model);
+    }
+
+    // Best-effort OpenRouter catalog lookup for one key (Edit Model "✨ Auto-Detect").
+    // Unmatched keys return result:null — the dialog then stays manual.
+    detectModelMetadata(
+        key: string,
+        providerKey?: string,
+    ): Observable<ServiceResultContainer<ModelMetadata | null>> {
+        return this.http.post<ServiceResultContainer<ModelMetadata | null>>(
+            `${this.base}/models/detect-metadata`,
+            { key, providerKey },
+        );
+    }
+
+    // Bare names of catalog entries with an upstream :free variant — feeds the
+    // "free variant exists" hint on locally-configured bare (paid) model keys.
+    getFreeVariantKeys(): Observable<ServiceResultContainer<{ bareNames: string[] }>> {
+        return this.http.get<ServiceResultContainer<{ bareNames: string[] }>>(
+            `${this.base}/models/free-variants`,
+        );
     }
 
     // Soft-disable via PATCH {active:false} — reversible, keeps the row and its test history.

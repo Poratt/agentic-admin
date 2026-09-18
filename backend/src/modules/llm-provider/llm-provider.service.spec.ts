@@ -311,6 +311,74 @@ describe('LlmProviderService.syncProviderModels', () => {
   });
 });
 
+describe('LlmProviderService.syncProviderModels metadata enrichment', () => {
+  function makeEnrichService(
+    providerRepo: { findOneBy: jest.Mock },
+    modelRepo: { find: jest.Mock; create: jest.Mock; save: jest.Mock },
+    metadataCatalog: any,
+  ): LlmProviderService {
+    return new LlmProviderService(providerRepo as any, modelRepo as any, {} as any, {} as any, {} as any, metadataCatalog);
+  }
+
+  it('enriches new models from the catalog before the single save', async () => {
+    const created: any[] = [];
+    const modelRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockImplementation((data) => {
+        created.push(data);
+        return data;
+      }),
+      save: jest.fn().mockResolvedValue([]),
+    };
+    const providerRepo = { findOneBy: jest.fn().mockResolvedValue({ id: 12, key: 'openrouter' }) };
+    const metadataCatalog = {
+      detectMany: jest.fn().mockResolvedValue(
+        new Map([
+          [
+            'deepseek/deepseek-v4-flash',
+            {
+              key: 'deepseek/deepseek-v4-flash',
+              contextLength: 1048576,
+              maxOutputTokens: 384000,
+              promptPricePerM: 0.04984,
+              completionPricePerM: 0.04984,
+              freeTier: false,
+              tier: 't1',
+              metadataSource: 'openrouter:t1',
+            },
+          ],
+        ]),
+      ),
+    };
+    const svc = makeEnrichService(providerRepo, modelRepo, metadataCatalog);
+
+    const res = await svc.syncProviderModels(12, ['deepseek/deepseek-v4-flash']);
+
+    expect(metadataCatalog.detectMany).toHaveBeenCalledWith(['deepseek/deepseek-v4-flash'], 'openrouter');
+    expect(created[0].contextLength).toBe(1048576);
+    expect(created[0].metadataSource).toBe('openrouter:t1');
+    expect(modelRepo.save).toHaveBeenCalledTimes(1);
+    expect(modelRepo.save).toHaveBeenCalledWith([created[0]]);
+    expect(res.result).toEqual({ added: 1, skipped: 0 });
+  });
+
+  it('keeps working when no metadata is found (best-effort, still one save)', async () => {
+    const modelRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockImplementation((data) => data),
+      save: jest.fn().mockResolvedValue([]),
+    };
+    const providerRepo = { findOneBy: jest.fn().mockResolvedValue({ id: 12, key: 'xkiro' }) };
+    const metadataCatalog = { detectMany: jest.fn().mockResolvedValue(new Map()) };
+    const svc = makeEnrichService(providerRepo, modelRepo, metadataCatalog);
+
+    const res = await svc.syncProviderModels(12, ['agnes-2.0-flash']);
+
+    expect(res.result).toEqual({ added: 1, skipped: 0 });
+    expect(modelRepo.save).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('LlmProviderService.getModelStats', () => {
   /** Fluent stand-in for a TypeORM query builder: every chain method returns itself. */
   function makeStatsBuilder(rows: { ping: unknown[]; real: unknown[] }) {

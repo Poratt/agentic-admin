@@ -30,4 +30,34 @@ export class CreateLlmModelDto {
   @IsIn(['text', 'image', 'video'])
   @IsOptional()
   capability?: 'text' | 'image' | 'video';
+
+  @ApiPropertyOptional({ description: 'Context window length in tokens (enriched via OpenRouter or manual)', example: 131072 })
+  @IsNumber()
+  @IsOptional()
+  contextLength?: number;
+
+  @ApiPropertyOptional({ description: 'Maximum output tokens', example: 131072 })
+  @IsNumber()
+  @IsOptional()
+  maxOutputTokens?: number;
+
+  @ApiPropertyOptional({ description: 'Prompt price per 1M tokens (USD)', example: 0.14 })
+  @IsNumber()
+  @IsOptional()
+  promptPricePerM?: number;
+
+  @ApiPropertyOptional({ description: 'Completion price per 1M tokens (USD)', example: 0.28 })
+  @IsNumber()
+  @IsOptional()
+  completionPricePerM?: number;
+
+  @ApiPropertyOptional({ description: 'Free tier flag — when true, prices are treated as zero', default: false })
+  @IsBoolean()
+  @IsOptional()
+  freeTier?: boolean;
+
+  @ApiPropertyOptional({ description: 'Metadata provenance, e.g. openrouter:t1 (T1 Exact) / openrouter:t2 (T2 Bare)', example: 'openrouter:t1' })
+  @IsString()
+  @IsOptional()
+  metadataSource?: string;
 }

@@ -114,6 +114,7 @@ flowchart TD
   ClientService --> ProviderConfig
   ClientService --> OpenRouter & Nvidia & Ollama & AgnesAI
   ModelCatalog --> ProviderConfig & Ollama
+  ModelCatalog -->|public metadata: context + pricing| OpenRouter
   HealthService --> ClientService & ProviderConfig & ModelCatalog
 
   LlmController -->|image / video gen| ClientService
