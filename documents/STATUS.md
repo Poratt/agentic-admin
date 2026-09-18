@@ -2,6 +2,19 @@
 
 Last updated: 2026-09-18
 
+## 2026-09-18 — ✅ DONE (Phases 0-3, on branch): static tool tier filtering
+
+- **Why:** ~75 tools injected into every LLM call waste tokens and confuse weak models. Keyword/regex domain selection on the USER prompt cuts confident prompts to 14-51 tools; anything unsure falls back to the full 75 (zero lost capability).
+- **Locked decisions (user):** separate `ToolTierFilterService` · min prompt 8 chars · zero-match → full set · constants file for future tags (no DB) · MCP always-on · debug-level logs per call.
+- **Phase 0:** verified 81/81 ops carry `@ApiTags` (16 tags; `LLM Provider` casing exact); `HIDDEN_FROM_LLM` already applied inside `parser.getTools()` → fallback can't leak hidden tools; prompt in scope in both call sites.
+- **Phase 1:** `LlmToolSchema.tags?: string[]` captured in `loadSwaggerAsTools` (`op.tags ?? []`), survives the clean pass. +4 spec.
+- **Phase 2:** NEW `constants/tool-domain-groups.ts` (7 groups, `ALWAYS_TAGS`, `MIN_PROMPT_LENGTH_FOR_HEURISTIC=8`, `MIN_KEYWORD_HITS_TO_TRUST=1`) + NEW `services/tool-tier-filter.service.ts`. ⚠️ Fixed plan bug: Hebrew `\b` never matches (letters aren't `\w`) → Hebrew keywords are bare substrings (false-positive keeps MORE tools = safe direction). +7 spec.
+- **Phase 3:** `getTools(prompt?)` — filter on user prompt only; MCP joins after the filter (always-on); debug log `kept N/M (matched: …)`. Registered in module; 4 constructor sites updated.
+- **Verified:** targeted 42/42; full backend `--runInBand` **573 passed / 4 failed (3 pre-existing suites)** — zero new; `npm run build -w backend` exit 0.
+- **Next (user):** restart :3000 → live logs (`kept 51/75 matched strain…`, `75/75` on `היי`) → commit (chore+feat+docs) → move plan to `done/` → graphify.
+
+---
+
 ## 2026-09-18 — ✅ DONE (committed on branch): test-model capabilities + statistics parity
 
 - **Why:** the "Test" button only validated text and was invisible in the unified stats view. Capability-aware pings + unified `is_test` field in `llm_call_stats` bring the gateway to parity with LiteLLM/Portkey.

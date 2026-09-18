@@ -1,6 +1,30 @@
 # Documentation Handoff
 
-## 2026-09-18 — 🔨 IN PROGRESS: test-model capabilities + statistics parity (Phases 0-3 done)
+## 2026-09-18 — ✅ DONE: static tool tier filtering — keyword domain groups (Phases 0-3)
+
+**Context (user request):** the chat agent injects ~75 tools into every LLM call, wasting tokens and confusing weak models. The feature picks a small set of domain groups from the USER prompt via in-process keyword regex; when confidence is low it falls back to the full set. Working branch: `feat/static-tool-tier-filtering` (from `main`).
+
+**6 Open Decisions locked by the user (2026-09-18):** (1) filter logic in a separate `ToolTierFilterService`; (2) `MIN_PROMPT_LENGTH_FOR_HEURISTIC = 8` chars; (3) zero matches → full 75 set (safety net); (4) future tags → edit the constants file (no DB); (5) MCP tools always-on (never filtered); (6) tier-decision logs at debug level every call.
+
+**Phase 0 research (sharp find — the exact `LLM Provider` casing):** all **81/81** ops in `swagger-spec.json` carry `@ApiTags`; 16 distinct tags (`auth`, `users`, `Admin Agent`, `llm`, `LLM Provider`, `calendar`, `analytics`, `currency`, `system`, `strain-hunter`, `genetics`, `web-search`, `terpenes`, `ideas`, `database-monitor`, `app` — `app` currently matches no op). `HIDDEN_FROM_LLM` tools are already removed by `parser.getTools()` BEFORE the tier filter, so the fallback path can never expose them (plan checklist item satisfied by the existing architecture). Prompt is in scope at both `getTools()` call sites (`queryDatabase` line ~162, `queryDatabaseStream` ~313).
+
+**Phase 1 — tags on tools:** `LlmToolSchema` gains `tags?: string[]`; `loadSwaggerAsTools` captures `tags: op.tags ?? []`; the `getTools()` clean-pass spread preserves them. Parser spec +4 (every exposed tool tagged; `users` verbatim; `LLM Provider` casing verbatim; domain tags per controller).
+
+**Phase 2 — the filter:** NEW `constants/tool-domain-groups.ts` (16 tags; 7 domain groups; `ALWAYS_TAGS`; `MIN_PROMPT_LENGTH_FOR_HEURISTIC = 8`; `MIN_KEYWORD_HITS_TO_TRUST = 1`) + NEW `services/tool-tier-filter.service.ts`. ⚠️ **Hebrew `\b` bug found & fixed during implementation:** JS `\b` only sees `\w = [a-zA-Z0-9_]` — Hebrew letters are NOT word chars, so the plan's `/\bזן\b/` would NEVER match Hebrew. Hebrew keywords are now bare substrings (false-positive only keeps MORE tools — the safe direction); Latin keywords keep `\b`. Service spec +7 (empty / whitespace / unmatched-prompt Safety Net → `toBe` same array; single Hebrew word `ויקיפדיה` → 14/75; cross-domain `תביא זן ואז תעשה לי תמונה` → 51/75; English currency 15/75; users 20/75; always-tags present; unrelated domains excluded).
+
+**Phase 3 — wiring:** `getTools(prompt?)` in `AdminAgentService` — filter runs on the USER prompt (absent → full set, so `printParsedSwaggerTools` unaffected); MCP tools join AFTER the filter (always-on, unchanged); debug log `Tier filter: kept N/M tools (matched: …)`. `ToolTierFilterService` registered in `AdminAgentModule.providers`. 4 constructor call sites in `admin-agent.service.spec.ts` updated (2 indentation variants).
+
+**VERIFIED (gate):**
+- Targeted 3 suites → **42/42** (`--runInBand`).
+- Full backend `npx jest --watchAll=false --runInBand` → **573 passed / 4 failed** — the 4 are the SAME 3 pre-existing suites (terpene, ideas-tasks, telegram-notify); baseline was 562, so +11 new tests, **zero new failures**.
+- `npm run build -w backend` → **exit 0**.
+- No `swagger-spec.json` regen needed (tags were already there; we just read them).
+
+**Next exact step:** user restarts :3000 (or wraps up), then live-verify on the running backend — logs should show `kept {32-51}/75 (matched: strain-hunter, genetics, terpenes)` for a strain prompt, `kept 15-20/75` for an llm/users prompt, `75/75` for `היי`. Commit (`chore`+`feat`+docs as usual) on user go, then `graphify update .` + move plan to `done/`.
+
+---
+
+## 2026-09-18 — ✅ DONE (merged to main): test-model capabilities + statistics parity
 
 **Context (user request):** the "Test" button on a model row only validated text answers, and test traffic was invisible to real-usage stats. The feature makes "Test" capability-aware (text/image/video) and unifies test traffic with the real-usage statistics on a single `llm_call_stats` data plane. Working branch: `feat/test-model-capabilities-and-stats`.
 
