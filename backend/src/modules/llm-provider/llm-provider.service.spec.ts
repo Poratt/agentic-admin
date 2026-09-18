@@ -341,8 +341,8 @@ describe('LlmProviderService.getModelStats', () => {
   ];
 
   const realRows = [
-    { providerKey: 'openrouter', modelKey: 'fast-model', runs: '10', successes: '10', avgMs: '1200.5', minMs: '900', lastCallAt: '2026-09-13T10:00:00.000Z' },
-    { providerKey: 'openrouter', modelKey: 'slow-model', runs: '10', successes: '8', avgMs: '9000', minMs: '7000', lastCallAt: '2026-09-13T11:00:00.000Z' },
+    { providerKey: 'openrouter', modelKey: 'fast-model', runs: '10', successes: '10', avgMs: '1200.5', minMs: '900', toolCallReliability: '88.6', lastCallAt: '2026-09-13T10:00:00.000Z' },
+    { providerKey: 'openrouter', modelKey: 'slow-model', runs: '10', successes: '8', avgMs: '9000', minMs: '7000', toolCallReliability: '50', lastCallAt: '2026-09-13T11:00:00.000Z' },
     { providerKey: 'openrouter', modelKey: 'steady-model', runs: '20', successes: '20', avgMs: '5000', minMs: '4000', lastCallAt: '2026-09-13T12:00:00.000Z' },
   ];
 
@@ -364,8 +364,8 @@ describe('LlmProviderService.getModelStats', () => {
     const unused = rows.find((r) => r.id === 'openrouter::unused-model')!;
 
     // MySQL hands back aggregates as strings; they must arrive as numbers, rounded.
-    expect(fast.ping).toEqual({ runs: 5, successRate: 100, avgMs: 300, minMs: 200 });
-    expect(fast.real).toEqual({ runs: 10, successRate: 100, avgMs: 1201, minMs: 900 });
+    expect(fast.ping).toEqual({ runs: 5, successRate: 100, avgMs: 300, minMs: 200, toolCallReliability: null });
+    expect(fast.real).toEqual({ runs: 10, successRate: 100, avgMs: 1201, minMs: 900, toolCallReliability: 89 });
     expect(fast.lastCallAt).toEqual(new Date('2026-09-13T10:00:00.000Z'));
 
     // A model with no measurements reports null, not zero — "never used" is not "instant".
@@ -407,5 +407,18 @@ describe('LlmProviderService.getModelStats', () => {
     expect(orphan.label).toBeNull();
     expect(orphan.active).toBe(false);
     expect(orphan.real!.runs).toBe(4);
+  });
+
+  it('carries per-model tool-call reliability as the rounded mean of the real calls', async () => {
+    const res = await makeStatsService().getModelStats();
+    const rows = res.result!.rows;
+
+    // fast-model emitted 88.6% sound tool output on average; slow-model exactly 50%.
+    expect(rows.find((r) => r.id === 'openrouter::fast-model')!.real!.toolCallReliability).toBe(89);
+    expect(rows.find((r) => r.id === 'openrouter::slow-model')!.real!.toolCallReliability).toBe(50);
+
+    // steady-model recorded no tool-call sample — null, not a perfect 0.
+    expect(rows.find((r) => r.id === 'openrouter::steady-model')!.real!.toolCallReliability).toBeNull();
+    expect(rows.find((r) => r.id === 'openrouter::unused-model')!.real).toBeNull();
   });
 });

@@ -179,6 +179,23 @@ describe('LlmProvidersManagement', () => {
         });
     });
 
+    describe('getToolReliabilityClass', () => {
+        it('should return good for >= 90', () => {
+            expect(component.getToolReliabilityClass(90)).toBe('good');
+            expect(component.getToolReliabilityClass(100)).toBe('good');
+        });
+
+        it('should return mid for >= 70', () => {
+            expect(component.getToolReliabilityClass(70)).toBe('mid');
+            expect(component.getToolReliabilityClass(89)).toBe('mid');
+        });
+
+        it('should return bad for < 70', () => {
+            expect(component.getToolReliabilityClass(0)).toBe('bad');
+            expect(component.getToolReliabilityClass(69)).toBe('bad');
+        });
+    });
+
     describe('isAdmin', () => {
         it('should return false for regular user', () => {
             mockAuthStore.userRole.mockReturnValue(UserRole.User);
@@ -814,7 +831,7 @@ describe('LlmProvidersManagement', () => {
                     label: 'Slow',
                     active: true,
                     ping: null,
-                    real: { runs: 10, successRate: 100, avgMs: 9000, minMs: 7000 },
+                    real: { runs: 10, successRate: 100, avgMs: 9000, minMs: 7000, toolCallReliability: 88 },
                     lastCallAt: '2026-09-13T11:00:00.000Z',
                     rankingBasis: 'real',
                 },
@@ -824,8 +841,8 @@ describe('LlmProvidersManagement', () => {
                     modelKey: 'fast-model',
                     label: 'Fast',
                     active: true,
-                    ping: { runs: 5, successRate: 100, avgMs: 300, minMs: 200 },
-                    real: { runs: 10, successRate: 100, avgMs: 1200, minMs: 900 },
+                    ping: { runs: 5, successRate: 100, avgMs: 300, minMs: 200, toolCallReliability: null },
+                    real: { runs: 10, successRate: 100, avgMs: 1200, minMs: 900, toolCallReliability: null },
                     lastCallAt: '2026-09-13T10:00:00.000Z',
                     rankingBasis: 'real',
                 },
@@ -908,8 +925,22 @@ describe('LlmProvidersManagement', () => {
             // column that loses its pSortableColumn fails here rather than silently not sorting.
             const headers = Array.from(fixture.nativeElement.querySelectorAll('.stats-table th')) as HTMLElement[];
 
-            expect(headers.length).toBe(9);
-            expect(headers.filter((th) => th.classList.contains('p-datatable-sortable-column')).length).toBe(9);
+            expect(headers.length).toBe(10);
+            expect(headers.filter((th) => th.classList.contains('p-datatable-sortable-column')).length).toBe(10);
+        });
+
+        it('renders tool-call reliability under the real-call columns, and a dash when there is no sample', () => {
+            mockProviderStore.modelStats.mockReturnValue(statsData);
+
+            component.activeTab.set('stats');
+            fixture.detectChanges();
+
+            const text = fixture.nativeElement.textContent as string;
+            // Header announces the metric so the column is discoverable before any data loads.
+            expect(text).toContain('Real · tools');
+            // slow-model carries a measured 88%; fast-model never requested tools — a dash, not 0%.
+            expect(text).toContain('88%');
+            expect(text.match(/88%/g)).toHaveLength(1);
         });
 
         it('switches views from the toolbar buttons, and hides the list-only controls on statistics', () => {
@@ -1140,8 +1171,8 @@ describe('LlmProvidersManagement', () => {
                     modelKey: 'openai/gpt-4o',
                     label: 'GPT-4o',
                     active: true,
-                    ping: { runs: 4, successRate: 100, avgMs: 250, minMs: 200 },
-                    real: { runs: 8, successRate: 50, avgMs: 800, minMs: 700 },
+                    ping: { runs: 4, successRate: 100, avgMs: 250, minMs: 200, toolCallReliability: null },
+                    real: { runs: 8, successRate: 50, avgMs: 800, minMs: 700, toolCallReliability: 75 },
                     lastCallAt: '2026-09-13T11:00:00.000Z',
                     rankingBasis: 'real',
                 },

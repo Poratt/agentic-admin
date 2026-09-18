@@ -6,9 +6,10 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import ffmpegStatic from 'ffmpeg-static';
 import OpenAI from 'openai';
-import { LlmRequest, LlmResponse, LlmToolCall } from '../types/llm.types';
+import { LlmRequest, LlmResponse, LlmToolCall, LlmToolSchema } from '../types/llm.types';
 import { LlmProviderConfigService } from './llm-provider-config.service';
 import { LlmProviderService } from '../../llm-provider/llm-provider.service';
+import { computeToolCallReliability } from '../utils/llm-tool-reliability';
 import { assertSafeUrl, SsrfError } from '../../../core/utils/ssrf-guard.util';
 import { LlmProviderEntity } from '../../llm-provider/entities/llm-provider.entity';
 
@@ -115,12 +116,20 @@ export class LlmClientService {
       }, 'generateResponse');
     } catch (error) {
       this.autoMarkIfModelMissing(dbProvider.id, activeModel, error);
-      this.recordCallStat(dbProvider.key, activeModel, Date.now() - start, callStatusFromError(error), caller, error);
+      this.recordCallStat(dbProvider.key, activeModel, Date.now() - start, callStatusFromError(error), caller, error, null);
       throw error;
     }
     this.logger.log(`LLM response took ${((Date.now() - start) / 1000).toFixed(1)}s`);
 
-    this.recordCallStat(dbProvider.key, activeModel, Date.now() - start, 'success', caller, null);
+    this.recordCallStat(
+      dbProvider.key,
+      activeModel,
+      Date.now() - start,
+      'success',
+      caller,
+      null,
+      computeToolCallReliability(tools, completion.toolCalls),
+    );
 
     const { content, toolCalls, finishReason } = completion;
 
@@ -223,6 +232,7 @@ export class LlmClientService {
     status: 'success' | 'error' | 'timeout',
     caller: string | undefined,
     error: unknown,
+    toolCallReliability: number | null,
   ): void {
     const resolvedCaller = caller ?? 'app';
     if (resolvedCaller === 'health') {
@@ -232,7 +242,7 @@ export class LlmClientService {
     const errorMessage = error instanceof Error ? error.message.slice(0, MAX_STORED_ERROR_LENGTH) : null;
 
     void this.dbProviderService
-      .saveCallStat({ providerKey, modelKey, latencyMs, status, caller: resolvedCaller, errorMessage })
+      .saveCallStat({ providerKey, modelKey, latencyMs, status, caller: resolvedCaller, errorMessage, toolCallReliability })
       .catch((writeError: unknown) => {
         this.logger.debug(`Failed to record LLM call stat: ${writeError instanceof Error ? writeError.message : 'unknown'}`);
       });

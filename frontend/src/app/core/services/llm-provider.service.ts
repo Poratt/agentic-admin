@@ -42,6 +42,9 @@ export interface ModelUsageStats {
     successRate: number;
     avgMs: number;
     minMs: number;
+    /** Mean tool-call reliability over the real calls that requested tools, 0-100; `null` when
+     *  the source has no tool-call sample (pings never request tools). */
+    toolCallReliability: number | null;
 }
 
 /** One row of the statistics tab: a model's connectivity pings beside the work it actually did. */

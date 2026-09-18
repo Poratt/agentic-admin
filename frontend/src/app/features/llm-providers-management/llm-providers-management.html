@@ -180,6 +180,15 @@
                         <th pSortableColumn="real.avgMs">
                             <div class="sortable-column-header">Real · avg <p-sort-icon field="real.avgMs" /></div>
                         </th>
+                        <th pSortableColumn="real.toolCallReliability">
+                            <div
+                                class="sortable-column-header"
+                                appTooltip
+                                [text]="'Syntactic soundness of the tool output — JSON-parseable arguments for a really offered function'"
+                            >
+                                Real · tools <p-sort-icon field="real.toolCallReliability" />
+                            </div>
+                        </th>
                         <th pSortableColumn="lastCallAt">
                             <div class="sortable-column-header">Last call <p-sort-icon field="lastCallAt" /></div>
                         </th>
@@ -237,7 +246,17 @@
                                 </span>
                             </td>
                             <td>{{ formatLatency(row.real.avgMs) }}</td>
+                            <td>
+                                @if (row.real?.toolCallReliability != null) {
+                                    <span class="metric-primary" [class]="getToolReliabilityClass(row.real.toolCallReliability)">
+                                        {{ row.real.toolCallReliability }}%
+                                    </span>
+                                } @else {
+                                    <span class="metric-empty">—</span>
+                                }
+                            </td>
                         } @else {
+                            <td class="metric-empty">—</td>
                             <td class="metric-empty">—</td>
                             <td class="metric-empty">—</td>
                             <td class="metric-empty">—</td>

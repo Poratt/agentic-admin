@@ -411,7 +411,13 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     private statsRowHaystack(row: ModelStatsRow): (string | null | undefined)[] {
         const source = (stats: ModelUsageStats | null): string[] =>
             stats
-                ? [String(stats.runs), String(stats.successRate), String(stats.avgMs), this.formatLatency(stats.avgMs)]
+                ? [
+                      String(stats.runs),
+                      String(stats.successRate),
+                      String(stats.avgMs),
+                      this.formatLatency(stats.avgMs),
+                      String(stats.toolCallReliability ?? ''),
+                  ]
                 : [];
         return [row.id, row.providerKey, row.modelKey, row.label, row.lastCallAt, ...source(row.ping), ...source(row.real)];
     }
@@ -720,6 +726,12 @@ export class LlmProvidersManagement implements OnInit, OnDestroy {
     performanceClass(percentage: number): string {
         if (percentage >= 90) return 'good';
         if (percentage >= 60) return 'mid';
+        return 'bad';
+    }
+
+    getToolReliabilityClass(value: number): string {
+        if (value >= 90) return 'good';
+        if (value >= 70) return 'mid';
         return 'bad';
     }
 

@@ -32,6 +32,14 @@ export class LlmCallStatEntity {
   status!: 'success' | 'error' | 'timeout';
 
   /**
+   * Tool-call reliability of this call, 0-100: the share of the emitted tool calls that are
+   * syntactically sound (JSON-parseable arguments for a truly requested tool). `null` when the
+   * call requested no tools or the model emitted none — there is nothing to measure.
+   */
+  @Column({ type: 'int', nullable: true, comment: 'Tool-call reliability 0-100; null when no tools were requested/replied' })
+  toolCallReliability!: number | null;
+
+  /**
    * Which surface made the call. `'health'` marks the manual connectivity pings, which are
    * excluded from the real-usage statistics so they cannot be counted twice — they are already
    * recorded in `llm_model_test_results`.

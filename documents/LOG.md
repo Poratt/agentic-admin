@@ -822,3 +822,10 @@
 - .env.example: fixed stale `ensure-searxng.sh` → `.js` reference; documented settings.yml is source of truth (SearXNG settings not env-driven) + `docker restart searxng`.
 - Verified LIVE: pyyaml parse clean · container restart clean · / 200 · search e2e 20 results (bing+ddg). `.env.example` diff surgical (only web-search block; note: str_replace tool refuses dotfiles → python precision edit).
 - Observed unowned change (NOT mine, untouched, flagged): `frontend/src/app/assets/styles/_filters.css` — p-slider-handle margin/border-radius/translate tweak, hardcoded `50%` vs `var(--radius-xs)`.
+
+
+## 2026-09-18 — Tool-call Reliability metric (decision record)
+- Decision: store a per-call 0-100 tool-reliability score on llm_call_stats (new nullable column), averaged per model in the statistics view — additive, no migration infra (TypeORM synchronize), ping/health calls never carry it (no sample = null, not 0).
+- Scoring (pure helper llm-tool-reliability.ts): valid tool call = function name among the request's offered tools AND arguments parse to a non-null, non-array JSON object. Exactly the free/quantized failure modes.
+- Alternative considered and rejected: deriving reliability only at stats time from stored responses — no response body is stored today, so per-call scoring at the call site is the only lossless point.
+- UI: new sortable `Real · tools` column in the statistics tab (LTR English, like the whole table).

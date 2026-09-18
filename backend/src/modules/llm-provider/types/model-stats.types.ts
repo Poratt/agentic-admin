@@ -7,6 +7,13 @@ export type ModelUsageStats = {
   avgMs: number;
   /** Fastest successful run, in milliseconds. */
   minMs: number;
+  /**
+   * Mean tool-call reliability over the calls that requested tools, 0-100 — the syntactic
+   * soundness of the tool output (JSON-parseable arguments for a truly requested function).
+   * `null` when the source has no tool-call sample: pings never request tools, and a model
+   * whose real calls never used them has nothing to measure.
+   */
+  toolCallReliability: number | null;
 };
 
 /**

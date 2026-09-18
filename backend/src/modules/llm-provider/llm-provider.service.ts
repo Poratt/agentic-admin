@@ -45,6 +45,7 @@ type RawAggregate = {
   successes: string | number | null;
   avgMs: string | number | null;
   minMs: string | number | null;
+  toolCallReliability?: string | number | null;
 };
 
 /**
@@ -55,11 +56,17 @@ function toUsageStats(raw: RawAggregate): ModelUsageStats {
   const runs = Number(raw.runs) || 0;
   const successes = Number(raw.successes) || 0;
 
+  // `AVG` over entirely-NULL tool reliability comes back NULL — "no tool-call sample" must stay
+  // null, not read as a perfect 0. Pings never carry the field at all and land on null as well.
+  const reliability = raw.toolCallReliability;
+  const toolCallReliability = reliability === null || reliability === undefined ? null : Math.round(Number(reliability));
+
   return {
     runs,
     successRate: runs > 0 ? Math.round((successes / runs) * 100) : 0,
     avgMs: Math.round(Number(raw.avgMs) || 0),
     minMs: Math.round(Number(raw.minMs) || 0),
+    toolCallReliability,
   };
 }
 
@@ -250,6 +257,7 @@ export class LlmProviderService {
         .addSelect(`SUM(CASE WHEN stat.status = 'success' THEN 1 ELSE 0 END)`, 'successes')
         .addSelect(`AVG(CASE WHEN stat.status = 'success' THEN stat.latencyMs END)`, 'avgMs')
         .addSelect(`MIN(CASE WHEN stat.status = 'success' THEN stat.latencyMs END)`, 'minMs')
+        .addSelect(`AVG(CASE WHEN stat.toolCallReliability IS NOT NULL THEN stat.toolCallReliability END)`, 'toolCallReliability')
         .addSelect('MAX(stat.createdAt)', 'lastCallAt')
         .where('stat.caller <> :healthCaller', { healthCaller: HEALTH_CALLER })
         .groupBy('stat.provider_key')
@@ -601,6 +609,7 @@ export class LlmProviderService {
     status: 'success' | 'error' | 'timeout';
     caller: string;
     errorMessage: string | null;
+    toolCallReliability: number | null;
   }): Promise<LlmCallStatEntity> {
     return this.callStatRepo.save(this.callStatRepo.create(stat));
   }

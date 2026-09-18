@@ -1,6 +1,16 @@
 # Project Documentation Status
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
+
+## 2026-09-18 — ✅ DONE: Tool-call Reliability metric in the Real statistics
+
+- **Why (user):** free-tier / 4-bit-quantized models break JSON or emit tool calls as plain text under load — a metric for the syntactic soundness of tool output brings the gateway to LiteLLM/Portkey level.
+- **Metric:** per real call that requested tools — share of tool calls that invoke a really offered function with JSON-parseable object arguments (0-100); stored per call in `llm_call_stats`, averaged per model in the stats view. No tools requested / none emitted → `null` (no sample), never 0.
+- **Backend:** new pure util `llm/utils/llm-tool-reliability.ts` (+10-case spec); `toolCallReliability` nullable column on `LlmCallStatEntity` (synchronize adds it); `generateResponse` computes + threads it via `recordCallStat`/`saveCallStat`; stats query adds the AVG aggregate; `ModelUsageStats.toolCallReliability: number | null`.
+- **Frontend:** `Real · tools` sortable column in the statistics tab (header tooltip; `N%` in good/mid/bad color or `—`); the stats search matches reliability too.
+- **Verified:** backend build 0; targeted llm 52/52; full backend 46 suites passed, 3 suites failed = pre-existing (terpene / ideas-tasks / telegram-notify, identical without my changes — verified via stash). Frontend **607/607 (59 files)** + build 0. graphify updated. No architecture-diagram change.
+- **Open:** (1) should "most stable" rank on tool reliability too? (2) lifetime mean vs rolling window? (3) header tooltip is English — fine?
+- **Next:** restart :3000 (new column), verify live, commit on user go.
 
 ## 2026-09-17 — ✅ DONE: removed Show unavailable from sync-models dialog
 

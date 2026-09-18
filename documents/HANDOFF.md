@@ -1,5 +1,43 @@
 # Documentation Handoff
 
+## 2026-09-18 — ✅ DONE: Tool-call Reliability metric in the Real statistics
+
+**Context (user request):** free-tier and heavily-quantized (4-bit) models tend to "break" JSON or emit tool calls as plain text once the context grows. The ask: a metric that measures the syntactic soundness of tool output, so the gateway behaves like LiteLLM/Portkey. Implemented as a new `Real · tools` column in the per-model statistics.
+
+**What it measures (per real, non-health LLM call that requested tools):** the share of emitted tool calls that are BOTH (1) invoking a function the request actually offered and (2) carrying JSON-parseable, non-null, non-array `arguments`. Score 0-100, persisted per call in `llm_call_stats`; the statistics view averages it per model.
+
+**Backend (7 files + 2 new):**
+- NEW `llm/utils/llm-tool-reliability.ts` — pure `computeToolCallReliability(tools, toolCalls) → number | null`; `null` when no tools were requested / none emitted (no sample, never 0%). Spec: 10 cases (100%, broken JSON, unknown name, non-object args, array args, whitespace-padded args, mixed 33%, no-tools, no-emissions, anonymous schema).
+- `llm-call-stat.entity.ts` — new nullable int column `toolCallReliability` (TypeORM `synchronize` adds it on backend restart — no migration file in this project).
+- `llm-client.service.ts` — `generateResponse` computes reliability on the success path and threads it through `recordCallStat` → `saveCallStat` (error/timeout paths record `null`).
+- `llm-provider.service.ts` — `saveCallStat` accepts the field; the real-calls stats query adds `AVG(CASE WHEN stat.toolCallReliability IS NOT NULL THEN stat.toolCallReliability END)`; `toUsageStats` maps it — SQL `NULL` stays `null`, never a perfect 0.
+- `types/model-stats.types.ts` — `ModelUsageStats.toolCallReliability: number | null`.
+
+**Frontend (3 files):**
+- `core/services/llm-provider.service.ts` — interface field added.
+- `llm-providers-management.html` — stats table gains a sortable `Real · tools` column (header tooltip explains the metric: "JSON-parseable arguments for a really offered function"); cell renders `N%` with the existing good/mid/bad `performanceClass` color, or `—` when there is no sample. Pings never request tools, so no ping-side column exists.
+- `llm-providers-management.ts` — `statsRowHaystack` includes the value so the stats search field matches reliability too.
+
+**VERIFIED:**
+- backend `npm run build` → exit 0. Targeted llm suites → **52/52**. Full `npx jest --runInBand` → **46 suites passed**; 3 suites failed (4 tests) — `terpene`, `ideas-tasks`, `telegram-notify` — **proven pre-existing**: identical failures reproduced with my changes stashed.
+- frontend full `npx ng test --watch=false` → **607/607 passed (59 files, +1)`, exit 0**; `ng build` → exit 0 (only the pre-existing `strain-hunter.css` budget warning, 8.84 kB).
+- Mojibake clean; `graphify update .` → 5106 nodes / 8529 edges / 348 communities.
+- No architecture-diagram change — new column on an existing entity + a new aggregate in an existing endpoint; no new modules, endpoints or external providers.
+
+**Decisions made:** (1) reliability is recorded only for real calls — health pings never request tools, so they are `null` by construction; (2) scoring demands BOTH the offered name and parseable object arguments — that is exactly the free/quantized failure mode; (3) SQL NULL stays `null` ("no sample"), deliberately not 0.
+
+**Open questions for the user:**
+1. Should the leaderboard's "most stable" badge also rank on tool reliability, or stay success-rate only?
+2. Lifetime mean vs a rolling window (e.g. last 50 tool-using calls)?
+3. The `Real · tools` header tooltip is English (the whole stats table is LTR English) — fine, or want Hebrew?
+
+**Next exact step:** restart :3000 so `synchronize` adds the column, run real agent calls (or Test All) and confirm the stats tab populates the new column live → commit when user says go.
+
+### Follow-up fix (same session): `@if` syntax for the reliability cell
+- User pointed out the strict `!== null` guard can't catch `undefined` (when the API omits the field entirely) — that rendered the lone `%` as `undefined%`. Cell now uses `@if (row.real?.toolCallReliability != null)` (loose, nullish-safe) and a dedicated `getToolReliabilityClass(value)` in the component (90/70/70 thresholds, reuses the existing `good`/`mid`/`bad` metric colours) instead of `performanceClass`'s 90/60. Unit spec added (3 tests: 90/100→good, 70/89→mid, 0/69→bad). Target suite now **91/91**, `ng build` exit 0 (only the pre-existing strain-hunter.css budget warning). No backend change.
+
+---
+
 ## 2026-09-17 — ✅ DONE: removed Show unavailable from sync-models dialog
 
 **Context:** user said the `Show unavailable (N)` toggle in the Sync Models dialog is redundant. Agreed — the dialog's only job is adding `new` models; unavailable entries (local keys missing upstream) have no checkbox and no action.
