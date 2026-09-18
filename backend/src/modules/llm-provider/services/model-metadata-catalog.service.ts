@@ -38,6 +38,9 @@ export interface ModelMetadata {
 const CATALOG_URL = 'https://openrouter.ai/api/v1/models';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 10_000;
+/** Delay before the first retry after a failed fetch; doubles per consecutive failure. */
+const RETRY_BASE_MS = 60_000;
+const RETRY_MAX_MS = 30 * 60 * 1000;
 
 /**
  * Normalizes any model key for matching. Real-world keys carry noise that must
@@ -152,18 +155,45 @@ export function metadataFromEntry(key: string, entry: OpenRouterModelEntry, tier
 /**
  * Best-effort catalog lookup for model metadata enrichment. Never throws: a failed or
  * slow OpenRouter fetch yields no matches (callers keep their existing values).
- * The catalog is cached in-process for 24h and on failure (negative cache) so a flaky
- * endpoint is not re-hit on every model key.
+ *
+ * Cache policy — the last good catalog and the retry schedule are tracked separately, so a
+ * failure can never be mistaken for data:
+ * - Success caches the entries for 24h and clears the backoff.
+ * - Failure keeps the previous entries (stale beats blank — a day-old catalog still prices
+ *   models) and opens a backoff window that doubles per consecutive failure, 60s → 30m. A
+ *   transient blip recovers within a minute; a real outage stops being retried on every
+ *   single `detect()` call, which the old design did whenever a cache already existed.
+ * - Concurrent callers share one in-flight fetch instead of firing one request each.
  */
 @Injectable()
 export class ModelMetadataCatalogService {
   private readonly logger = new Logger(ModelMetadataCatalogService.name);
   private cache: { entries: OpenRouterModelEntry[]; fetchedAt: number } | null = null;
+  /** Non-null while a refresh is in flight — the single-flight latch for concurrent callers. */
+  private inflight: Promise<OpenRouterModelEntry[]> | null = null;
+  /** Epoch ms before which no refresh is attempted. 0 = no backoff. */
+  private retryAt = 0;
+  private failures = 0;
 
   private async getEntries(): Promise<OpenRouterModelEntry[]> {
     if (this.cache && Date.now() - this.cache.fetchedAt < CACHE_TTL_MS) {
       return this.cache.entries;
     }
+    // Backing off: serve whatever the last good fetch produced, without touching the network.
+    // ponytail: stale is served indefinitely — add a max-stale bound only if the catalog itself goes away for good.
+    if (Date.now() < this.retryAt) {
+      return this.cache?.entries ?? [];
+    }
+    if (this.inflight) return this.inflight;
+
+    this.inflight = this.refresh().finally(() => {
+      this.inflight = null;
+    });
+    return this.inflight;
+  }
+
+  /** One catalog fetch. Never rejects — the failure path returns the last good entries. */
+  private async refresh(): Promise<OpenRouterModelEntry[]> {
     try {
       const res = await fetch(CATALOG_URL, {
         headers: { Accept: 'application/json' },
@@ -172,14 +202,24 @@ export class ModelMetadataCatalogService {
       if (!res.ok) throw new Error(`OpenRouter catalog HTTP ${res.status}`);
       const body = (await res.json()) as { data?: OpenRouterModelEntry[] };
       const entries = (body.data ?? []).filter((e) => e && typeof e.id === 'string' && e.id.length > 0);
+      // A 2xx with no usable rows is a broken response, not a catalog — treat it as a failure so it
+      // opens a backoff window instead of locking enrichment out for the full 24h TTL.
+      if (entries.length === 0) throw new Error('OpenRouter catalog returned no entries');
+
       this.cache = { entries, fetchedAt: Date.now() };
+      this.failures = 0;
+      this.retryAt = 0;
       this.logger.log(`Loaded ${entries.length} OpenRouter catalog entries`);
       return entries;
     } catch (error) {
+      this.failures += 1;
+      const backoffMs = Math.min(RETRY_BASE_MS * 2 ** (this.failures - 1), RETRY_MAX_MS);
+      this.retryAt = Date.now() + backoffMs;
       const reason = error instanceof Error ? error.message : 'unknown error';
-      this.logger.warn(`OpenRouter catalog unavailable (${reason}) — metadata enrichment skipped for this batch`);
-      if (!this.cache) this.cache = { entries: [], fetchedAt: Date.now() };
-      return this.cache.entries;
+      this.logger.warn(
+        `OpenRouter catalog unavailable (${reason}) — serving ${this.cache?.entries.length ?? 0} cached entries, retrying in ${Math.round(backoffMs / 1000)}s`,
+      );
+      return this.cache?.entries ?? [];
     }
   }
 

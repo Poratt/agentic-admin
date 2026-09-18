@@ -164,17 +164,108 @@ describe('ModelMetadataCatalogService', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('https://openrouter.ai/api/v1/models');
   });
 
-  it('never throws on a catalog failure — returns all-null and does not hammer the endpoint', async () => {
+  it('never throws on a catalog failure, and backs off instead of re-fetching on every call', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('network down'));
+    const t0 = Date.now();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(t0);
+    const svc = new ModelMetadataCatalogService();
+
+    expect(await svc.detect('deepseek/deepseek-v4-flash')).toBeNull();
+    expect(await svc.detect('deepseek/deepseek-v4-flash')).toBeNull();
+    expect(await svc.detect('nvidia/nemotron-3.5-lightning:free')).toBeNull();
+    // Three calls inside the backoff window → one request.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(nowSpy).toHaveBeenCalled();
+  });
+
+  it('retries after the backoff window — a transient failure must not kill enrichment for 24h', async () => {
     const fetchMock = jest
       .spyOn(global, 'fetch')
       .mockRejectedValueOnce(new Error('network down'))
       .mockResolvedValueOnce({ ok: true, json: async () => ({ data: FIXTURE }) } as any);
+    const t0 = Date.now();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(t0);
     const svc = new ModelMetadataCatalogService();
 
-    const failed = await svc.detect('deepseek/deepseek-v4-flash');
-    expect(failed).toBeNull();
-    // Negative cache: the failure must not trigger a re-fetch for subsequent calls in the TTL.
-    await svc.detect('deepseek/deepseek-v4-flash');
+    expect(await svc.detect('deepseek/deepseek-v4-flash')).toBeNull();
+
+    nowSpy.mockReturnValue(t0 + 59_000);
+    expect(await svc.detect('deepseek/deepseek-v4-flash')).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    nowSpy.mockReturnValue(t0 + 61_000);
+    expect((await svc.detect('deepseek/deepseek-v4-flash'))?.contextLength).toBe(1048576);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('widens the backoff on consecutive failures (60s, then 120s)', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('network down'));
+    const t0 = Date.now();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(t0);
+    const svc = new ModelMetadataCatalogService();
+
+    await svc.detect('deepseek/deepseek-v4-flash');
+    nowSpy.mockReturnValue(t0 + 61_000);
+    await svc.detect('deepseek/deepseek-v4-flash');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    nowSpy.mockReturnValue(t0 + 61_000 + 119_000);
+    await svc.detect('deepseek/deepseek-v4-flash');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    nowSpy.mockReturnValue(t0 + 61_000 + 121_000);
+    await svc.detect('deepseek/deepseek-v4-flash');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('serves the last good catalog when a refresh fails after the TTL expires', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: FIXTURE }) } as any)
+      .mockRejectedValue(new Error('network down'));
+    const t0 = Date.now();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(t0);
+    const svc = new ModelMetadataCatalogService();
+
+    expect((await svc.detect('deepseek/deepseek-v4-flash'))?.contextLength).toBe(1048576);
+
+    // 25h later the cache is expired and the refresh fails — stale beats blank, and the
+    // failed refresh is not retried on the very next call.
+    nowSpy.mockReturnValue(t0 + 25 * 60 * 60 * 1000);
+    expect((await svc.detect('deepseek/deepseek-v4-flash'))?.contextLength).toBe(1048576);
+    expect((await svc.detect('deepseek/deepseek-v4-flash-0731'))?.contextLength).toBe(1310720);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('coalesces concurrent refreshes into a single fetch', async () => {
+    const fetchMock = mockCatalog();
+    const svc = new ModelMetadataCatalogService();
+
+    const [a, b, c] = await Promise.all([
+      svc.detect('deepseek/deepseek-v4-flash'),
+      svc.detect('deepseek/deepseek-v4-flash-0731'),
+      svc.detect('nvidia/nemotron-3.5-lightning:free'),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(a?.contextLength).toBe(1048576);
+    expect(b?.contextLength).toBe(1310720);
+    expect(c?.freeTier).toBe(true);
+  });
+
+  it('treats an empty catalog body as a failure rather than caching it for 24h', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [] }) } as any)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: FIXTURE }) } as any);
+    const t0 = Date.now();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(t0);
+    const svc = new ModelMetadataCatalogService();
+
+    expect(await svc.detect('deepseek/deepseek-v4-flash')).toBeNull();
+
+    nowSpy.mockReturnValue(t0 + 61_000);
+    expect((await svc.detect('deepseek/deepseek-v4-flash'))?.contextLength).toBe(1048576);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
