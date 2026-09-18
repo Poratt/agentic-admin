@@ -2,16 +2,16 @@
 
 Last updated: 2026-09-18
 
-## 2026-09-18 — 🔨 IN PROGRESS: test-model capabilities + statistics parity (Phases 0-3)
+## 2026-09-18 — ✅ DONE (committed on branch): test-model capabilities + statistics parity
 
 - **Why:** the "Test" button only validated text and was invisible in the unified stats view. Capability-aware pings + unified `is_test` field in `llm_call_stats` bring the gateway to parity with LiteLLM/Portkey.
 - **Stats unification (L3):** `getModelStats` now reads Ping and Real from `llm_call_stats` via `getCallStatAggregates(isTest)` — `llm_model_test_results` is an audit log only. Zero backfill debt (`is_test DEFAULT FALSE`; `recordCallStat` had short-circuited on `caller === 'health'`).
-- **Cap switch (L4):** text → real ping; image → approved-switch + real ping; video → `skipped` (no provider call, `success:true`, `available:false`); default → persist `error` row + 400. `HEALTH_CALLER` removed.
+- **Cap switch (L4):** text → real ping; image → approved-switch + real ping; video → `skipped` (no provider call, `success:true`, `available:false); default → persist `error` row + 400. `HEALTH_CALLER` removed.
 - **Backend:** `is_test` bool on `LlmCallStatEntity`; nullable `capability` + `skipped` status on `LlmModelTestResultEntity`; `saveCallStat`/`saveTestResult` accept new fields; `llm-call-stat.entity` caller comment updated to provenance-only; Swagger updated.
 - **Frontend:** `iconForCapability` + null-safe `capabilityLabel`; Test button icon/tooltip keyed on capability; inline history shows `SKIPPED` (warning) + capability chip; `testAllModels` counts ALL active models; `llm-test-results` chat block renders skipped branch + capability chip. CSS `.status-text.warn` + `.capability-chip`.
-- **Verified (this session):** LLM+LLM-provider suites **142/142** (`--runInBand`); health+provider.service **41/41**; targeted frontend: management **94/94** + llm-test-results **9/9**; `nest build` exit 0; `ng build` exit 0. Full backend suite: module-level gate accepted (full run was interrupted by RAM incident — see rule #9).
-- **RAM incident (2026-09-18):** killed orphaned node workers, added Golden Rule #9 (both AGENTS.md + `~/.claude/CLAUDE.md`), capped backend `jest.maxWorkers: 2`.
-- **Open:** backend restart by user for `is_test` + `capability` columns to apply (`synchronize: true`); smoke-test live; `graphify update .`; commit on user go (Phase 4).
+- **Verified:** backend full suite at commit gate **562 passed / 3 pre-existing suites failed** (terpene, ideas-tasks, telegram-notify; no new failures); target frontend files 94/94 + 9/9; `nest build` + `ng build` exit 0. **Live smoke test (user):** Agnes Image 2.0/2.1 Flash → SUCCESS (~11s, `OK`); Agnes Video V2.0 → SKIPPED `No safe video ping for provider`. graphify updated (5157 nodes / 8586 edges).
+- **RAM incident (2026-09-18):** Golden Rule #9 (both AGENTS.md + `~/.claude/CLAUDE.md` + repo CLAUDE.md), backend `jest.maxWorkers: 2`.
+- **Committed + pushed** on `feat/test-model-capabilities-and-stats`: `741d55f` chore(tests) + `c44f737` feat(llm-providers). **Remaining:** merge to `main` (PR).
 
 ---
 
