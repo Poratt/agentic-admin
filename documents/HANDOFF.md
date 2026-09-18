@@ -1,5 +1,11 @@
 # Documentation Handoff
 
+## 2026-09-18 — ✅ COMMITTED + PUSHED: whole session compressed into 2 commits on `feat/model-metadata-enrichment`
+
+User request: "compress and push everything, including what the previous agent left stuck". Everything (metadata enrichment from the stuck agent + this session's auto-enrich on test, specs column split, colspan fix, stats-tab refetch, free-variant hint, all docs) went in as `66bc921` feat + `782ce48` chore(swagger); branch pushed with `-u` (new remote branch). Working tree clean. Note: the swagger regen for `GET models/free-variants` happens on backend restart — the committed spec already carries the metadata routes; after :3000 restart, if swagger-spec.json diffs, that is expected leftover to commit with the next batch.
+
+---
+
 ## 2026-09-18 — ✅ DONE (uncommitted on `feat/model-metadata-enrichment`): Model Metadata Enrichment + Edit-Model dialog redesign
 
 **Context (user request):** `llm_models` had no context/pricing data — admins couldn't see whether a model fits a big document, and cost was invisible. The feature fills `context_length`, `max_output_tokens`, `prompt_price_per_m`, `completion_price_per_m` (+ `free_tier`) from the public OpenRouter catalog — **inline at Sync (the 95% entry path), inline at Seeds, and a `✨ Auto-Detect` button in Edit Model**. Never blocks writes; never invents pricing (unknown → NULL).
